@@ -141,9 +141,11 @@ impl Reader {
         // As long as the MTU is set to value lesser than 1500, this api uses `stack_buf`
         // and avoids `Vec` allocation
 
-        let local_buf = local_buf_util!(in_buf_len > STACK_BUF_LEN && self.offset != 0, in_buf_len);
-        need_mut! {local_buf,local_buf};
-        let local_buf = local_buf.as_mut();
+        let local_buf_v0 =
+            local_buf_util!(in_buf_len > STACK_BUF_LEN && self.offset != 0, in_buf_len);
+        need_mut! {local_buf_v1,local_buf_v0};
+        #[allow(clippy::useless_asref)]
+        let local_buf = local_buf_v1.as_mut();
 
         let either_buf = if self.offset != 0 {
             &mut *local_buf
@@ -204,9 +206,11 @@ impl Writer {
         // The following logic is to prevent dynamically allocating Vec on every send
         // As long as the MTU is set to value lesser than 1500, this api uses `stack_buf`
         // and avoids `Vec` allocation
-        let local_buf = local_buf_util!(in_buf_len > STACK_BUF_LEN && self.offset != 0, in_buf_len);
-        need_mut! {local_buf,local_buf};
-        let local_buf = local_buf.as_mut();
+        let local_buf_v0 =
+            local_buf_util!(in_buf_len > STACK_BUF_LEN && self.offset != 0, in_buf_len);
+        need_mut! {local_buf_v1,local_buf_v0};
+        #[allow(clippy::useless_asref)]
+        let local_buf = local_buf_v1.as_mut();
 
         let either_buf = if self.offset != 0 {
             let ipv6 = is_ipv6(in_buf)?;
