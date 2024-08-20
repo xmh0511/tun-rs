@@ -27,7 +27,7 @@ use crate::platform::windows::verify_dll_file::{
 };
 use crate::Layer;
 
-pub(crate) enum Driver {
+pub enum Driver {
     Tun(Tun),
     #[allow(dead_code)]
     Tap(()),
