@@ -21,6 +21,7 @@ use wintun::Session;
 use crate::configuration::Configuration;
 use crate::device::AbstractDevice;
 use crate::error::{Error, Result};
+use crate::platform::windows::netsh;
 use crate::platform::windows::verify_dll_file::{
     get_dll_absolute_path, get_signer_name, verify_embedded_signature,
 };
@@ -54,7 +55,9 @@ impl Device {
             Ok(a) => a,
             Err(_) => wintun::Adapter::create(&wintun, tun_name, tun_name, guid)?,
         };
-
+        if let Some(metric) = config.metric {
+            netsh::set_interface_metric(adapter.get_adapter_index()?, metric)?;
+        }
         let address = config
             .address
             .unwrap_or(IpAddr::V4(Ipv4Addr::new(10, 1, 0, 2)));
@@ -71,16 +74,13 @@ impl Device {
 
         let session =
             adapter.start_session(config.ring_capacity.unwrap_or(wintun::MAX_RING_CAPACITY))?;
-
-        let mut device = Device {
+        adapter.set_mtu(mtu as _)?;
+        let device = Device {
             tun: Tun {
                 session: Arc::new(session),
             },
             mtu,
         };
-
-        // This is not needed since we use netsh to set the address.
-        device.configure(config)?;
 
         Ok(device)
     }
@@ -213,13 +213,13 @@ impl AbstractDevice for Device {
 
     /// The return value is always `Ok(65535)` due to wintun
     fn mtu(&self) -> Result<u16> {
-        // Note: wintun mtu is always 65535
         Ok(self.mtu)
     }
 
     /// This setting has no effect since the mtu of wintun is always 65535
-    fn set_mtu(&mut self, _: u16) -> Result<()> {
-        // Note: no-op due to mtu of wintun is always 65535
+    fn set_mtu(&mut self, mtu: u16) -> Result<()> {
+        self.tun.session.get_adapter().set_mtu(mtu as _)?;
+        self.mtu = mtu;
         Ok(())
     }
 
@@ -287,13 +287,14 @@ impl Write for Tun {
     }
 }
 
-impl Drop for Tun {
-    fn drop(&mut self) {
-        if let Err(err) = self.session.shutdown() {
-            log::error!("failed to shutdown session: {:?}", err);
-        }
-    }
-}
+// impl Drop for Tun {
+//     fn drop(&mut self) {
+//         // The session has implemented drop
+//         if let Err(err) = self.session.shutdown() {
+//             log::error!("failed to shutdown session: {:?}", err);
+//         }
+//     }
+// }
 
 #[repr(transparent)]
 pub struct Reader(Arc<Tun>);
