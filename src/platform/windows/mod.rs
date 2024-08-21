@@ -22,6 +22,7 @@ mod verify_dll_file;
 
 use crate::configuration::Configuration;
 use crate::error::Result;
+pub use device::Driver;
 pub use device::{Device, Tun};
 pub use device::{Driver, PacketVariant};
 use std::ffi::OsString;
