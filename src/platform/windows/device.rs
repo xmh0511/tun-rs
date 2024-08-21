@@ -539,7 +539,7 @@ impl Tap {
                 )
             })
             .map_err(|e| io::Error::new(e.kind(), format!("TAP_WIN_IOCTL_GET_MAC,err={:?}", e)))?;
-        let index = ffi::luid_to_index(&luid).map(|index| index as u32)?;
+        let index = ffi::luid_to_index(&luid)?;
         // 设置网卡跃点
         if let Err(e) = netsh::set_interface_metric(index, 0) {
             log::warn!("{:?}", e);

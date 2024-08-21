@@ -1,76 +1,52 @@
 /// 以太网帧协议
 #[derive(Eq, PartialEq, Copy, Clone, Debug)]
 pub enum Protocol {
-    ///
     Ipv4,
 
-    ///
     Arp,
 
-    ///
     WakeOnLan,
 
-    ///
     Trill,
 
-    ///
     DecNet,
 
-    ///
     Rarp,
 
-    ///
     AppleTalk,
 
-    ///
     Aarp,
 
-    ///
     Ipx,
 
-    ///
     Qnx,
 
-    ///
     Ipv6,
 
-    ///
     FlowControl,
 
-    ///
     CobraNet,
 
-    ///
     Mpls,
 
-    ///
     MplsMulticast,
 
-    ///
     PppoeDiscovery,
 
-    ///
     PppoeSession,
 
-    ///
     Vlan,
 
-    ///
     PBridge,
 
-    ///
     Lldp,
 
-    ///
     Ptp,
 
-    ///
     Cfm,
 
-    ///
     QinQ,
 
-    ///
     Unknown(u16),
 }
 
@@ -107,11 +83,11 @@ impl From<u16> for Protocol {
     }
 }
 
-impl Into<u16> for Protocol {
-    fn into(self) -> u16 {
+impl From<Protocol> for u16 {
+    fn from(val: Protocol) -> Self {
         use self::Protocol::*;
 
-        match self {
+        match val {
             Ipv4 => 0x0800,
             Arp => 0x0806,
             WakeOnLan => 0x0842,
