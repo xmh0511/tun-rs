@@ -556,18 +556,10 @@ impl Tap {
 
     pub fn write_by_ref(&self, buf: &[u8]) -> io::Result<usize> {
         // 封装二层数据
-        super::tap_packet::write_tap(
-            buf,
-            |eth_buf| ffi::write_file(self.handle, eth_buf).map(|res| res as _),
-            &self.mac,
-        )
+		ffi::write_file(self.handle, eth_buf).map(|res| res as _)
     }
     pub fn read_by_ref(&self, buf: &mut [u8]) -> io::Result<usize> {
-        super::tap_packet::read_tap(
-            buf,
-            |eth_buf| ffi::read_file(self.handle, eth_buf).map(|res| res as usize),
-            |eth_buf| ffi::write_file(self.handle, eth_buf).map(|res| res as _),
-        )
+		ffi::read_file(self.handle, eth_buf).map(|res| res as usize)
     }
     fn enabled(&self, value: bool) -> io::Result<()> {
         let status: u32 = if value { 1 } else { 0 };
