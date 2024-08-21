@@ -18,6 +18,7 @@ use std::sync::Arc;
 
 use wintun::Session;
 
+use super::ffi;
 use crate::configuration::Configuration;
 use crate::device::AbstractDevice;
 use crate::error::{Error, Result};
@@ -25,12 +26,62 @@ use crate::platform::windows::netsh;
 use crate::platform::windows::verify_dll_file::{
     get_dll_absolute_path, get_signer_name, verify_embedded_signature,
 };
+use winapi::shared::ifdef::NET_LUID;
+use winapi::shared::minwindef::DWORD;
+use winapi::um::fileapi::OPEN_EXISTING;
+use winapi::um::winbase::FILE_FLAG_OVERLAPPED;
+use winapi::um::winioctl::{FILE_ANY_ACCESS, FILE_DEVICE_UNKNOWN, METHOD_BUFFERED};
+use winapi::um::winnt::{
+    FILE_ATTRIBUTE_SYSTEM, FILE_SHARE_READ, FILE_SHARE_WRITE, GENERIC_READ, GENERIC_WRITE, HANDLE,
+};
+
 use crate::Layer;
+
+/* Present in 8.1 */
+const TAP_WIN_IOCTL_GET_MAC: DWORD =
+    ctl_code(FILE_DEVICE_UNKNOWN, 1, METHOD_BUFFERED, FILE_ANY_ACCESS);
+const TAP_WIN_IOCTL_GET_VERSION: DWORD =
+    ctl_code(FILE_DEVICE_UNKNOWN, 2, METHOD_BUFFERED, FILE_ANY_ACCESS);
+const TAP_WIN_IOCTL_GET_MTU: DWORD =
+    ctl_code(FILE_DEVICE_UNKNOWN, 3, METHOD_BUFFERED, FILE_ANY_ACCESS);
+const TAP_WIN_IOCTL_GET_INFO: DWORD =
+    ctl_code(FILE_DEVICE_UNKNOWN, 4, METHOD_BUFFERED, FILE_ANY_ACCESS);
+const TAP_WIN_IOCTL_CONFIG_POINT_TO_POINT: DWORD =
+    ctl_code(FILE_DEVICE_UNKNOWN, 5, METHOD_BUFFERED, FILE_ANY_ACCESS);
+const TAP_WIN_IOCTL_SET_MEDIA_STATUS: DWORD =
+    ctl_code(FILE_DEVICE_UNKNOWN, 6, METHOD_BUFFERED, FILE_ANY_ACCESS);
+const TAP_WIN_IOCTL_CONFIG_DHCP_MASQ: DWORD =
+    ctl_code(FILE_DEVICE_UNKNOWN, 7, METHOD_BUFFERED, FILE_ANY_ACCESS);
+const TAP_WIN_IOCTL_GET_LOG_LINE: DWORD =
+    ctl_code(FILE_DEVICE_UNKNOWN, 8, METHOD_BUFFERED, FILE_ANY_ACCESS);
+const TAP_WIN_IOCTL_CONFIG_DHCP_SET_OPT: DWORD =
+    ctl_code(FILE_DEVICE_UNKNOWN, 9, METHOD_BUFFERED, FILE_ANY_ACCESS);
+/* Added in 8.2 */
+/* obsoletes TAP_WIN_IOCTL_CONFIG_POINT_TO_POINT */
+const TAP_WIN_IOCTL_CONFIG_TUN: DWORD =
+    ctl_code(FILE_DEVICE_UNKNOWN, 10, METHOD_BUFFERED, FILE_ANY_ACCESS);
 
 pub enum Driver {
     Tun(Tun),
     #[allow(dead_code)]
-    Tap(()),
+    Tap(Tap),
+}
+impl Driver {
+    pub fn read_by_ref(&self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            Driver::Tap(tap) => tap.read_by_ref(buf),
+            Driver::Tun(tun) => tun.read_by_ref(buf),
+        }
+    }
+    pub fn write_by_ref(&self, buf: &[u8]) -> std::io::Result<usize> {
+        match self {
+            Driver::Tap(tap) => tap.write_by_ref(buf),
+            Driver::Tun(tun) => tun.write_by_ref(buf),
+        }
+    }
+    pub fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }
 /// A TUN device using the wintun driver.
 pub struct Device {
@@ -51,6 +102,15 @@ impl Device {
     /// Create a new `Device` for the given `Configuration`.
     pub fn new(config: &Configuration) -> Result<Self> {
         let layer = config.layer.unwrap_or(Layer::L3);
+        let tun_name = config.tun_name.as_deref().unwrap_or("wintun");
+        let address = config
+            .address
+            .unwrap_or(IpAddr::V4(Ipv4Addr::new(10, 1, 0, 2)));
+
+        let mask = config
+            .netmask
+            .unwrap_or(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 0)));
+        let mtu = config.mtu.unwrap_or(crate::DEFAULT_MTU);
         if layer == Layer::L3 {
             let wintun_file = &config.platform_config.wintun_file;
             let wintun = unsafe {
@@ -66,7 +126,6 @@ impl Device {
                 let wintun = libloading::Library::new(wintun_file)?;
                 wintun::load_from_library(wintun)?
             };
-            let tun_name = config.tun_name.as_deref().unwrap_or("wintun");
             let guid = config.platform_config.device_guid;
             let adapter = match wintun::Adapter::open(&wintun, tun_name) {
                 Ok(a) => a,
@@ -75,19 +134,12 @@ impl Device {
             if let Some(metric) = config.metric {
                 netsh::set_interface_metric(adapter.get_adapter_index()?, metric)?;
             }
-            let address = config
-                .address
-                .unwrap_or(IpAddr::V4(Ipv4Addr::new(10, 1, 0, 2)));
-            let mask = config
-                .netmask
-                .unwrap_or(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 0)));
             let gateway = config.destination.map(IpAddr::from);
             adapter.set_network_addresses_tuple(address, mask, gateway)?;
             #[cfg(feature = "wintun-dns")]
             if let Some(dns_servers) = &config.platform_config.dns_servers {
                 adapter.set_dns_servers(dns_servers)?;
             }
-            let mtu = config.mtu.unwrap_or(crate::DEFAULT_MTU);
 
             let session =
                 adapter.start_session(config.ring_capacity.unwrap_or(wintun::MAX_RING_CAPACITY))?;
@@ -101,7 +153,15 @@ impl Device {
 
             Ok(device)
         } else if layer == Layer::L2 {
-            todo!()
+            let tap = Tap::new(tun_name.to_owned())?;
+            tap.set_ip(address, mask)?;
+            tap.set_mtu(mtu as u32)?;
+            let device = Device {
+                driver: Driver::Tap(tap),
+                mtu,
+            };
+
+            Ok(device)
         } else {
             panic!("unknow layer {:?}", layer);
         }
@@ -110,11 +170,12 @@ impl Device {
     pub fn split(self) -> (Reader, Writer) {
         match self.driver {
             Driver::Tun(tun) => {
-                let tun = Arc::new(tun);
+                let tun = Arc::new(Driver::Tun(tun));
                 (Reader(tun.clone()), Writer(tun))
             }
-            Driver::Tap(_) => {
-                unimplemented!()
+            Driver::Tap(tap) => {
+                let tap = Arc::new(Driver::Tap(tap));
+                (Reader(tap.clone()), Writer(tap))
             }
         }
     }
@@ -126,9 +187,9 @@ impl Device {
             tun =>{
                 tun.recv(buf)
             };
-            _tap=>
+            tap=>
             {
-                unimplemented!()
+               tap.recv(buf)
             }
         )
     }
@@ -140,9 +201,9 @@ impl Device {
             tun=>  {
                 tun.send(buf)
             };
-            _tap=>
+            tap=>
             {
-                unimplemented!()
+               tap.send(buf)
             }
         )
     }
@@ -150,44 +211,17 @@ impl Device {
 
 impl Read for Device {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        driver_case!(
-            & mut self.driver;
-            tun=>  {
-                tun.read(buf)
-            };
-            _tap=>
-            {
-                unimplemented!()
-            }
-        )
+        self.driver.read_by_ref(buf)
     }
 }
 
 impl Write for Device {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        driver_case!(
-            & mut self.driver;
-            tun=>  {
-                tun.write(buf)
-            };
-            _tap=>
-            {
-                unimplemented!()
-            }
-        )
+        self.driver.write_by_ref(buf)
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        driver_case!(
-            & mut self.driver;
-            tun=>  {
-                tun.flush()
-            };
-            _tap=>
-            {
-                unimplemented!()
-            }
-        )
+        self.driver.flush()
     }
 }
 
@@ -210,9 +244,9 @@ impl AbstractDevice for Device {
             tun=>  {
                 Ok(tun.session.get_adapter().get_name()?)
             };
-            _tap=>
+            tap=>
             {
-                unimplemented!()
+               Ok(tap.name()?)
             }
         )
     }
@@ -451,7 +485,7 @@ impl Write for Tun {
 // }
 
 #[repr(transparent)]
-pub struct Reader(Arc<Tun>);
+pub struct Reader(Arc<Driver>);
 
 impl Read for Reader {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
@@ -460,7 +494,7 @@ impl Read for Reader {
 }
 
 #[repr(transparent)]
-pub struct Writer(Arc<Tun>);
+pub struct Writer(Arc<Driver>);
 
 impl Write for Writer {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
@@ -470,4 +504,134 @@ impl Write for Writer {
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
     }
+}
+
+pub struct Tap {
+    handle: HANDLE,
+    index: u32,
+    luid: NET_LUID,
+    mac: [u8; 6],
+}
+
+impl Tap {
+    pub(crate) fn new(name: String) -> std::io::Result<Self> {
+        let luid = ffi::alias_to_luid(&encode_utf16(&name)).map_err(|e| {
+            io::Error::new(e.kind(), format!("alias_to_luid name={},err={:?}", name, e))
+        })?;
+        let guid = ffi::luid_to_guid(&luid)
+            .and_then(|guid| ffi::string_from_guid(&guid))
+            .map_err(|e| {
+                io::Error::new(e.kind(), format!("luid_to_guid name={},err={:?}", name, e))
+            })?;
+        let path = format!(r"\\.\Global\{}.tap", decode_utf16(&guid));
+        let handle = ffi::create_file(
+            &encode_utf16(&path),
+            GENERIC_READ | GENERIC_WRITE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            OPEN_EXISTING,
+            FILE_ATTRIBUTE_SYSTEM | FILE_FLAG_OVERLAPPED,
+        )
+        .map_err(|e| io::Error::new(e.kind(), format!("tap name={},err={:?}", name, e)))?;
+
+        let mut mac = [0u8; 6];
+        ffi::device_io_control(handle, TAP_WIN_IOCTL_GET_MAC, &(), &mut mac)
+            .map_err(|e| {
+                io::Error::new(
+                    e.kind(),
+                    format!("TAP_WIN_IOCTL_CONFIG_TUN name={},err={:?}", name, e),
+                )
+            })
+            .map_err(|e| io::Error::new(e.kind(), format!("TAP_WIN_IOCTL_GET_MAC,err={:?}", e)))?;
+        let index = ffi::luid_to_index(&luid).map(|index| index as u32)?;
+        // 设置网卡跃点
+        if let Err(e) = netsh::set_interface_metric(index, 0) {
+            log::warn!("{:?}", e);
+        }
+        let tap = Self {
+            handle,
+            index,
+            luid,
+            mac,
+        };
+        tap.enabled(true)?;
+        Ok(tap)
+    }
+
+    pub fn write_by_ref(&self, buf: &[u8]) -> io::Result<usize> {
+        ffi::write_file(self.handle, buf).map(|res| res as _)
+    }
+    pub fn read_by_ref(&self, buf: &mut [u8]) -> io::Result<usize> {
+        ffi::read_file(self.handle, buf).map(|res| res as usize)
+    }
+    fn enabled(&self, value: bool) -> io::Result<()> {
+        let status: u32 = if value { 1 } else { 0 };
+        ffi::device_io_control(
+            self.handle,
+            TAP_WIN_IOCTL_SET_MEDIA_STATUS,
+            &status,
+            &mut (),
+        )
+    }
+    /// Recv a packet from tun device
+    pub fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
+        self.read_by_ref(buf)
+    }
+
+    /// Send a packet to tun device
+    pub fn send(&self, buf: &[u8]) -> io::Result<usize> {
+        self.write_by_ref(buf)
+    }
+    pub fn name(&self) -> std::io::Result<String> {
+        ffi::luid_to_alias(&self.luid).map(|name| decode_utf16(&name))
+    }
+    pub fn shutdown(&self) -> io::Result<()> {
+        self.enabled(false)
+    }
+
+    fn set_ip(&self, address: IpAddr, mask: IpAddr) -> io::Result<()> {
+        let IpAddr::V4(address) = address else {
+            unimplemented!("do not support IPv6 yet")
+        };
+        let IpAddr::V4(mask) = mask else {
+            unimplemented!("do not support IPv6 yet")
+        };
+        netsh::set_interface_ip(self.index, &address, &mask)
+    }
+    pub fn mtu(&self) -> io::Result<u32> {
+        let mut mtu = 0;
+        ffi::device_io_control(self.handle, TAP_WIN_IOCTL_GET_MTU, &(), &mut mtu).map(|_| mtu)
+    }
+
+    fn set_mtu(&self, value: u32) -> io::Result<()> {
+        netsh::set_interface_mtu(self.index, value)
+    }
+}
+
+impl Read for Tap {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.read_by_ref(buf)
+    }
+}
+
+impl Write for Tap {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.write_by_ref(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+fn encode_utf16(string: &str) -> Vec<u16> {
+    use std::iter::once;
+    string.encode_utf16().chain(once(0)).collect()
+}
+
+fn decode_utf16(string: &[u16]) -> String {
+    let end = string.iter().position(|b| *b == 0).unwrap_or(string.len());
+    String::from_utf16_lossy(&string[..end])
+}
+const fn ctl_code(device_type: DWORD, function: DWORD, method: DWORD, access: DWORD) -> DWORD {
+    (device_type << 16) | (access << 14) | (function << 2) | method
 }

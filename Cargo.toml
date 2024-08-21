@@ -41,7 +41,18 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_LibraryLoader",
 ] }
 wintun = { git = "https://github.com/rustp2p/wintun.git", features = ["panic_on_unsent_packets"] }
-libloading = "0.8"
+libloading = "0.8.5"
+winapi = {version = "0.3",features = [
+    "errhandlingapi",
+    "combaseapi",
+    "ioapiset",
+    "winioctl",
+    "setupapi",
+    "synchapi",
+    "netioapi",
+    "fileapi","handleapi","winerror","minwindef","ifdef","basetsd","winnt","winreg","winbase","minwinbase",
+    "impl-default"
+]}
 
 [target.'cfg(any(target_os = "macos", target_os = "freebsd"))'.dependencies]
 ipnet = "2"

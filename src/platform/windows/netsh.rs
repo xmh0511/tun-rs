@@ -1,4 +1,5 @@
 use std::io;
+use std::net::Ipv4Addr;
 use std::os::windows::process::CommandExt;
 use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
 
@@ -22,4 +23,21 @@ pub fn exe_cmd(cmd: &str) -> io::Result<()> {
         ));
     }
     Ok(())
+}
+
+/// 设置网卡ip
+pub fn set_interface_ip(index: u32, address: &Ipv4Addr, netmask: &Ipv4Addr) -> io::Result<()> {
+    let cmd = format!(
+        "netsh interface ip set address {} static {:?} {:?} ",
+        index, address, netmask,
+    );
+    exe_cmd(&cmd)
+}
+
+pub fn set_interface_mtu(index: u32, mtu: u32) -> io::Result<()> {
+    let cmd = format!(
+        "netsh interface ipv4 set subinterface {}  mtu={} store=persistent",
+        index, mtu
+    );
+    exe_cmd(&cmd)
 }
