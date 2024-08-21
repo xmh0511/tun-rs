@@ -165,7 +165,7 @@ impl AsyncRead for DeviceReader {
             Some(bytes) => {
                 match bytes {
                     PacketVariant::Tap(bytes) => {
-                        buf.put_slice(&*bytes);
+                        buf.put_slice(&bytes);
                     }
                     PacketVariant::Tun(bytes) => {
                         buf.put_slice(bytes.bytes());
