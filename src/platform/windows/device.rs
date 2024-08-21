@@ -505,6 +505,7 @@ pub struct Tap {
     handle: HANDLE,
     index: u32,
     luid: NET_LUID,
+    #[allow(dead_code)]
     mac: [u8; 6],
 }
 unsafe impl Send for Tap {}
@@ -555,11 +556,10 @@ impl Tap {
     }
 
     pub fn write_by_ref(&self, buf: &[u8]) -> io::Result<usize> {
-        // 封装二层数据
-		ffi::write_file(self.handle, eth_buf).map(|res| res as _)
+        ffi::write_file(self.handle, buf).map(|res| res as _)
     }
     pub fn read_by_ref(&self, buf: &mut [u8]) -> io::Result<usize> {
-		ffi::read_file(self.handle, eth_buf).map(|res| res as usize)
+        ffi::read_file(self.handle, buf).map(|res| res as usize)
     }
     fn enabled(&self, value: bool) -> io::Result<()> {
         let status: u32 = if value { 1 } else { 0 };
