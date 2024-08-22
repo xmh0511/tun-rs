@@ -109,9 +109,17 @@ impl Driver {
         }
     }
 }
+
+use crate::Layer;
+
+pub enum Driver {
+    Tun(Tun),
+    #[allow(dead_code)]
+    Tap(()),
+}
 /// A TUN device using the wintun driver.
 pub struct Device {
-    pub(crate) driver: Arc<Driver>,
+    pub(crate) driver: Driver,
     mtu: u16,
 }
 
@@ -137,6 +145,7 @@ impl Device {
             .netmask
             .unwrap_or(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 0)));
         let mtu = config.mtu.unwrap_or(crate::DEFAULT_MTU);
+
         if layer == Layer::L3 {
             let wintun_file = &config.platform_config.wintun_file;
             let wintun = unsafe {
@@ -160,6 +169,7 @@ impl Device {
             if let Some(metric) = config.metric {
                 netsh::set_interface_metric(adapter.get_adapter_index()?, metric)?;
             }
+
             let gateway = config.destination.map(IpAddr::from);
             adapter.set_network_addresses_tuple(address, mask, gateway)?;
             #[cfg(feature = "wintun-dns")]
@@ -186,7 +196,6 @@ impl Device {
                 driver: Arc::new(Driver::Tap(tap)),
                 mtu,
             };
-
             Ok(device)
         } else {
             panic!("unknow layer {:?}", layer);
