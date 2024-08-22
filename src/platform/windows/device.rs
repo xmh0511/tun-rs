@@ -110,16 +110,9 @@ impl Driver {
     }
 }
 
-use crate::Layer;
-
-pub enum Driver {
-    Tun(Tun),
-    #[allow(dead_code)]
-    Tap(()),
-}
 /// A TUN device using the wintun driver.
 pub struct Device {
-    pub(crate) driver: Driver,
+    pub(crate) driver: Arc<Driver>,
     mtu: u16,
 }
 
