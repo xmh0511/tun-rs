@@ -58,7 +58,6 @@ impl AsyncDevice {
     /// Consumes this AsyncDevice and return a Framed object (unified Stream and Sink interface)
     pub fn into_framed(self) -> Framed<Self, TunPacketCodec> {
         let mtu = self.mtu().unwrap_or(crate::DEFAULT_MTU);
-        println!("mtu size : {}", mtu);
         let codec = TunPacketCodec::new(mtu as usize);
         // associate mtu with the capacity of ReadBuf
         Framed::with_capacity(self, codec, mtu as usize)
@@ -106,6 +105,7 @@ impl AsyncWrite for AsyncDevice {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<std::io::Result<usize>> {
+        println!("poll write {:?}", buf);
         loop {
             let mut guard = ready!(self.inner.poll_write_ready_mut(cx))?;
             match guard.try_io(|inner| inner.get_mut().write(buf)) {
