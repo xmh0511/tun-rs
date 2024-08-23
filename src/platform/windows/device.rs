@@ -16,16 +16,6 @@ use std::io::{self, Read, Write};
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
 
-use wintun::{Packet, Session};
-
-use super::ffi;
-use crate::configuration::Configuration;
-use crate::device::AbstractDevice;
-use crate::error::{Error, Result};
-use crate::platform::windows::netsh;
-use crate::platform::windows::verify_dll_file::{
-    get_dll_absolute_path, get_signer_name, verify_embedded_signature,
-};
 use winapi::shared::ifdef::NET_LUID;
 use winapi::shared::minwindef::DWORD;
 use winapi::um::fileapi::OPEN_EXISTING;
@@ -34,8 +24,17 @@ use winapi::um::winioctl::{FILE_ANY_ACCESS, FILE_DEVICE_UNKNOWN, METHOD_BUFFERED
 use winapi::um::winnt::{
     FILE_ATTRIBUTE_SYSTEM, FILE_SHARE_READ, FILE_SHARE_WRITE, GENERIC_READ, GENERIC_WRITE, HANDLE,
 };
-
+use wintun::{Packet, Session};
+use crate::configuration::{Configuration, configure};
+use crate::device::AbstractDevice;
+use crate::error::{Error, Result};
 use crate::Layer;
+use crate::platform::windows::netsh;
+use crate::platform::windows::verify_dll_file::{
+    get_dll_absolute_path, get_signer_name, verify_embedded_signature,
+};
+
+use super::ffi;
 
 /* Present in 8.1 */
 const TAP_WIN_IOCTL_GET_MAC: DWORD =
@@ -78,6 +77,29 @@ pub enum PacketVariant {
     Tap(Box<[u8]>),
 }
 impl Driver {
+    pub fn index(&self) -> Result<u32> {
+        match self {
+            Driver::Tun(tun) => {
+                let index = tun.session.get_adapter().get_adapter_index()?;
+                Ok(index)
+            }
+            Driver::Tap(tap) => {
+                Ok(tap.index)
+            }
+        }
+    }
+    pub fn name(&self) -> Result<String> {
+        match self {
+            Driver::Tun(tun) => {
+                let name = tun.session.get_adapter().get_name()?;
+                Ok(name)
+            }
+            Driver::Tap(tap) => {
+                let name = tap.name()?;
+                Ok(name)
+            }
+        }
+    }
     pub fn read_by_ref(&self, buf: &mut [u8]) -> std::io::Result<usize> {
         match self {
             Driver::Tap(tap) => tap.read_by_ref(buf),
@@ -119,8 +141,8 @@ pub struct Device {
 macro_rules! driver_case {
     ($driver:expr; $tun:ident =>  $tun_branch:block; $tap:ident => $tap_branch:block) => {
         match $driver {
-            Driver::Tun($tun) => $tun_branch,
-            Driver::Tap($tap) => $tap_branch,
+            Driver::Tun($tun) => $tun_branch
+            Driver::Tap($tap) => $tap_branch
         }
     };
 }
@@ -139,7 +161,7 @@ impl Device {
             .unwrap_or(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 0)));
         let mtu = config.mtu.unwrap_or(crate::DEFAULT_MTU);
 
-        if layer == Layer::L3 {
+        let mut device = if layer == Layer::L3 {
             let wintun_file = &config.platform_config.wintun_file;
             let wintun = unsafe {
                 // Ensure the dll file has not been tampered with.
@@ -163,8 +185,6 @@ impl Device {
                 netsh::set_interface_metric(adapter.get_adapter_index()?, metric)?;
             }
 
-            let gateway = config.destination.map(IpAddr::from);
-            adapter.set_network_addresses_tuple(address, mask, gateway)?;
             #[cfg(feature = "wintun-dns")]
             if let Some(dns_servers) = &config.platform_config.dns_servers {
                 adapter.set_dns_servers(dns_servers)?;
@@ -180,7 +200,7 @@ impl Device {
                 mtu,
             };
 
-            Ok(device)
+            device
         } else if layer == Layer::L2 {
             let tap = Tap::new(tun_name.to_owned())?;
             tap.set_ip(address, mask)?;
@@ -189,10 +209,12 @@ impl Device {
                 driver: Arc::new(Driver::Tap(tap)),
                 mtu,
             };
-            Ok(device)
+            device
         } else {
             panic!("unknow layer {:?}", layer);
-        }
+        };
+        configure(&mut device, config)?;
+        Ok(device)
     }
 
     pub fn split(self) -> (Reader, Writer) {
@@ -270,7 +292,7 @@ impl AbstractDevice for Device {
         )
     }
 
-    fn set_tun_name(&mut self, value: &str) -> Result<()> {
+    fn set_tun_name(&self, value: &str) -> Result<()> {
         driver_case!(
             &*self.driver;
             tun=>  {
@@ -284,9 +306,6 @@ impl AbstractDevice for Device {
         )
     }
 
-    fn enabled(&mut self, _value: bool) -> Result<()> {
-        Ok(())
-    }
 
     fn address(&self) -> Result<IpAddr> {
         driver_case!(
@@ -308,22 +327,6 @@ impl AbstractDevice for Device {
         )
     }
 
-    fn set_address(&mut self, value: IpAddr) -> Result<()> {
-        let IpAddr::V4(value) = value else {
-            unimplemented!("do not support IPv6 yet")
-        };
-        driver_case!(
-            &*self.driver;
-            tun=>  {
-                tun.session.get_adapter().set_address(value)?;
-                Ok(())
-            };
-            tap=>
-            {
-               tap.set_address(value).map_err(|e|e.into())
-            }
-        )
-    }
 
     fn destination(&self) -> Result<IpAddr> {
         // It's just the default gateway in windows.
@@ -348,32 +351,11 @@ impl AbstractDevice for Device {
         )
     }
 
-    fn set_destination(&mut self, value: IpAddr) -> Result<()> {
-        let IpAddr::V4(value) = value else {
-            unimplemented!("do not support IPv6 yet")
-        };
-        // It's just set the default gateway in windows.
-        driver_case!(
-            &*self.driver;
-            tun=>  {
-                tun.session.get_adapter().set_gateway(Some(value))?;
-                Ok(())
-            };
-            tap=>
-            {
-                tap.set_destination(value)
-            }
-        )
-    }
 
     fn broadcast(&self) -> Result<IpAddr> {
         Err(Error::NotImplemented)
     }
 
-    fn set_broadcast(&mut self, value: IpAddr) -> Result<()> {
-        log::debug!("set_broadcast {} is not need", value);
-        Ok(())
-    }
 
     fn netmask(&self) -> Result<IpAddr> {
         let current_addr = self.address()?;
@@ -392,22 +374,11 @@ impl AbstractDevice for Device {
         )
     }
 
-    fn set_netmask(&mut self, value: IpAddr) -> Result<()> {
-        let IpAddr::V4(value) = value else {
-            unimplemented!("do not support IPv6 yet")
-        };
-        driver_case!(
-            &*self.driver;
-            tun=>  {
-                tun.session.get_adapter().set_netmask(value)?;
-                Ok(())
-            };
-            tap=>
-            {
-               tap.set_netmask(value).map_err(|e|e.into())
-            }
-        )
+    fn set_network_address(&self, address: IpAddr, netmask: IpAddr, destination: Option<IpAddr>) -> Result<()> {
+        netsh::set_interface_ip(self.driver.index()?,&address,&netmask,destination.as_ref())?;
+        Ok(())
     }
+
 
     /// The return value is always `Ok(65535)` due to wintun
     fn mtu(&self) -> Result<u16> {
@@ -415,12 +386,11 @@ impl AbstractDevice for Device {
     }
 
     /// This setting has no effect since the mtu of wintun is always 65535
-    fn set_mtu(&mut self, mtu: u16) -> Result<()> {
+    fn set_mtu(&self, mtu: u16) -> Result<()> {
         driver_case!(
             &*self.driver;
             tun=>  {
                 tun.session.get_adapter().set_mtu(mtu as _)?;
-                self.mtu = mtu;
                 Ok(())
             };
             tap=>
@@ -531,7 +501,7 @@ impl Tap {
             OPEN_EXISTING,
             FILE_ATTRIBUTE_SYSTEM | FILE_FLAG_OVERLAPPED,
         )
-        .map_err(|e| io::Error::new(e.kind(), format!("tap name={},err={:?}", name, e)))?;
+            .map_err(|e| io::Error::new(e.kind(), format!("tap name={},err={:?}", name, e)))?;
 
         let mut mac = [0u8; 6];
         ffi::device_io_control(handle, TAP_WIN_IOCTL_GET_MAC, &(), &mut mac)
@@ -592,17 +562,10 @@ impl Tap {
     }
 
     fn set_ip(&self, address: IpAddr, mask: IpAddr) -> io::Result<()> {
-        let IpAddr::V4(address) = address else {
-            unimplemented!("do not support IPv6 yet")
-        };
-        let IpAddr::V4(mask) = mask else {
-            unimplemented!("do not support IPv6 yet")
-        };
-        netsh::set_interface_ip(self.index, &address, &mask)
+
+        netsh::set_interface_ip(self.index, &address, &mask,None)
     }
-    fn set_netmask(&self, _mask: Ipv4Addr) -> io::Result<()> {
-        unimplemented!()
-    }
+
     fn address(&self) -> Result<IpAddr> {
         unimplemented!()
     }

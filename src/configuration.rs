@@ -15,7 +15,7 @@
 use std::net::IpAddr;
 #[cfg(unix)]
 use std::os::unix::io::RawFd;
-
+use crate::AbstractDevice;
 use crate::address::IntoAddress;
 use crate::platform::PlatformConfig;
 
@@ -40,6 +40,7 @@ pub enum Layer {
 /// Configuration builder for a TUN interface.
 #[derive(Clone, Default, Debug)]
 pub struct Configuration {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub(crate) tun_name: Option<String>,
     pub(crate) platform_config: PlatformConfig,
     pub(crate) address: Option<IpAddr>,
@@ -188,4 +189,41 @@ impl Configuration {
         self.close_fd_on_drop = Some(value);
         self
     }
+}
+
+/// Reconfigure the device.
+pub(crate) fn configure<D: AbstractDevice>(device: &mut D, config: &Configuration) -> crate::error::Result<()> {
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
+    {
+        if let Some(mtu) = config.mtu {
+            device.set_mtu(mtu)?;
+        }
+        if let (Some(address), Some(netmask)) = (config.address, config.netmask) {
+            device.set_network_address(address, netmask, config.destination)?;
+        }
+    }
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
+    if let Some(ip) = config.broadcast {
+        device.set_broadcast(ip)?;
+    }
+
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
+    if let Some(enabled) = config.enabled {
+        self.enabled(enabled)?;
+    }
+
+    Ok(())
 }
