@@ -36,6 +36,7 @@ use std::{
     net::{IpAddr, Ipv4Addr},
     os::unix::io::{AsRawFd, IntoRawFd, RawFd},
     ptr,
+    sync::Mutex,
 };
 
 #[derive(Clone, Copy)]
@@ -50,7 +51,7 @@ pub struct Device {
     tun_name: Option<String>,
     tun: posix::Tun,
     ctl: Option<posix::Fd>,
-    route: Option<Route>,
+    route: Mutex<Option<Route>>,
 }
 
 impl AsRef<dyn AbstractDevice + 'static> for Device {
@@ -76,7 +77,7 @@ impl Device {
                 tun_name: None,
                 tun: posix::Tun::new(tun, mtu, config.platform_config.packet_information),
                 ctl: None,
-                route: None,
+                route: Mutex::new(None),
             };
             return Ok(device);
         }
@@ -104,7 +105,7 @@ impl Device {
             return Err(Error::InvalidQueuesNumber);
         }
 
-        let mut device = unsafe {
+        let device = unsafe {
             let fd = libc::socket(PF_SYSTEM, SOCK_DGRAM, SYSPROTO_CONTROL);
             let tun = posix::Fd::new(fd, true).map_err(|_| io::Error::last_os_error())?;
 
@@ -156,7 +157,7 @@ impl Device {
                 ),
                 tun: posix::Tun::new(tun, mtu, config.platform_config.packet_information),
                 ctl,
-                route: None,
+                route: Mutex::new(None),
             }
         };
 
@@ -191,7 +192,7 @@ impl Device {
     }
 
     /// Set the IPv4 alias of the device.
-    fn set_alias(&mut self, addr: IpAddr, broadaddr: IpAddr, mask: IpAddr) -> Result<()> {
+    fn set_alias(&self, addr: IpAddr, broadaddr: IpAddr, mask: IpAddr) -> Result<()> {
         let IpAddr::V4(addr) = addr else {
             unimplemented!("do not support IPv6 yet")
         };
@@ -230,18 +231,14 @@ impl Device {
         }
     }
 
-    /// Split the interface into a `Reader` and `Writer`.
-    pub fn split(self) -> (posix::Reader, posix::Writer) {
-        (self.tun.reader, self.tun.writer)
-    }
-
     /// Set non-blocking mode
     pub fn set_nonblock(&self) -> io::Result<()> {
         self.tun.set_nonblock()
     }
 
-    fn set_route(&mut self, route: Route) -> Result<()> {
-        if let Some(v) = &self.route {
+    fn set_route(&self, route: Route) -> Result<()> {
+        let mut route_guard = self.route.lock().unwrap();
+        if let Some(v) = &*route_guard {
             let prefix_len = ipnet::ip_mask_to_prefix(IpAddr::V4(v.netmask))
                 .map_err(|_| Error::InvalidConfig)?;
             let network = ipnet::Ipv4Net::new(v.addr, prefix_len)
@@ -271,7 +268,7 @@ impl Device {
         ];
         run_command("route", &args)?;
         log::info!("route {}", args.join(" "));
-        self.route = Some(route);
+        *route_guard = Some(route);
         Ok(())
     }
 
@@ -308,11 +305,11 @@ impl AbstractDevice for Device {
     }
 
     // XXX: Cannot set interface name on Darwin.
-    fn set_tun_name(&mut self, value: &str) -> Result<()> {
+    fn set_tun_name(&self, value: &str) -> Result<()> {
         Err(Error::InvalidName)
     }
 
-    fn enabled(&mut self, value: bool) -> Result<()> {
+    fn enabled(&self, value: bool) -> Result<()> {
         let ctl = self.ctl.as_ref().ok_or(Error::InvalidConfig)?;
         unsafe {
             let mut req = self.request()?;
@@ -347,7 +344,7 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_address(&mut self, value: IpAddr) -> Result<()> {
+    fn set_address(&self, value: IpAddr) -> Result<()> {
         let IpAddr::V4(value) = value else {
             unimplemented!("do not support IPv6 yet")
         };
@@ -358,7 +355,8 @@ impl AbstractDevice for Device {
             if let Err(err) = siocsifaddr(ctl.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
-            if let Some(mut route) = self.route {
+            let route = { self.route.lock().unwrap().clone() };
+            if let Some(mut route) = route {
                 route.addr = value;
                 self.set_route(route)?;
             }
@@ -378,7 +376,7 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_destination(&mut self, value: IpAddr) -> Result<()> {
+    fn set_destination(&self, value: IpAddr) -> Result<()> {
         let IpAddr::V4(value) = value else {
             unimplemented!("do not support IPv6 yet")
         };
@@ -389,7 +387,8 @@ impl AbstractDevice for Device {
             if let Err(err) = siocsifdstaddr(ctl.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
-            if let Some(mut route) = self.route {
+            let route = { self.route.lock().unwrap().clone() };
+            if let Some(mut route) = route {
                 route.dest = value;
                 self.set_route(route)?;
             }
@@ -411,7 +410,7 @@ impl AbstractDevice for Device {
     }
 
     /// Question on macOS
-    fn set_broadcast(&mut self, value: IpAddr) -> Result<()> {
+    fn set_broadcast(&self, value: IpAddr) -> Result<()> {
         let IpAddr::V4(value) = value else {
             unimplemented!("do not support IPv6 yet")
         };
@@ -438,7 +437,7 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_netmask(&mut self, value: IpAddr) -> Result<()> {
+    fn set_netmask(&self, value: IpAddr) -> Result<()> {
         let IpAddr::V4(value) = value else {
             unimplemented!("do not support IPv6 yet")
         };
@@ -450,7 +449,8 @@ impl AbstractDevice for Device {
             if let Err(err) = siocsifnetmask(ctl.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
-            if let Some(mut route) = self.route {
+            let route = { self.route.lock().unwrap().clone() };
+            if let Some(mut route) = route {
                 route.netmask = value;
                 self.set_route(route)?;
             }
@@ -474,7 +474,7 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_mtu(&mut self, value: u16) -> Result<()> {
+    fn set_mtu(&self, value: u16) -> Result<()> {
         let ctl = self.ctl.as_ref().ok_or(Error::InvalidConfig)?;
         unsafe {
             let mut req = self.request()?;

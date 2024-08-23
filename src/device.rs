@@ -20,7 +20,7 @@ use std::net::IpAddr;
 /// A TUN abstract device interface.
 pub trait AbstractDevice: Read + Write {
     /// Reconfigure the device.
-    fn configure(&mut self, config: &Configuration) -> Result<()> {
+    fn configure(&self, config: &Configuration) -> Result<()> {
         if let Some(ip) = config.address {
             self.set_address(ip)?;
         }
@@ -52,34 +52,34 @@ pub trait AbstractDevice: Read + Write {
     fn tun_name(&self) -> Result<String>;
 
     /// Set the device tun name.
-    fn set_tun_name(&mut self, tun_name: &str) -> Result<()>;
+    fn set_tun_name(&self, tun_name: &str) -> Result<()>;
 
     /// Turn on or off the interface.
-    fn enabled(&mut self, value: bool) -> Result<()>;
+    fn enabled(&self, value: bool) -> Result<()>;
 
     /// Get the address.
     fn address(&self) -> Result<IpAddr>;
 
     /// Set the address.
-    fn set_address(&mut self, value: IpAddr) -> Result<()>;
+    fn set_address(&self, value: IpAddr) -> Result<()>;
 
     /// Get the destination address.
     fn destination(&self) -> Result<IpAddr>;
 
     /// Set the destination address.
-    fn set_destination(&mut self, value: IpAddr) -> Result<()>;
+    fn set_destination(&self, value: IpAddr) -> Result<()>;
 
     /// Get the broadcast address.
     fn broadcast(&self) -> Result<IpAddr>;
 
     /// Set the broadcast address.
-    fn set_broadcast(&mut self, value: IpAddr) -> Result<()>;
+    fn set_broadcast(&self, value: IpAddr) -> Result<()>;
 
     /// Get the netmask.
     fn netmask(&self) -> Result<IpAddr>;
 
     /// Set the netmask.
-    fn set_netmask(&mut self, value: IpAddr) -> Result<()>;
+    fn set_netmask(&self, value: IpAddr) -> Result<()>;
 
     /// Get the MTU.
     fn mtu(&self) -> Result<u16>;
@@ -87,7 +87,7 @@ pub trait AbstractDevice: Read + Write {
     /// Set the MTU.
     ///
     /// [Note: This setting has no effect on the Windows platform due to the mtu of wintun is always 65535. --end note]
-    fn set_mtu(&mut self, value: u16) -> Result<()>;
+    fn set_mtu(&self, value: u16) -> Result<()>;
 
     /// Return whether the underlying tun device on the platform has packet information
     ///
