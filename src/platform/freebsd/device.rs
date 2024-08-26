@@ -17,7 +17,7 @@ use libc::{
 };
 use std::{
     // ffi::{CStr, CString},
-    io::{self, Read, Write},
+    io,
     mem,
     net::{IpAddr, Ipv4Addr},
     os::unix::io::{AsRawFd, IntoRawFd, RawFd},
@@ -113,11 +113,9 @@ impl Device {
                     }
                 };
 
-                let mtu = config.mtu.unwrap_or(crate::DEFAULT_MTU);
-
                 Device {
                     tun_name: RwLock::new(tun_name),
-                    tun: Tun::new(tun, mtu, false),
+                    tun: Tun::new(tun, false),
                     ctl,
                     route: Mutex::new(None),
                 }
@@ -443,7 +441,6 @@ impl AbstractDevice for Device {
             if let Err(err) = siocsifmtu(self.ctl.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
-            self.tun.set_mtu(value);
             Ok(())
         }
     }
@@ -460,10 +457,6 @@ impl AbstractDevice for Device {
             self.set_destination(dest)?;
         }
         Ok(())
-    }
-
-    fn packet_information(&self) -> bool {
-        self.tun.packet_information()
     }
 }
 
