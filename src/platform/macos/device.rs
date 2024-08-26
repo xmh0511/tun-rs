@@ -165,7 +165,7 @@ impl Device {
                 }
             };
 
-            crate::configuration::configure(&mut device, &config)?;
+            crate::configuration::configure(&mut device, config)?;
             device.set_alias(
                 config
                     .address
@@ -357,7 +357,7 @@ impl AbstractDevice for Device {
             if let Err(err) = siocsifaddr(ctl.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
-            let route = { self.route.lock().unwrap().clone() };
+            let route = { *self.route.lock().unwrap() };
             if let Some(mut route) = route {
                 route.addr = value;
                 self.set_route(route)?;
@@ -389,7 +389,7 @@ impl AbstractDevice for Device {
             if let Err(err) = siocsifdstaddr(ctl.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
-            let route = { self.route.lock().unwrap().clone() };
+            let route = { *self.route.lock().unwrap() };
             if let Some(mut route) = route {
                 route.dest = value;
                 self.set_route(route)?;
@@ -451,7 +451,7 @@ impl AbstractDevice for Device {
             if let Err(err) = siocsifnetmask(ctl.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
-            let route = { self.route.lock().unwrap().clone() };
+            let route = { *self.route.lock().unwrap() };
             if let Some(mut route) = route {
                 route.netmask = value;
                 self.set_route(route)?;

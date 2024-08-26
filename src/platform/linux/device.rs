@@ -135,7 +135,7 @@ impl Device {
             };
 
             if config.platform_config.ensure_root_privileges {
-                crate::configuration::configure(&mut device, &config)?;
+                crate::configuration::configure(&mut device, config)?;
             }
 
             Ok(device)
