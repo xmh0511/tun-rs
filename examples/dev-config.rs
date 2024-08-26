@@ -56,9 +56,12 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     let r = dev.netmask()?;
     println!("{:?}", r);
 
-    dev.set_address(std::net::IpAddr::V4(Ipv4Addr::new(10, 0, 0, 20)))?;
-    dev.set_destination(std::net::IpAddr::V4(Ipv4Addr::new(10, 0, 0, 66)))?;
-    dev.set_netmask(std::net::IpAddr::V4(Ipv4Addr::new(255, 255, 0, 0)))?;
+    #[cfg(not(target_os = "windows"))]
+    {
+        dev.set_address(std::net::IpAddr::V4(Ipv4Addr::new(10, 0, 0, 20)))?;
+        dev.set_destination(std::net::IpAddr::V4(Ipv4Addr::new(10, 0, 0, 66)))?;
+        dev.set_netmask(std::net::IpAddr::V4(Ipv4Addr::new(255, 255, 0, 0)))?;
+    }
     dev.set_mtu(65535)?;
 
     //dev.set_tun_name("tun8")?;
