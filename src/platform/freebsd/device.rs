@@ -117,7 +117,7 @@ impl Device {
 
                 Device {
                     tun_name: RwLock::new(tun_name),
-                    tun: Tun::new(tun, mtu, false),
+                    tun: Tun::new(tun, false),
                     ctl,
                     route: Mutex::new(None),
                 }
@@ -443,7 +443,6 @@ impl AbstractDevice for Device {
             if let Err(err) = siocsifmtu(self.ctl.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
-            self.tun.set_mtu(value);
             Ok(())
         }
     }
@@ -462,9 +461,6 @@ impl AbstractDevice for Device {
         Ok(())
     }
 
-    fn packet_information(&self) -> bool {
-        self.tun.packet_information()
-    }
 }
 
 impl AsRawFd for Device {
