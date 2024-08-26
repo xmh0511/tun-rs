@@ -426,7 +426,16 @@ pub struct Tap {
 }
 unsafe impl Send for Tap {}
 unsafe impl Sync for Tap {}
-
+impl Drop for Tap {
+    fn drop(&mut self) {
+        if let Err(e) = self.shutdown() {
+            log::warn!("shutdown={:?}", e)
+        }
+        if let Err(e) = ffi::close_handle(self.handle) {
+            log::warn!("close_handle={:?}", e)
+        }
+    }
+}
 impl Tap {
     pub(crate) fn new(name: String) -> std::io::Result<Self> {
         let luid = ffi::alias_to_luid(&encode_utf16(&name)).map_err(|e| {
