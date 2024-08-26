@@ -12,12 +12,12 @@
 //
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
 
+use crate::address::IntoAddress;
+use crate::platform::PlatformConfig;
+use crate::AbstractDevice;
 use std::net::IpAddr;
 #[cfg(unix)]
 use std::os::unix::io::RawFd;
-
-use crate::address::IntoAddress;
-use crate::platform::PlatformConfig;
 
 cfg_if::cfg_if! {
     if #[cfg(windows)] {
@@ -40,7 +40,8 @@ pub enum Layer {
 /// Configuration builder for a TUN interface.
 #[derive(Clone, Default, Debug)]
 pub struct Configuration {
-    pub(crate) tun_name: Option<String>,
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    pub(crate) tun_name_: Option<String>,
     pub(crate) platform_config: PlatformConfig,
     pub(crate) address: Option<IpAddr>,
     pub(crate) destination: Option<IpAddr>,
@@ -79,16 +80,18 @@ impl Configuration {
         since = "1.1.2",
         note = "Since the API `name` may have an easy name conflict when IDE prompts, it is replaced by `tun_name` for better coding experience"
     )]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn name<S: AsRef<str>>(&mut self, tun_name: S) -> &mut Self {
-        self.tun_name = Some(tun_name.as_ref().into());
+        self.tun_name_ = Some(tun_name.as_ref().into());
         self
     }
 
     /// Set the tun name.
     ///
     /// [Note: on macOS, the tun name must be the form `utunx` where `x` is a number, such as `utun3`. -- end note]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn tun_name<S: AsRef<str>>(&mut self, tun_name: S) -> &mut Self {
-        self.tun_name = Some(tun_name.as_ref().into());
+        self.tun_name_ = Some(tun_name.as_ref().into());
         self
     }
 
@@ -188,4 +191,38 @@ impl Configuration {
         self.close_fd_on_drop = Some(value);
         self
     }
+}
+
+/// Reconfigure the device.
+#[allow(dead_code)]
+pub(crate) fn configure<D: AbstractDevice>(
+    device: &mut D,
+    config: &Configuration,
+) -> crate::error::Result<()> {
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
+    {
+        if let Some(mtu) = config.mtu {
+            device.set_mtu(mtu)?;
+        }
+        if let (Some(address), Some(netmask)) = (config.address, config.netmask) {
+            device.set_network_address(address, netmask, config.destination)?;
+        }
+    }
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
+    if let Some(ip) = config.broadcast {
+        device.set_broadcast(ip)?;
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
+    if let Some(enabled) = config.enabled {
+        device.enabled(enabled)?;
+    }
+    _ = device;
+    _ = config;
+    Ok(())
 }

@@ -12,85 +12,118 @@
 //
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
 
-use crate::configuration::Configuration;
-use crate::error::Result;
-use std::io::{Read, Write};
+#[allow(unused_imports)]
 use std::net::IpAddr;
 
+use crate::error::Result;
+
 /// A TUN abstract device interface.
-pub trait AbstractDevice: Read + Write {
-    /// Reconfigure the device.
-    fn configure(&mut self, config: &Configuration) -> Result<()> {
-        if let Some(ip) = config.address {
-            self.set_address(ip)?;
-        }
-
-        if let Some(ip) = config.destination {
-            self.set_destination(ip)?;
-        }
-
-        if let Some(ip) = config.broadcast {
-            self.set_broadcast(ip)?;
-        }
-
-        if let Some(ip) = config.netmask {
-            self.set_netmask(ip)?;
-        }
-
-        if let Some(mtu) = config.mtu {
-            self.set_mtu(mtu)?;
-        }
-
-        if let Some(enabled) = config.enabled {
-            self.enabled(enabled)?;
-        }
-
-        Ok(())
-    }
-
+pub trait AbstractDevice {
     /// Get the device tun name.
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
     fn tun_name(&self) -> Result<String>;
 
     /// Set the device tun name.
-    fn set_tun_name(&mut self, tun_name: &str) -> Result<()>;
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+    fn set_tun_name(&self, tun_name: &str) -> Result<()>;
 
     /// Turn on or off the interface.
-    fn enabled(&mut self, value: bool) -> Result<()>;
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
+    fn enabled(&self, value: bool) -> Result<()>;
 
     /// Get the address.
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
     fn address(&self) -> Result<IpAddr>;
 
     /// Set the address.
-    fn set_address(&mut self, value: IpAddr) -> Result<()>;
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
+    fn set_address(&self, value: IpAddr) -> Result<()>;
 
     /// Get the destination address.
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
     fn destination(&self) -> Result<IpAddr>;
 
     /// Set the destination address.
-    fn set_destination(&mut self, value: IpAddr) -> Result<()>;
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
+    fn set_destination(&self, value: IpAddr) -> Result<()>;
 
     /// Get the broadcast address.
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
     fn broadcast(&self) -> Result<IpAddr>;
 
     /// Set the broadcast address.
-    fn set_broadcast(&mut self, value: IpAddr) -> Result<()>;
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
+    fn set_broadcast(&self, value: IpAddr) -> Result<()>;
 
     /// Get the netmask.
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
     fn netmask(&self) -> Result<IpAddr>;
 
     /// Set the netmask.
-    fn set_netmask(&mut self, value: IpAddr) -> Result<()>;
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
+    fn set_netmask(&self, value: IpAddr) -> Result<()>;
+
+    /// Sets the network addresses of this adapter, including network address, subnet mask, and gateway
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
+    fn set_network_address(
+        &self,
+        address: IpAddr,
+        netmask: IpAddr,
+        destination: Option<IpAddr>,
+    ) -> Result<()>;
 
     /// Get the MTU.
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "ios",
+        target_os = "android"
+    ))]
     fn mtu(&self) -> Result<u16>;
 
     /// Set the MTU.
-    ///
-    /// [Note: This setting has no effect on the Windows platform due to the mtu of wintun is always 65535. --end note]
-    fn set_mtu(&mut self, value: u16) -> Result<()>;
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "ios",
+        target_os = "android"
+    ))]
+    fn set_mtu(&self, value: u16) -> Result<()>;
 
     /// Return whether the underlying tun device on the platform has packet information
-    ///
-    /// [Note: This value is not used to specify whether the packets delivered from/to tun2 have packet information. -- end note]
     fn packet_information(&self) -> bool;
 }

@@ -17,11 +17,10 @@ use crate::{
     configuration::Configuration,
     device::AbstractDevice,
     error::{Error, Result},
-    platform::posix::{self, Fd, Tun},
+    platform::posix::{Fd, Tun},
 };
 use std::{
     io::{Read, Write},
-    net::IpAddr,
     os::unix::io::{AsRawFd, IntoRawFd, RawFd},
 };
 
@@ -59,11 +58,6 @@ impl Device {
         };
 
         Ok(device)
-    }
-
-    /// Split the interface into a `Reader` and `Writer`.
-    pub fn split(self) -> (posix::Reader, posix::Writer) {
-        (self.tun.reader, self.tun.writer)
     }
 
     /// Set non-blocking mode
@@ -107,56 +101,12 @@ impl Write for Device {
 }
 
 impl AbstractDevice for Device {
-    fn tun_name(&self) -> Result<String> {
-        Ok("".to_string())
-    }
-
-    fn set_tun_name(&mut self, value: &str) -> Result<()> {
-        Err(Error::NotImplemented)
-    }
-
-    fn enabled(&mut self, value: bool) -> Result<()> {
-        Ok(())
-    }
-
-    fn address(&self) -> Result<IpAddr> {
-        Err(Error::NotImplemented)
-    }
-
-    fn set_address(&mut self, _value: IpAddr) -> Result<()> {
-        Ok(())
-    }
-
-    fn destination(&self) -> Result<IpAddr> {
-        Err(Error::NotImplemented)
-    }
-
-    fn set_destination(&mut self, _value: IpAddr) -> Result<()> {
-        Ok(())
-    }
-
-    fn broadcast(&self) -> Result<IpAddr> {
-        Err(Error::NotImplemented)
-    }
-
-    fn set_broadcast(&mut self, _value: IpAddr) -> Result<()> {
-        Ok(())
-    }
-
-    fn netmask(&self) -> Result<IpAddr> {
-        Err(Error::NotImplemented)
-    }
-
-    fn set_netmask(&mut self, _value: IpAddr) -> Result<()> {
-        Ok(())
-    }
-
     fn mtu(&self) -> Result<u16> {
         // TODO: must get the mtu from the underlying device driver
         Ok(self.tun.mtu())
     }
 
-    fn set_mtu(&mut self, value: u16) -> Result<()> {
+    fn set_mtu(&self, value: u16) -> Result<()> {
         // TODO: must set the mtu to the underlying device driver
         self.tun.set_mtu(value);
         Ok(())

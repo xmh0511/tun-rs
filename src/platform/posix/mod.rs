@@ -24,5 +24,5 @@ pub(crate) use sockaddr::ipaddr_to_sockaddr;
 mod fd;
 pub(crate) use self::fd::Fd;
 
-mod split;
-pub use self::split::{Reader, Tun, Writer};
+mod tun;
+pub use self::tun::Tun;
