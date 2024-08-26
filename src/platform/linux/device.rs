@@ -23,6 +23,7 @@ use std::{
     net::IpAddr,
     os::unix::io::{AsRawFd, IntoRawFd, RawFd},
     ptr,
+    sync::RwLock,
 };
 
 use crate::{
@@ -37,7 +38,7 @@ const OVERWRITE_SIZE: usize = std::mem::size_of::<libc::__c_anonymous_ifr_ifru>(
 
 /// A TUN device using the TUN/TAP Linux driver.
 pub struct Device {
-    tun_name: String,
+    tun_name: RwLock<String>,
     tun: Tun,
     ctl: Fd,
 }
@@ -127,7 +128,7 @@ impl Device {
                     .to_string_lossy()
                     .to_string();
                 Device {
-                    tun_name,
+                    tun_name: RwLock::new(tun_name),
                     tun: Tun::new(tun_fd, mtu, packet_information),
                     ctl,
                 }
@@ -146,17 +147,19 @@ impl Device {
     /// Prepare a new request.
     unsafe fn request(&self) -> ifreq {
         let mut req: ifreq = mem::zeroed();
+        let tun_name = self.tun_name.read().unwrap();
+        let tun_name = &*tun_name;
         ptr::copy_nonoverlapping(
-            self.tun_name.as_ptr() as *const c_char,
+            tun_name.as_ptr() as *const c_char,
             req.ifr_name.as_mut_ptr(),
-            self.tun_name.len(),
+            tun_name.len(),
         );
 
         req
     }
 
     /// Make the device persistent.
-    pub fn persist(&mut self) -> Result<()> {
+    pub fn persist(&self) -> Result<()> {
         unsafe {
             if let Err(err) = tunsetpersist(self.as_raw_fd(), &1) {
                 Err(io::Error::from(err).into())
@@ -167,7 +170,7 @@ impl Device {
     }
 
     /// Set the owner of the device.
-    pub fn user(&mut self, value: i32) -> Result<()> {
+    pub fn user(&self, value: i32) -> Result<()> {
         unsafe {
             if let Err(err) = tunsetowner(self.as_raw_fd(), &value) {
                 Err(io::Error::from(err).into())
@@ -178,7 +181,7 @@ impl Device {
     }
 
     /// Set the group of the device.
-    pub fn group(&mut self, value: i32) -> Result<()> {
+    pub fn group(&self, value: i32) -> Result<()> {
         unsafe {
             if let Err(err) = tunsetgroup(self.as_raw_fd(), &value) {
                 Err(io::Error::from(err).into())
@@ -230,7 +233,7 @@ impl Write for Device {
 
 impl AbstractDevice for Device {
     fn tun_name(&self) -> Result<String> {
-        Ok(self.tun_name.clone())
+        Ok(self.tun_name.read().unwrap().clone())
     }
 
     fn set_tun_name(&self, value: &str) -> Result<()> {
@@ -252,7 +255,7 @@ impl AbstractDevice for Device {
                 return Err(io::Error::from(err).into());
             }
 
-            self.tun_name = value.into();
+            *self.tun_name.write().unwrap() = value.into();
 
             Ok(())
         }
