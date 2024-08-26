@@ -127,7 +127,7 @@ impl Device {
                     tun_name,
                     tun: Tun::new(tun, mtu, false),
                     ctl,
-                    route: None,
+                    route: Mutex::new(None),
                 }
             };
 
