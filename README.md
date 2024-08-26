@@ -118,7 +118,7 @@ pub extern "C" fn start_tun(fd: std::os::raw::c_int) {
             p_cfg.packet_information(true);
         });
         let tun = tun2::create_as_async(&cfg).unwrap();
-		let mut buf = [0u8;1500];
+        let mut buf = [0u8;1500];
         while let Ok(packet) = tun.recv(& mut buf).await {
             ...
         }
