@@ -79,6 +79,7 @@ macro_rules! local_buf_util {
 macro_rules! local_buf_util {
 	($e:expr,$size:expr) =>{
 		{
+			#[allow(clippy::large_enum_variant)]
 			pub(crate) enum OptBuf{
 				Heap(Vec<u8>),
 				Stack([u8;crate::DEFAULT_MTU as usize + PIL])

@@ -109,13 +109,10 @@ impl Device {
                                     break 'End (tun, device_name);
                                 }
                             }
-                            return Err(Error::Io(
-                                std::io::Error::new(
-                                    std::io::ErrorKind::AlreadyExists,
-                                    "no avaiable file descriptor",
-                                )
-                                .into(),
-                            ));
+                            return Err(Error::Io(std::io::Error::new(
+                                std::io::ErrorKind::AlreadyExists,
+                                "no avaiable file descriptor",
+                            )));
                         };
                         (tun, device_name)
                     }
@@ -124,7 +121,7 @@ impl Device {
                 let mtu = config.mtu.unwrap_or(crate::DEFAULT_MTU);
 
                 Device {
-                    tun_name:RwLock::new(tun_name),
+                    tun_name: RwLock::new(tun_name),
                     tun: Tun::new(tun, mtu, false),
                     ctl,
                     route: Mutex::new(None),
@@ -143,7 +140,7 @@ impl Device {
                     .unwrap_or(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 0))),
             )?;
 
-            crate::configuration::configure(&mut device, &config)?;
+            crate::configuration::configure(&mut device, config)?;
 
             Ok(device)
         } else {
@@ -184,10 +181,10 @@ impl Device {
             let route = Route {
                 addr,
                 netmask: mask,
-                dest: dest,
+                dest,
             };
             let mut route_guard = self.route.lock().unwrap();
-            if let Err(e) = self.set_route(route, &mut *route_guard) {
+            if let Err(e) = self.set_route(route, &mut route_guard) {
                 log::warn!("{e:?}");
             }
 
@@ -349,14 +346,10 @@ impl AbstractDevice for Device {
     fn set_address(&self, value: IpAddr) -> Result<()> {
         unsafe {
             let mut req = self.request();
-            if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &mut req) {
+            if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
-            let previous = {
-                (*self.route.lock().unwrap())
-                    .clone()
-                    .ok_or(Error::InvalidConfig)?
-            };
+            let previous = { (*self.route.lock().unwrap()).ok_or(Error::InvalidConfig)? };
             self.set_alias(
                 value,
                 IpAddr::V4(previous.dest),
@@ -380,14 +373,10 @@ impl AbstractDevice for Device {
     fn set_destination(&self, value: IpAddr) -> Result<()> {
         unsafe {
             let mut req = self.request();
-            if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &mut req) {
+            if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
-            let previous = {
-                (*self.route.lock().unwrap())
-                    .clone()
-                    .ok_or(Error::InvalidConfig)?
-            };
+            let previous = { (*self.route.lock().unwrap()).ok_or(Error::InvalidConfig)? };
             self.set_alias(
                 IpAddr::V4(previous.addr),
                 value,
@@ -427,14 +416,10 @@ impl AbstractDevice for Device {
     fn set_netmask(&self, value: IpAddr) -> Result<()> {
         unsafe {
             let mut req = self.request();
-            if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &mut req) {
+            if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
-            let previous = {
-                (*self.route.lock().unwrap())
-                    .clone()
-                    .ok_or(Error::InvalidConfig)?
-            };
+            let previous = { (*self.route.lock().unwrap()).ok_or(Error::InvalidConfig)? };
             self.set_alias(IpAddr::V4(previous.addr), IpAddr::V4(previous.dest), value)?;
         }
         Ok(())
