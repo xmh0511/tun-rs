@@ -59,14 +59,15 @@ impl Device {
     /// Create a new `Device` for the given `Configuration`.
     pub fn new(config: &Configuration) -> Result<Self> {
         let layer = config.layer.unwrap_or(Layer::L3);
+        let mtu = config.mtu.unwrap_or(crate::DEFAULT_MTU);
         if layer == Layer::L3 {
             if let Some(fd) = config.raw_fd {
                 let close_fd_on_drop = config.close_fd_on_drop.unwrap_or(true);
                 let tun = Fd::new(fd, close_fd_on_drop).map_err(|_| io::Error::last_os_error())?;
                 let device = Device {
-                    tun_name: None,
+                    tun_name: RwLock::new(None),
                     tun: posix::Tun::new(tun, mtu, config.platform_config.packet_information),
-                    ctl: None,
+                    ctl: Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)?,
                 };
                 return Ok(device);
             }
@@ -119,8 +120,6 @@ impl Device {
 
                     tun_fd
                 };
-
-                let mtu = config.mtu.unwrap_or(crate::DEFAULT_MTU);
 
                 let ctl = Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)?;
 
