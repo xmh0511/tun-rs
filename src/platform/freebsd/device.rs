@@ -84,10 +84,6 @@ impl Device {
                     return Err(Error::UnsupportedLayer);
                 }
 
-                let queues_num = config.queues.unwrap_or(1);
-                if queues_num != 1 {
-                    return Err(Error::InvalidQueuesNumber);
-                }
 
                 let ctl = Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)?;
 

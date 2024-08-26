@@ -92,7 +92,6 @@ impl Device {
                 if !tun_name.starts_with("utun") {
                     return Err(Error::InvalidName);
                 }
-
                 tun_name[4..].parse::<u32>()? + 1_u32
             } else {
                 0_u32

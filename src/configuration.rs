@@ -118,7 +118,7 @@ impl Configuration {
         f(&mut self.platform_config);
         self
     }
-
+  
     /// Set the tun name.
     ///
     /// [Note: on macOS, the tun name must be the form `utunx` where `x` is a number, such as `utun3`. -- end note]
