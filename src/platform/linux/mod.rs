@@ -45,7 +45,6 @@ impl PlatformConfig {
         self.packet_information = value;
         self
     }
-
 }
 
 /// Create a TUN device with the given name.

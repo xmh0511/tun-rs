@@ -23,18 +23,18 @@ use std::{
 };
 
 use libc::{
-    self, AF_INET, c_char, c_short, IFF_MULTI_QUEUE, IFF_NO_PI, IFF_RUNNING, IFF_TAP, IFF_TUN,
-    IFF_UP, IFNAMSIZ, ifreq, O_RDWR, SOCK_DGRAM,
+    self, c_char, c_short, ifreq, AF_INET, IFF_MULTI_QUEUE, IFF_NO_PI, IFF_RUNNING, IFF_TAP,
+    IFF_TUN, IFF_UP, IFNAMSIZ, O_RDWR, SOCK_DGRAM,
 };
 
+use crate::configuration::configure;
 use crate::{
     configuration::{Configuration, Layer},
     device::AbstractDevice,
     error::{Error, Result},
     platform::linux::sys::*,
-    platform::posix::{self, Fd, ipaddr_to_sockaddr, sockaddr_union, Tun},
+    platform::posix::{self, ipaddr_to_sockaddr, sockaddr_union, Fd, Tun},
 };
-use crate::configuration::configure;
 
 const OVERWRITE_SIZE: usize = std::mem::size_of::<libc::__c_anonymous_ifr_ifru>();
 
@@ -128,8 +128,8 @@ impl Device {
                 }
             };
 
-        configure(&mut device, config)?;
-        Ok(device)
+            configure(&mut device, config)?;
+            Ok(device)
         } else {
             unimplemented!()
         }
@@ -337,7 +337,12 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_network_address(&self, address: IpAddr, netmask: IpAddr, destination: Option<IpAddr>) -> Result<()> {
+    fn set_network_address(
+        &self,
+        address: IpAddr,
+        netmask: IpAddr,
+        destination: Option<IpAddr>,
+    ) -> Result<()> {
         self.set_address(address)?;
         self.set_netmask(netmask)?;
         if let Some(destination) = destination {

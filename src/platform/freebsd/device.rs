@@ -84,7 +84,6 @@ impl Device {
                     return Err(Error::UnsupportedLayer);
                 }
 
-
                 let ctl = Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)?;
 
                 let (tun, tun_name) = {

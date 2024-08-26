@@ -83,16 +83,13 @@ pub struct Configuration {
         target_os = "freebsd"
     ))]
     pub(crate) mtu: Option<u16>,
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
     pub(crate) enabled: Option<bool>,
     #[cfg(any(
         target_os = "windows",
         target_os = "linux",
-        target_os = "freebsd"
+        target_os = "freebsd",
+        target_os = "macos"
     ))]
     pub(crate) layer: Option<Layer>,
     #[cfg(unix)]
@@ -118,7 +115,7 @@ impl Configuration {
         f(&mut self.platform_config);
         self
     }
-  
+
     /// Set the tun name.
     ///
     /// [Note: on macOS, the tun name must be the form `utunx` where `x` is a number, such as `utun3`. -- end note]
@@ -198,22 +195,14 @@ impl Configuration {
     }
 
     /// Set the interface to be enabled once created.
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
     pub fn up(&mut self) -> &mut Self {
         self.enabled = Some(true);
         self
     }
 
     /// Set the interface to be disabled once created.
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
     pub fn down(&mut self) -> &mut Self {
         self.enabled = Some(false);
         self
@@ -223,7 +212,8 @@ impl Configuration {
     #[cfg(any(
         target_os = "windows",
         target_os = "linux",
-        target_os = "freebsd"
+        target_os = "freebsd",
+        target_os = "macos"
     ))]
     pub fn layer(&mut self, value: Layer) -> &mut Self {
         self.layer = Some(value);
