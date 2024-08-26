@@ -21,21 +21,21 @@ use std::sync::Arc;
 use super::TunPacketCodec;
 use crate::device::AbstractDevice;
 use crate::platform::windows::{Driver, PacketVariant};
-use crate::platform::Device;
+use crate::platform::DeviceInner;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio::sync::mpsc::error::TrySendError;
 use tokio_util::codec::Framed;
 
 /// An async TUN device wrapper around a TUN device.
 pub struct AsyncDevice {
-    inner: Device,
+    inner: DeviceInner,
     session_reader: DeviceReader,
     session_writer: DeviceWriter,
 }
 
 /// Returns a shared reference to the underlying Device object.
 impl core::ops::Deref for AsyncDevice {
-    type Target = Device;
+    type Target = DeviceInner;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
@@ -51,7 +51,7 @@ impl core::ops::DerefMut for AsyncDevice {
 
 impl AsyncDevice {
     /// Create a new `AsyncDevice` wrapping around a `Device`.
-    pub fn new(device: Device) -> io::Result<AsyncDevice> {
+    pub fn new(device: DeviceInner) -> io::Result<AsyncDevice> {
         let session_reader = DeviceReader::new(device.driver.clone())?;
         let session_writer = DeviceWriter::new(device.driver.clone())?;
         Ok(AsyncDevice {
@@ -73,12 +73,12 @@ impl AsyncDevice {
     }
 
     /// Recv a packet from tun device - Not implemented for windows
-    pub async fn recv(&self, _buf: &mut [u8]) -> std::io::Result<usize> {
+    pub(crate) async fn recv(&self, _buf: &mut [u8]) -> std::io::Result<usize> {
         unimplemented!()
     }
 
     /// Send a packet to tun device - Not implemented for windows
-    pub async fn send(&self, _buf: &[u8]) -> std::io::Result<usize> {
+    pub(crate) async fn send(&self, _buf: &[u8]) -> std::io::Result<usize> {
         unimplemented!()
     }
 }
