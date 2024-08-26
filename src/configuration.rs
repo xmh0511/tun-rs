@@ -12,9 +12,11 @@
 //
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
 
+#[allow(unused_imports)]
 use crate::address::IntoAddress;
 use crate::platform::PlatformConfig;
 use crate::AbstractDevice;
+#[allow(unused_imports)]
 use std::net::IpAddr;
 #[cfg(unix)]
 use std::os::unix::io::RawFd;
@@ -190,14 +192,24 @@ impl Configuration {
     }
 
     /// Set the interface to be enabled once created.
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "windows"
+    ))]
     pub fn up(&mut self) -> &mut Self {
         self.enabled = Some(true);
         self
     }
 
     /// Set the interface to be disabled once created.
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "windows",
+    ))]
     pub fn down(&mut self) -> &mut Self {
         self.enabled = Some(false);
         self
