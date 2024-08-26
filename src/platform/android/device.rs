@@ -13,7 +13,6 @@
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
 #![allow(unused_variables)]
 
-use std::io::{Read, Write};
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 
 use crate::configuration::Configuration;
@@ -26,18 +25,6 @@ pub struct Device {
     tun: Tun,
 }
 
-impl AsRef<dyn AbstractDevice + 'static> for Device {
-    fn as_ref(&self) -> &(dyn AbstractDevice + 'static) {
-        self
-    }
-}
-
-impl AsMut<dyn AbstractDevice + 'static> for Device {
-    fn as_mut(&mut self) -> &mut (dyn AbstractDevice + 'static) {
-        self
-    }
-}
-
 impl Device {
     /// Create a new `Device` for the given `Configuration`.
     pub fn new(config: &Configuration) -> Result<Self> {
@@ -47,11 +34,10 @@ impl Device {
             _ => return Err(Error::InvalidConfig),
         };
         let device = {
-            let mtu = config.mtu.unwrap_or(crate::DEFAULT_MTU);
             let tun = Fd::new(fd, close_fd_on_drop).map_err(|_| std::io::Error::last_os_error())?;
 
             Device {
-                tun: Tun::new(tun, mtu, false),
+                tun: Tun::new(tun, false),
             }
         };
 
@@ -74,34 +60,7 @@ impl Device {
     }
 }
 
-impl Read for Device {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.tun.read(buf)
-    }
-}
-
-impl Write for Device {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.tun.write(buf)
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.tun.flush()
-    }
-}
-
 impl AbstractDevice for Device {
-    fn mtu(&self) -> Result<u16> {
-        // TODO: must get the mtu from the underlying device driver
-        Ok(self.tun.mtu())
-    }
-
-    fn set_mtu(&self, value: u16) -> Result<()> {
-        // TODO: must set the mtu to the underlying device driver
-        self.tun.set_mtu(value);
-        Ok(())
-    }
-
     fn packet_information(&self) -> bool {
         self.tun.packet_information()
     }

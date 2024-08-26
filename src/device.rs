@@ -15,8 +15,6 @@
 #[allow(unused_imports)]
 use std::net::IpAddr;
 
-use crate::error::Result;
-
 /// A TUN abstract device interface.
 pub trait AbstractDevice {
     /// Get the device tun name.
@@ -108,8 +106,6 @@ pub trait AbstractDevice {
         target_os = "linux",
         target_os = "macos",
         target_os = "freebsd",
-        target_os = "ios",
-        target_os = "android"
     ))]
     fn mtu(&self) -> Result<u16>;
 
@@ -119,8 +115,6 @@ pub trait AbstractDevice {
         target_os = "linux",
         target_os = "macos",
         target_os = "freebsd",
-        target_os = "ios",
-        target_os = "android"
     ))]
     fn set_mtu(&self, value: u16) -> Result<()>;
 

@@ -49,13 +49,12 @@ impl Device {
     /// Create a new `Device` for the given `Configuration`.
     pub fn new(config: &Configuration) -> Result<Self> {
         let layer = config.layer.unwrap_or(Layer::L3);
-        let mtu = config.mtu.unwrap_or(crate::DEFAULT_MTU);
         if let Some(fd) = config.raw_fd {
             let close_fd_on_drop = config.close_fd_on_drop.unwrap_or(true);
             let tun = Fd::new(fd, close_fd_on_drop).map_err(|_| io::Error::last_os_error())?;
             let device = Device {
                 name: RwLock::new(String::new()),
-                tun: posix::Tun::new(tun, mtu, config.platform_config.packet_information),
+                tun: posix::Tun::new(tun, config.platform_config.packet_information),
                 ctl: Fd::new(unsafe { libc::socket(AF_INET, SOCK_DGRAM, 0) }, true)?,
             };
             return Ok(device);
@@ -110,7 +109,7 @@ impl Device {
                 .to_string();
             Device {
                 name: RwLock::new(tun_name),
-                tun: Tun::new(tun_fd, mtu, packet_information),
+                tun: Tun::new(tun_fd, packet_information),
                 ctl,
             }
         };
@@ -358,7 +357,6 @@ impl AbstractDevice for Device {
             if let Err(err) = siocsifmtu(self.ctl.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
-            self.tun.set_mtu(value);
             Ok(())
         }
     }

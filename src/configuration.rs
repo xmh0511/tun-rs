@@ -192,26 +192,24 @@ impl Configuration {
     }
 
     /// Set the interface to be enabled once created.
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd",
-        target_os = "windows"
-    ))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd",))]
     pub fn up(&mut self) -> &mut Self {
         self.enabled = Some(true);
         self
     }
+    #[cfg(windows)]
+    pub fn up(&mut self) -> &mut Self {
+        self
+    }
 
     /// Set the interface to be disabled once created.
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd",
-        target_os = "windows",
-    ))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd",))]
     pub fn down(&mut self) -> &mut Self {
         self.enabled = Some(false);
+        self
+    }
+    #[cfg(windows)]
+    pub fn down(&mut self) -> &mut Self {
         self
     }
 

@@ -17,7 +17,6 @@ use crate::PACKET_INFORMATION_LENGTH as PIL;
 use bytes::BufMut;
 use std::io::{self, Read, Write};
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
-use std::sync::RwLock;
 
 /// Infer the protocol based on the first nibble in the packet buffer.
 pub(crate) fn is_ipv6(buf: &[u8]) -> std::io::Result<bool> {
@@ -123,12 +122,11 @@ macro_rules! need_mut {
 pub struct Tun {
     pub(crate) fd: Fd,
     pub(crate) offset: usize,
-    pub(crate) mtu: RwLock<u16>,
     pub(crate) packet_information: bool,
 }
 
 impl Tun {
-    pub(crate) fn new(fd: Fd, mtu: u16, packet_information: bool) -> Self {
+    pub(crate) fn new(fd: Fd, packet_information: bool) -> Self {
         #[cfg(any(target_os = "macos", target_os = "ios"))]
         let offset = if !packet_information { PIL } else { 0 };
         #[cfg(not(any(target_os = "macos", target_os = "ios")))]
@@ -136,21 +134,12 @@ impl Tun {
         Self {
             fd,
             offset,
-            mtu: RwLock::new(mtu),
             packet_information,
         }
     }
 
     pub fn set_nonblock(&self) -> io::Result<()> {
         self.fd.set_nonblock()
-    }
-
-    pub fn set_mtu(&self, value: u16) {
-        *self.mtu.write().unwrap() = value;
-    }
-
-    pub fn mtu(&self) -> u16 {
-        *self.mtu.read().unwrap()
     }
 
     pub fn packet_information(&self) -> bool {

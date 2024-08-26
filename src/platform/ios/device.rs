@@ -19,10 +19,7 @@ use crate::{
     error::{Error, Result},
     platform::posix::{Fd, Tun},
 };
-use std::{
-    io::{Read, Write},
-    os::unix::io::{AsRawFd, IntoRawFd, RawFd},
-};
+use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 
 /// A TUN device for iOS.
 pub struct Device {
@@ -50,10 +47,9 @@ impl Device {
             _ => return Err(Error::InvalidConfig),
         };
         let device = {
-            let mtu = config.mtu.unwrap_or(crate::DEFAULT_MTU);
             let fd = Fd::new(fd, close_fd_on_drop).map_err(|_| std::io::Error::last_os_error())?;
             Device {
-                tun: Tun::new(fd, mtu, config.platform_config.packet_information),
+                tun: Tun::new(fd, config.platform_config.packet_information),
             }
         };
 
@@ -76,42 +72,7 @@ impl Device {
     }
 }
 
-impl Read for Device {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.tun.read(buf)
-    }
-
-    fn read_vectored(&mut self, bufs: &mut [std::io::IoSliceMut<'_>]) -> std::io::Result<usize> {
-        self.tun.read_vectored(bufs)
-    }
-}
-
-impl Write for Device {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.tun.write(buf)
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.tun.flush()
-    }
-
-    fn write_vectored(&mut self, bufs: &[std::io::IoSlice<'_>]) -> std::io::Result<usize> {
-        self.tun.write_vectored(bufs)
-    }
-}
-
 impl AbstractDevice for Device {
-    fn mtu(&self) -> Result<u16> {
-        // TODO: must get the mtu from the underlying device driver
-        Ok(self.tun.mtu())
-    }
-
-    fn set_mtu(&self, value: u16) -> Result<()> {
-        // TODO: must set the mtu to the underlying device driver
-        self.tun.set_mtu(value);
-        Ok(())
-    }
-
     fn packet_information(&self) -> bool {
         self.tun.packet_information()
     }

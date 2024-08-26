@@ -261,18 +261,6 @@ impl Write for Device {
     }
 }
 
-impl AsRef<dyn AbstractDevice + 'static> for Device {
-    fn as_ref(&self) -> &(dyn AbstractDevice + 'static) {
-        self
-    }
-}
-
-impl AsMut<dyn AbstractDevice + 'static> for Device {
-    fn as_mut(&mut self) -> &mut (dyn AbstractDevice + 'static) {
-        self
-    }
-}
-
 impl AbstractDevice for Device {
     fn tun_name(&self) -> Result<String> {
         driver_case!(
