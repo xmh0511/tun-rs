@@ -223,7 +223,7 @@ impl Device {
             }
         )
     }
-    pub fn shutdown(&self) -> io::Result<()> {
+    pub(crate) fn shutdown(&self) -> io::Result<()> {
         driver_case!(
             &self.driver;
             tun=>{

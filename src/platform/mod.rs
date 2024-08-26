@@ -67,6 +67,9 @@ impl Device {
     pub fn send(&self, buf: &[u8]) -> std::io::Result<usize> {
         self.0.send(buf)
     }
+    pub fn shutdown(&self) -> std::io::Result<()> {
+        self.0.shutdown()
+    }
 }
 
 impl Deref for Device {

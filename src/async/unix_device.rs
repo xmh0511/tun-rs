@@ -12,18 +12,9 @@
 //
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
 
-// use core::pin::Pin;
-// use core::task::{Context, Poll};
-// use futures_core::ready;
-// use std::io::{IoSlice, Read, Write};
+use crate::platform::DeviceInner;
 use tokio::io::unix::AsyncFd;
 use tokio::io::Interest;
-// use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-// use tokio_util::codec::Framed;
-
-// use super::TunPacketCodec;
-// use crate::device::AbstractDevice;
-use crate::platform::DeviceInner;
 
 /// An async TUN device wrapper around a TUN device.
 pub struct AsyncDevice {
@@ -67,5 +58,8 @@ impl AsyncDevice {
         self.inner
             .async_io(Interest::READABLE, |device| device.send(buf))
             .await
+    }
+    pub fn shutdown(&self) -> std::io::Result {
+        todo!()
     }
 }

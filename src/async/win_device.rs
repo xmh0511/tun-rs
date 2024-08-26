@@ -70,4 +70,7 @@ impl AsyncDevice {
     pub async fn send(&self, buf: &[u8]) -> std::io::Result<usize> {
         self.inner.send(buf)
     }
+    pub fn shutdown(&self) -> io::Result<()> {
+        self.inner.shutdown()
+    }
 }
