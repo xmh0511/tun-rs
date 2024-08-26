@@ -17,7 +17,7 @@ use libc::{
 };
 use std::{
     // ffi::{CStr, CString},
-    io::{self, Read, Write},
+    io,
     mem,
     net::{IpAddr, Ipv4Addr},
     os::unix::io::{AsRawFd, IntoRawFd, RawFd},
@@ -112,8 +112,6 @@ impl Device {
                         (tun, device_name)
                     }
                 };
-
-                let mtu = config.mtu.unwrap_or(crate::DEFAULT_MTU);
 
                 Device {
                     tun_name: RwLock::new(tun_name),
@@ -460,7 +458,6 @@ impl AbstractDevice for Device {
         }
         Ok(())
     }
-
 }
 
 impl AsRawFd for Device {
