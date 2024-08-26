@@ -14,7 +14,13 @@
 
 #[allow(unused_imports)]
 use std::net::IpAddr;
-
+#[cfg(any(
+    target_os = "windows",
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "freebsd"
+))]
+use crate::error::Result;
 /// A TUN abstract device interface.
 pub trait AbstractDevice {
     /// Get the device tun name.
@@ -119,5 +125,10 @@ pub trait AbstractDevice {
     fn set_mtu(&self, value: u16) -> Result<()>;
 
     /// Return whether the underlying tun device on the platform has packet information
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "ios",
+    ))]
     fn packet_information(&self) -> bool;
 }

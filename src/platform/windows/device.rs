@@ -110,9 +110,6 @@ impl Driver {
             Driver::Tun(tun) => tun.write_by_ref(buf),
         }
     }
-    pub fn flush(&self) -> io::Result<()> {
-        Ok(())
-    }
     pub fn receive_blocking(&self) -> std::io::Result<PacketVariant> {
         match self {
             Driver::Tun(tun) => {
@@ -212,10 +209,6 @@ impl Device {
         Ok(device)
     }
 
-    pub fn split(self) -> (Reader, Writer) {
-        (Reader(self.driver.clone()), Writer(self.driver))
-    }
-
     /// Recv a packet from tun device
     pub fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
         driver_case!(
@@ -242,22 +235,6 @@ impl Device {
                tap.send(buf)
             }
         )
-    }
-}
-
-impl Read for Device {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.driver.read_by_ref(buf)
-    }
-}
-
-impl Write for Device {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.driver.write_by_ref(buf)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.driver.flush()
     }
 }
 
@@ -387,11 +364,6 @@ impl AbstractDevice for Device {
             }
         )
     }
-
-    fn packet_information(&self) -> bool {
-        // Note: wintun does not support packet information
-        false
-    }
 }
 
 pub struct Tun {
@@ -436,30 +408,6 @@ impl Tun {
     }
 }
 
-impl Read for Tun {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.read_by_ref(buf)
-    }
-}
-
-impl Write for Tun {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.write_by_ref(buf)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
-// impl Drop for Tun {
-//     fn drop(&mut self) {
-//         // The session has implemented drop
-//         if let Err(err) = self.session.shutdown() {
-//             log::error!("failed to shutdown session: {:?}", err);
-//         }
-//     }
-// }
 
 pub struct Tap {
     handle: HANDLE,
@@ -578,21 +526,6 @@ impl Tap {
     }
 }
 
-impl Read for Tap {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.read_by_ref(buf)
-    }
-}
-
-impl Write for Tap {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.write_by_ref(buf)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
 
 fn encode_utf16(string: &str) -> Vec<u16> {
     use std::iter::once;
