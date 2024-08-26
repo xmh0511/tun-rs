@@ -61,9 +61,9 @@ impl Device {
 }
 
 impl AbstractDevice for Device {
-    fn packet_information(&self) -> bool {
-        self.tun.packet_information()
-    }
+    // fn packet_information(&self) -> bool {
+    //     self.tun.packet_information()
+    // }
 }
 
 impl AsRawFd for Device {

@@ -39,11 +39,6 @@ async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
         .mtu(tun2::DEFAULT_MTU)
         .up();
 
-    #[cfg(target_os = "linux")]
-    config.platform_config(|config| {
-        config.ensure_root_privileges(true);
-    });
-
     let dev = tun2::create_as_async(&config)?;
     let size = dev.mtu()? as usize + tun2::PACKET_INFORMATION_LENGTH;
     let mut buf = vec![0; size];

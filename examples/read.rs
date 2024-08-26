@@ -39,11 +39,6 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
         .destination((10, 0, 0, 1))
         .up();
 
-    #[cfg(target_os = "linux")]
-    config.platform_config(|config| {
-        config.ensure_root_privileges(true);
-    });
-
     let dev = tun2::create(&config)?;
     std::thread::spawn(move || {
         let mut buf = [0; 4096];

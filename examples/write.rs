@@ -40,11 +40,6 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
         .destination((10, 0, 0, 1))
         .up();
 
-    #[cfg(target_os = "linux")]
-    config.platform_config(|config| {
-        config.ensure_root_privileges(true);
-    });
-
     #[cfg(target_os = "macos")]
     config.platform_config(|config| {
         config.packet_information(false);
