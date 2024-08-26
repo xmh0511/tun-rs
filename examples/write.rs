@@ -45,6 +45,11 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
         config.ensure_root_privileges(true);
     });
 
+    #[cfg(target_os = "macos")]
+    config.platform_config(|config| {
+        config.packet_information(false);
+    });
+
     let dev = tun2::create(&config)?;
     let mut buf = [0; 4096];
 

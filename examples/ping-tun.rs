@@ -54,7 +54,7 @@ async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
 
     #[cfg(target_os = "macos")]
     config.platform_config(|config| {
-        config.packet_information(true);
+        config.packet_information(false);
     });
 
     let dev = tun2::create_as_async(&config)?;
