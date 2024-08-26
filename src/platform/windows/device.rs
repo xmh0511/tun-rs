@@ -223,6 +223,17 @@ impl Device {
             }
         )
     }
+    pub fn shutdown(&self) -> io::Result<()> {
+        driver_case!(
+            &self.driver;
+            tun=>{
+                tun.get_session().shutdown().map_err(|e|io::Error::new(io::ErrorKind::Other,format!("{:?}",e)))
+            };
+            tap=>{
+               tap.shutdown()
+            }
+        )
+    }
 }
 
 impl AbstractDevice for Device {
