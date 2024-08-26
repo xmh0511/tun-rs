@@ -12,7 +12,6 @@
 //
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
 
-use std::io::Read;
 use std::sync::mpsc::Receiver;
 use tun2::BoxError;
 
@@ -45,11 +44,11 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
         config.ensure_root_privileges(true);
     });
 
-    let mut dev = tun2::create(&config)?;
+    let dev = tun2::create(&config)?;
     std::thread::spawn(move || {
         let mut buf = [0; 4096];
         loop {
-            let amount = dev.read(&mut buf)?;
+            let amount = dev.recv(&mut buf)?;
             println!("{:?}", &buf[0..amount]);
         }
         #[allow(unreachable_code)]

@@ -79,9 +79,6 @@ features = ["async"]
 name = "read-async"
 required-features = ["async"]
 
-[[example]]
-name = "read-async-codec"
-required-features = ["async"]
 
 [[example]]
 name = "ping-tun"

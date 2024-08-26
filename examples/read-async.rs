@@ -12,7 +12,6 @@
 //
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
 
-use tokio::io::AsyncReadExt;
 use tokio::sync::mpsc::Receiver;
 use tun2::{AbstractDevice, BoxError};
 
@@ -45,7 +44,7 @@ async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
         config.ensure_root_privileges(true);
     });
 
-    let mut dev = tun2::create_as_async(&config)?;
+    let dev = tun2::create_as_async(&config)?;
     let size = dev.mtu()? as usize + tun2::PACKET_INFORMATION_LENGTH;
     let mut buf = vec![0; size];
     loop {
@@ -54,7 +53,7 @@ async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
                 println!("Quit...");
                 break;
             }
-            len = dev.read(&mut buf) => {
+            len = dev.recv(&mut buf) => {
                 println!("pkt: {:?}", &buf[..len?]);
             }
         };

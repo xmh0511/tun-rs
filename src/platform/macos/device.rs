@@ -31,8 +31,7 @@ use libc::{
 };
 use std::{
     ffi::CStr,
-    io::{self, Read, Write},
-    mem,
+    io, mem,
     net::{IpAddr, Ipv4Addr},
     os::unix::io::{AsRawFd, IntoRawFd, RawFd},
     ptr,
@@ -270,22 +269,6 @@ impl Device {
     /// Send a packet to tun device
     pub fn send(&self, buf: &[u8]) -> io::Result<usize> {
         self.tun.send(buf)
-    }
-}
-
-impl Read for Device {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.tun.read(buf)
-    }
-}
-
-impl Write for Device {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.tun.write(buf)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.tun.flush()
     }
 }
 

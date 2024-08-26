@@ -13,7 +13,6 @@
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
 
 use packet::{builder::Builder, icmp, ip, Packet};
-use std::io::{Read, Write};
 use std::sync::mpsc::Receiver;
 use tun2::BoxError;
 
@@ -46,12 +45,12 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
         config.ensure_root_privileges(true);
     });
 
-    let mut dev = tun2::create(&config)?;
+    let dev = tun2::create(&config)?;
     let mut buf = [0; 4096];
 
     std::thread::spawn(move || {
         loop {
-            let amount = dev.read(&mut buf)?;
+            let amount = dev.recv(&mut buf)?;
             let pkt = &buf[0..amount];
             match ip::Packet::new(pkt) {
                 Ok(ip::Packet::V4(pkt)) => {
@@ -70,7 +69,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
                                 .sequence(icmp.sequence())?
                                 .payload(icmp.payload())?
                                 .build()?;
-                            let size = dev.write(&reply[..])?;
+                            let size = dev.send(&reply[..])?;
                             println!("write {size} len {}", reply.len());
                         }
                     }
