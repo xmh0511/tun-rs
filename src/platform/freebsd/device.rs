@@ -345,7 +345,7 @@ impl AbstractDevice for Device {
 
     fn set_address(&self, value: IpAddr) -> Result<()> {
         unsafe {
-            let mut req = self.request();
+            let req = self.request();
             if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
@@ -372,7 +372,7 @@ impl AbstractDevice for Device {
 
     fn set_destination(&self, value: IpAddr) -> Result<()> {
         unsafe {
-            let mut req = self.request();
+            let req = self.request();
             if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
@@ -415,7 +415,7 @@ impl AbstractDevice for Device {
 
     fn set_netmask(&self, value: IpAddr) -> Result<()> {
         unsafe {
-            let mut req = self.request();
+            let req = self.request();
             if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
