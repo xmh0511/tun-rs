@@ -191,23 +191,20 @@ impl Device {
             let session =
                 adapter.start_session(config.ring_capacity.unwrap_or(wintun::MAX_RING_CAPACITY))?;
             adapter.set_mtu(mtu as _)?;
-            let device = Device {
+            Device {
                 driver: Arc::new(Driver::Tun(Tun {
                     session: Arc::new(session),
                 })),
                 mtu,
-            };
-
-            device
+            }
         } else if layer == Layer::L2 {
             let tap = Tap::new(tun_name.to_owned())?;
             tap.set_ip(address, mask)?;
             tap.set_mtu(mtu as u32)?;
-            let device = Device {
+            Device {
                 driver: Arc::new(Driver::Tap(tap)),
                 mtu,
-            };
-            device
+            }
         } else {
             panic!("unknow layer {:?}", layer);
         };
@@ -536,7 +533,7 @@ impl Tap {
     pub fn read_by_ref(&self, buf: &mut [u8]) -> io::Result<usize> {
         ffi::read_file(self.handle, buf).map(|res| res as usize)
     }
-    fn enabled(&self, value: bool) -> io::Result<()> {
+    pub fn enabled(&self, value: bool) -> io::Result<()> {
         let status: u32 = if value { 1 } else { 0 };
         ffi::device_io_control(
             self.handle,
@@ -564,17 +561,17 @@ impl Tap {
         self.enabled(false)
     }
 
-    fn set_ip(&self, address: IpAddr, mask: IpAddr) -> io::Result<()> {
+    pub fn set_ip(&self, address: IpAddr, mask: IpAddr) -> io::Result<()> {
         netsh::set_interface_ip(self.index, &address, &mask, None)
     }
 
-    fn address(&self) -> Result<IpAddr> {
+    pub fn address(&self) -> Result<IpAddr> {
         unimplemented!()
     }
-    fn netmask(&self) -> Result<IpAddr> {
+    pub fn netmask(&self) -> Result<IpAddr> {
         unimplemented!()
     }
-    fn set_address(&self, _address: Ipv4Addr) -> io::Result<()> {
+    pub fn set_address(&self, _address: Ipv4Addr) -> io::Result<()> {
         unimplemented!()
     }
     pub fn mtu(&self) -> io::Result<u32> {
@@ -582,13 +579,13 @@ impl Tap {
         ffi::device_io_control(self.handle, TAP_WIN_IOCTL_GET_MTU, &(), &mut mtu).map(|_| mtu)
     }
 
-    fn set_mtu(&self, value: u32) -> io::Result<()> {
+    pub fn set_mtu(&self, value: u32) -> io::Result<()> {
         netsh::set_interface_mtu(self.index, value)
     }
-    fn destination(&self) -> Result<IpAddr> {
+    pub fn destination(&self) -> Result<IpAddr> {
         unimplemented!()
     }
-    fn set_destination(&self, _address: Ipv4Addr) -> Result<()> {
+    pub fn set_destination(&self, _address: Ipv4Addr) -> Result<()> {
         unimplemented!()
     }
 }

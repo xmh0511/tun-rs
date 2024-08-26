@@ -67,7 +67,7 @@ impl Device {
                 let device = Device {
                     tun_name: RwLock::new(String::new()),
                     tun: posix::Tun::new(tun, mtu, config.platform_config.packet_information),
-                    ctl: Fd::new(unsafe{libc::socket(AF_INET, SOCK_DGRAM, 0)}, true)?,
+                    ctl: Fd::new(unsafe { libc::socket(AF_INET, SOCK_DGRAM, 0) }, true)?,
                 };
                 return Ok(device);
             }
