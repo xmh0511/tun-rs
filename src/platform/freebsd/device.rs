@@ -22,7 +22,7 @@ use std::{
     net::{IpAddr, Ipv4Addr},
     os::unix::io::{AsRawFd, IntoRawFd, RawFd},
     ptr,
-    sync::Mutex,
+    sync::{Mutex, RwLock},
 };
 
 use crate::{
@@ -42,7 +42,7 @@ struct Route {
 
 /// A TUN device using the TUN/TAP Linux driver.
 pub struct Device {
-    tun_name: String,
+    tun_name: RwLock<String>,
     tun: Tun,
     ctl: Fd,
     route: Mutex<Option<Route>>,
@@ -184,7 +184,7 @@ impl Device {
                 netmask: mask,
                 dest: dest,
             };
-            let route_guard = self.route.lock().unwrap();
+            let mut route_guard = self.route.lock().unwrap();
             if let Err(e) = self.set_route(route, &mut *route_guard) {
                 log::warn!("{e:?}");
             }
@@ -283,7 +283,7 @@ impl Write for Device {
 
 impl AbstractDevice for Device {
     fn tun_name(&self) -> Result<String> {
-        Ok(self.tun_name.clone())
+        Ok(self.tun_name.read().unwrap().clone())
     }
 
     fn set_tun_name(&self, value: &str) -> Result<()> {
@@ -304,7 +304,7 @@ impl AbstractDevice for Device {
                 return Err(io::Error::from(err).into());
             }
 
-            self.tun_name = value.to_string();
+            *self.tun_name.write().unwrap() = value.to_string();
             Ok(())
         }
     }
