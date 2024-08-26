@@ -165,10 +165,12 @@ impl Device {
         let ctl = &self.ctl;
         unsafe {
             let mut req: ifaliasreq = mem::zeroed();
+            let tun_name = self.tun_name.read().unwrap();
+            let tun_name = &*tun_name;
             ptr::copy_nonoverlapping(
-                self.tun_name.as_ptr() as *const c_char,
+                tun_name.as_ptr() as *const c_char,
                 req.ifran.as_mut_ptr(),
-                self.tun_name.len(),
+                tun_name.len(),
             );
 
             req.addr = posix::sockaddr_union::from((addr, 0)).addr;
@@ -196,10 +198,12 @@ impl Device {
     /// Prepare a new request.
     unsafe fn request(&self) -> ifreq {
         let mut req: ifreq = mem::zeroed();
+        let tun_name = self.tun_name.read().unwrap();
+        let tun_name = &*tun_name;
         ptr::copy_nonoverlapping(
-            self.tun_name.as_ptr() as *const c_char,
+            tun_name.as_ptr() as *const c_char,
             req.ifr_name.as_mut_ptr(),
-            self.tun_name.len(),
+            tun_name.len(),
         );
 
         req
@@ -283,7 +287,7 @@ impl Write for Device {
 
 impl AbstractDevice for Device {
     fn tun_name(&self) -> Result<String> {
-        Ok(self.tun_name.read().clone())
+        Ok(self.tun_name.read().unwrap().clone())
     }
 
     fn set_tun_name(&self, value: &str) -> Result<()> {
@@ -304,7 +308,7 @@ impl AbstractDevice for Device {
                 return Err(io::Error::from(err).into());
             }
 
-            *self.tun_name.write() = value.to_string();
+            *self.tun_name.write().unwrap() = value.to_string();
             Ok(())
         }
     }
