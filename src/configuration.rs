@@ -12,12 +12,12 @@
 //
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
 
+use crate::address::IntoAddress;
+use crate::platform::PlatformConfig;
+use crate::AbstractDevice;
 use std::net::IpAddr;
 #[cfg(unix)]
 use std::os::unix::io::RawFd;
-use crate::AbstractDevice;
-use crate::address::IntoAddress;
-use crate::platform::PlatformConfig;
 
 cfg_if::cfg_if! {
     if #[cfg(windows)] {
@@ -192,7 +192,10 @@ impl Configuration {
 }
 
 /// Reconfigure the device.
-pub(crate) fn configure<D: AbstractDevice>(device: &mut D, config: &Configuration) -> crate::error::Result<()> {
+pub(crate) fn configure<D: AbstractDevice>(
+    device: &mut D,
+    config: &Configuration,
+) -> crate::error::Result<()> {
     #[cfg(any(
         target_os = "windows",
         target_os = "linux",
@@ -207,22 +210,14 @@ pub(crate) fn configure<D: AbstractDevice>(device: &mut D, config: &Configuratio
             device.set_network_address(address, netmask, config.destination)?;
         }
     }
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
     if let Some(ip) = config.broadcast {
         device.set_broadcast(ip)?;
     }
 
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
     if let Some(enabled) = config.enabled {
-        self.enabled(enabled)?;
+        device.enabled(enabled)?;
     }
 
     Ok(())

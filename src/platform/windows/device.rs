@@ -16,6 +16,14 @@ use std::io::{self, Read, Write};
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
 
+use crate::configuration::{configure, Configuration};
+use crate::device::AbstractDevice;
+use crate::error::{Error, Result};
+use crate::platform::windows::netsh;
+use crate::platform::windows::verify_dll_file::{
+    get_dll_absolute_path, get_signer_name, verify_embedded_signature,
+};
+use crate::Layer;
 use winapi::shared::ifdef::NET_LUID;
 use winapi::shared::minwindef::DWORD;
 use winapi::um::fileapi::OPEN_EXISTING;
@@ -25,14 +33,6 @@ use winapi::um::winnt::{
     FILE_ATTRIBUTE_SYSTEM, FILE_SHARE_READ, FILE_SHARE_WRITE, GENERIC_READ, GENERIC_WRITE, HANDLE,
 };
 use wintun::{Packet, Session};
-use crate::configuration::{Configuration, configure};
-use crate::device::AbstractDevice;
-use crate::error::{Error, Result};
-use crate::Layer;
-use crate::platform::windows::netsh;
-use crate::platform::windows::verify_dll_file::{
-    get_dll_absolute_path, get_signer_name, verify_embedded_signature,
-};
 
 use super::ffi;
 
@@ -83,9 +83,7 @@ impl Driver {
                 let index = tun.session.get_adapter().get_adapter_index()?;
                 Ok(index)
             }
-            Driver::Tap(tap) => {
-                Ok(tap.index)
-            }
+            Driver::Tap(tap) => Ok(tap.index),
         }
     }
     pub fn name(&self) -> Result<String> {
@@ -306,7 +304,6 @@ impl AbstractDevice for Device {
         )
     }
 
-
     fn address(&self) -> Result<IpAddr> {
         driver_case!(
             &*self.driver;
@@ -326,7 +323,6 @@ impl AbstractDevice for Device {
             }
         )
     }
-
 
     fn destination(&self) -> Result<IpAddr> {
         // It's just the default gateway in windows.
@@ -351,11 +347,9 @@ impl AbstractDevice for Device {
         )
     }
 
-
     fn broadcast(&self) -> Result<IpAddr> {
         Err(Error::NotImplemented)
     }
-
 
     fn netmask(&self) -> Result<IpAddr> {
         let current_addr = self.address()?;
@@ -374,11 +368,20 @@ impl AbstractDevice for Device {
         )
     }
 
-    fn set_network_address(&self, address: IpAddr, netmask: IpAddr, destination: Option<IpAddr>) -> Result<()> {
-        netsh::set_interface_ip(self.driver.index()?,&address,&netmask,destination.as_ref())?;
+    fn set_network_address(
+        &self,
+        address: IpAddr,
+        netmask: IpAddr,
+        destination: Option<IpAddr>,
+    ) -> Result<()> {
+        netsh::set_interface_ip(
+            self.driver.index()?,
+            &address,
+            &netmask,
+            destination.as_ref(),
+        )?;
         Ok(())
     }
-
 
     /// The return value is always `Ok(65535)` due to wintun
     fn mtu(&self) -> Result<u16> {
@@ -501,7 +504,7 @@ impl Tap {
             OPEN_EXISTING,
             FILE_ATTRIBUTE_SYSTEM | FILE_FLAG_OVERLAPPED,
         )
-            .map_err(|e| io::Error::new(e.kind(), format!("tap name={},err={:?}", name, e)))?;
+        .map_err(|e| io::Error::new(e.kind(), format!("tap name={},err={:?}", name, e)))?;
 
         let mut mac = [0u8; 6];
         ffi::device_io_control(handle, TAP_WIN_IOCTL_GET_MAC, &(), &mut mac)
@@ -562,8 +565,7 @@ impl Tap {
     }
 
     fn set_ip(&self, address: IpAddr, mask: IpAddr) -> io::Result<()> {
-
-        netsh::set_interface_ip(self.index, &address, &mask,None)
+        netsh::set_interface_ip(self.index, &address, &mask, None)
     }
 
     fn address(&self) -> Result<IpAddr> {

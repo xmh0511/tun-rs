@@ -22,6 +22,7 @@ use std::{
     net::{IpAddr, Ipv4Addr},
     os::unix::io::{AsRawFd, IntoRawFd, RawFd},
     ptr,
+    sync::Mutex,
 };
 
 use crate::{
@@ -44,7 +45,7 @@ pub struct Device {
     tun_name: String,
     tun: Tun,
     ctl: Fd,
-    route: Option<Route>,
+    route: Mutex<Option<Route>>,
 }
 
 impl AsRef<dyn AbstractDevice + 'static> for Device {
@@ -62,91 +63,96 @@ impl AsMut<dyn AbstractDevice + 'static> for Device {
 impl Device {
     /// Create a new `Device` for the given `Configuration`.
     pub fn new(config: &Configuration) -> Result<Self> {
-        let mut device = unsafe {
-            let dev = match config.tun_name.as_ref() {
-                Some(tun_name) => {
-                    let tun_name = tun_name.clone();
+        let layer = config.layer.unwrap_or(Layer::L3);
+        if layer == Layer::L3 {
+            let mut device = unsafe {
+                let dev = match config.tun_name.as_ref() {
+                    Some(tun_name) => {
+                        let tun_name = tun_name.clone();
 
-                    if tun_name.len() > IFNAMSIZ {
-                        return Err(Error::NameTooLong);
+                        if tun_name.len() > IFNAMSIZ {
+                            return Err(Error::NameTooLong);
+                        }
+
+                        Some(tun_name)
                     }
 
-                    Some(tun_name)
+                    None => None,
+                };
+
+                if config.layer.filter(|l| *l != Layer::L3).is_some() {
+                    return Err(Error::UnsupportedLayer);
                 }
 
-                None => None,
-            };
+                let queues_num = config.queues.unwrap_or(1);
+                if queues_num != 1 {
+                    return Err(Error::InvalidQueuesNumber);
+                }
 
-            if config.layer.filter(|l| *l != Layer::L3).is_some() {
-                return Err(Error::UnsupportedLayer);
-            }
+                let ctl = Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)?;
 
-            let queues_num = config.queues.unwrap_or(1);
-            if queues_num != 1 {
-                return Err(Error::InvalidQueuesNumber);
-            }
-
-            let ctl = Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)?;
-
-            let (tun, tun_name) = {
-                if let Some(name) = dev.as_ref() {
-                    let device_path = format!("/dev/{}\0", name);
-                    let fd = libc::open(device_path.as_ptr() as *const _, O_RDWR);
-                    let tun = Fd::new(fd, true).map_err(|_| io::Error::last_os_error())?;
-                    (tun, name.clone())
-                } else {
-                    let (tun, device_name) = 'End: {
-                        for i in 0..256 {
-                            let device_name = format!("tun{i}");
-                            let device_path = format!("/dev/{device_name}\0");
-                            let fd = libc::open(device_path.as_ptr() as *const _, O_RDWR);
-                            if fd > 0 {
-                                let tun =
-                                    Fd::new(fd, true).map_err(|_| io::Error::last_os_error())?;
-                                break 'End (tun, device_name);
+                let (tun, tun_name) = {
+                    if let Some(name) = dev.as_ref() {
+                        let device_path = format!("/dev/{}\0", name);
+                        let fd = libc::open(device_path.as_ptr() as *const _, O_RDWR);
+                        let tun = Fd::new(fd, true).map_err(|_| io::Error::last_os_error())?;
+                        (tun, name.clone())
+                    } else {
+                        let (tun, device_name) = 'End: {
+                            for i in 0..256 {
+                                let device_name = format!("tun{i}");
+                                let device_path = format!("/dev/{device_name}\0");
+                                let fd = libc::open(device_path.as_ptr() as *const _, O_RDWR);
+                                if fd > 0 {
+                                    let tun = Fd::new(fd, true)
+                                        .map_err(|_| io::Error::last_os_error())?;
+                                    break 'End (tun, device_name);
+                                }
                             }
-                        }
-                        return Err(Error::Io(
-                            std::io::Error::new(
-                                std::io::ErrorKind::AlreadyExists,
-                                "no avaiable file descriptor",
-                            )
-                            .into(),
-                        ));
-                    };
-                    (tun, device_name)
+                            return Err(Error::Io(
+                                std::io::Error::new(
+                                    std::io::ErrorKind::AlreadyExists,
+                                    "no avaiable file descriptor",
+                                )
+                                .into(),
+                            ));
+                        };
+                        (tun, device_name)
+                    }
+                };
+
+                let mtu = config.mtu.unwrap_or(crate::DEFAULT_MTU);
+
+                Device {
+                    tun_name,
+                    tun: Tun::new(tun, mtu, false),
+                    ctl,
+                    route: None,
                 }
             };
 
-            let mtu = config.mtu.unwrap_or(crate::DEFAULT_MTU);
+            device.set_alias(
+                config
+                    .address
+                    .unwrap_or(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1))),
+                config
+                    .destination
+                    .unwrap_or(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 255))),
+                config
+                    .netmask
+                    .unwrap_or(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 0))),
+            )?;
 
-            Device {
-                tun_name,
-                tun: Tun::new(tun, mtu, false),
-                ctl,
-                route: None,
-            }
-        };
+            crate::configuration::configure(&mut device, &config)?;
 
-        device.set_alias(
-            config
-                .address
-                .unwrap_or(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1))),
-            config
-                .destination
-                .unwrap_or(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 255))),
-            config
-                .netmask
-                .unwrap_or(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 0))),
-        )?;
-
-        device.configure(config)?;
-
-        Ok(device)
+            Ok(device)
+        } else {
+            unimplemented!()
+        }
     }
 
     /// Set the IPv4 alias of the device.
-    fn set_alias(&mut self, addr: IpAddr, dest: IpAddr, mask: IpAddr) -> Result<()> {
+    fn set_alias(&self, addr: IpAddr, dest: IpAddr, mask: IpAddr) -> Result<()> {
         let IpAddr::V4(addr) = addr else {
             unimplemented!("do not support IPv6 yet")
         };
@@ -178,7 +184,8 @@ impl Device {
                 netmask: mask,
                 dest: dest,
             };
-            if let Err(e) = self.set_route(route) {
+            let route_guard = self.route.lock().unwrap();
+            if let Err(e) = self.set_route(route, &mut *route_guard) {
                 log::warn!("{e:?}");
             }
 
@@ -198,17 +205,12 @@ impl Device {
         req
     }
 
-    /// Split the interface into a `Reader` and `Writer`.
-    pub fn split(self) -> (posix::Reader, posix::Writer) {
-        (self.tun.reader, self.tun.writer)
-    }
-
     /// Set non-blocking mode
     pub fn set_nonblock(&self) -> io::Result<()> {
         self.tun.set_nonblock()
     }
 
-    fn set_route(&mut self, route: Route) -> Result<()> {
+    fn set_route(&self, route: Route, route_guard: &mut Option<Route>) -> Result<()> {
         // if let Some(v) = &self.route {
         //     let prefix_len = ipnet::ip_mask_to_prefix(IpAddr::V4(v.netmask))
         //         .map_err(|_| Error::InvalidConfig)?;
@@ -240,7 +242,7 @@ impl Device {
         ];
         run_command("route", &args)?;
         log::info!("route {}", args.join(" "));
-        self.route = Some(route);
+        *route_guard = Some(route);
         Ok(())
     }
 
@@ -284,7 +286,7 @@ impl AbstractDevice for Device {
         Ok(self.tun_name.clone())
     }
 
-    fn set_tun_name(&mut self, value: &str) -> Result<()> {
+    fn set_tun_name(&self, value: &str) -> Result<()> {
         use std::ffi::CString;
         unsafe {
             if value.len() > IFNAMSIZ {
@@ -307,7 +309,7 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn enabled(&mut self, value: bool) -> Result<()> {
+    fn enabled(&self, value: bool) -> Result<()> {
         unsafe {
             let mut req = self.request();
 
@@ -340,13 +342,17 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_address(&mut self, value: IpAddr) -> Result<()> {
+    fn set_address(&self, value: IpAddr) -> Result<()> {
         unsafe {
             let mut req = self.request();
             if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &mut req) {
                 return Err(io::Error::from(err).into());
             }
-            let previous = self.route.as_ref().ok_or(Error::InvalidConfig)?;
+            let previous = {
+                (*self.route.lock().unwrap())
+                    .clone()
+                    .ok_or(Error::InvalidConfig)?
+            };
             self.set_alias(
                 value,
                 IpAddr::V4(previous.dest),
@@ -367,13 +373,17 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_destination(&mut self, value: IpAddr) -> Result<()> {
+    fn set_destination(&self, value: IpAddr) -> Result<()> {
         unsafe {
             let mut req = self.request();
             if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &mut req) {
                 return Err(io::Error::from(err).into());
             }
-            let previous = self.route.as_ref().ok_or(Error::InvalidConfig)?;
+            let previous = {
+                (*self.route.lock().unwrap())
+                    .clone()
+                    .ok_or(Error::InvalidConfig)?
+            };
             self.set_alias(
                 IpAddr::V4(previous.addr),
                 value,
@@ -394,7 +404,7 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_broadcast(&mut self, _value: IpAddr) -> Result<()> {
+    fn set_broadcast(&self, _value: IpAddr) -> Result<()> {
         Ok(())
     }
 
@@ -410,13 +420,17 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_netmask(&mut self, value: IpAddr) -> Result<()> {
+    fn set_netmask(&self, value: IpAddr) -> Result<()> {
         unsafe {
             let mut req = self.request();
             if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &mut req) {
                 return Err(io::Error::from(err).into());
             }
-            let previous = self.route.as_ref().ok_or(Error::InvalidConfig)?;
+            let previous = {
+                (*self.route.lock().unwrap())
+                    .clone()
+                    .ok_or(Error::InvalidConfig)?
+            };
             self.set_alias(IpAddr::V4(previous.addr), IpAddr::V4(previous.dest), value)?;
         }
         Ok(())
@@ -437,7 +451,7 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_mtu(&mut self, value: u16) -> Result<()> {
+    fn set_mtu(&self, value: u16) -> Result<()> {
         unsafe {
             let mut req = self.request();
             req.ifr_ifru.ifru_mtu = value as i32;
@@ -448,6 +462,20 @@ impl AbstractDevice for Device {
             self.tun.set_mtu(value);
             Ok(())
         }
+    }
+
+    fn set_network_address(
+        &self,
+        address: IpAddr,
+        netmask: IpAddr,
+        destination: Option<IpAddr>,
+    ) -> Result<()> {
+        self.set_address(address)?;
+        self.set_netmask(netmask)?;
+        if let Some(dest) = destination {
+            self.set_destination(dest)?;
+        }
+        Ok(())
     }
 
     fn packet_information(&self) -> bool {

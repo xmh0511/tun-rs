@@ -69,112 +69,119 @@ impl AsMut<dyn AbstractDevice + 'static> for Device {
 impl Device {
     /// Create a new `Device` for the given `Configuration`.
     pub fn new(config: &Configuration) -> Result<Self> {
+        let layer = config.layer.unwrap_or(Layer::L3);
         let mtu = config.mtu.unwrap_or(crate::DEFAULT_MTU);
-        if let Some(fd) = config.raw_fd {
-            let close_fd_on_drop = config.close_fd_on_drop.unwrap_or(true);
-            let tun = Fd::new(fd, close_fd_on_drop).map_err(|_| io::Error::last_os_error())?;
-            let device = Device {
-                tun_name: None,
-                tun: posix::Tun::new(tun, mtu, config.platform_config.packet_information),
-                ctl: None,
-                route: Mutex::new(None),
+        if layer == Layer::L3 {
+            if let Some(fd) = config.raw_fd {
+                let close_fd_on_drop = config.close_fd_on_drop.unwrap_or(true);
+                let tun = Fd::new(fd, close_fd_on_drop).map_err(|_| io::Error::last_os_error())?;
+                let device = Device {
+                    tun_name: None,
+                    tun: posix::Tun::new(tun, mtu, config.platform_config.packet_information),
+                    ctl: None,
+                    route: Mutex::new(None),
+                };
+                return Ok(device);
+            }
+
+            let id = if let Some(tun_name) = config.tun_name.as_ref() {
+                if tun_name.len() > IFNAMSIZ {
+                    return Err(Error::NameTooLong);
+                }
+
+                if !tun_name.starts_with("utun") {
+                    return Err(Error::InvalidName);
+                }
+
+                tun_name[4..].parse::<u32>()? + 1_u32
+            } else {
+                0_u32
             };
-            return Ok(device);
-        }
 
-        let id = if let Some(tun_name) = config.tun_name.as_ref() {
-            if tun_name.len() > IFNAMSIZ {
-                return Err(Error::NameTooLong);
+            if config.layer.filter(|l| *l != Layer::L3).is_some() {
+                return Err(Error::UnsupportedLayer);
             }
 
-            if !tun_name.starts_with("utun") {
-                return Err(Error::InvalidName);
+            let queues_number = config.queues.unwrap_or(1);
+            if queues_number != 1 {
+                return Err(Error::InvalidQueuesNumber);
             }
 
-            tun_name[4..].parse::<u32>()? + 1_u32
+            let mut device = unsafe {
+                let fd = libc::socket(PF_SYSTEM, SOCK_DGRAM, SYSPROTO_CONTROL);
+                let tun = posix::Fd::new(fd, true).map_err(|_| io::Error::last_os_error())?;
+
+                let mut info = ctl_info {
+                    ctl_id: 0,
+                    ctl_name: {
+                        let mut buffer = [0; 96];
+                        for (i, o) in UTUN_CONTROL_NAME.as_bytes().iter().zip(buffer.iter_mut()) {
+                            *o = *i as _;
+                        }
+                        buffer
+                    },
+                };
+
+                if let Err(err) = ctliocginfo(tun.inner, &mut info as *mut _ as *mut _) {
+                    return Err(io::Error::from(err).into());
+                }
+
+                let addr = libc::sockaddr_ctl {
+                    sc_id: info.ctl_id,
+                    sc_len: mem::size_of::<libc::sockaddr_ctl>() as _,
+                    sc_family: AF_SYSTEM as _,
+                    ss_sysaddr: AF_SYS_CONTROL as _,
+                    sc_unit: id as c_uint,
+                    sc_reserved: [0; 5],
+                };
+
+                let address = &addr as *const libc::sockaddr_ctl as *const sockaddr;
+                if libc::connect(tun.inner, address, mem::size_of_val(&addr) as socklen_t) < 0 {
+                    return Err(io::Error::last_os_error().into());
+                }
+
+                let mut tun_name = [0u8; 64];
+                let mut name_len: socklen_t = 64;
+
+                let optval = &mut tun_name as *mut _ as *mut c_void;
+                let optlen = &mut name_len as *mut socklen_t;
+                if libc::getsockopt(tun.inner, SYSPROTO_CONTROL, UTUN_OPT_IFNAME, optval, optlen)
+                    < 0
+                {
+                    return Err(io::Error::last_os_error().into());
+                }
+
+                let ctl = Some(posix::Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)?);
+
+                Device {
+                    tun_name: Some(
+                        CStr::from_ptr(tun_name.as_ptr() as *const c_char)
+                            .to_string_lossy()
+                            .into(),
+                    ),
+                    tun: posix::Tun::new(tun, mtu, config.platform_config.packet_information),
+                    ctl,
+                    route: Mutex::new(None),
+                }
+            };
+
+            crate::configuration::configure(&mut device, &config)?;
+            device.set_alias(
+                config
+                    .address
+                    .unwrap_or(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1))),
+                config
+                    .destination
+                    .unwrap_or(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 255))),
+                config
+                    .netmask
+                    .unwrap_or(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 0))),
+            )?;
+
+            Ok(device)
         } else {
-            0_u32
-        };
-
-        if config.layer.filter(|l| *l != Layer::L3).is_some() {
-            return Err(Error::UnsupportedLayer);
+            unimplemented!()
         }
-
-        let queues_number = config.queues.unwrap_or(1);
-        if queues_number != 1 {
-            return Err(Error::InvalidQueuesNumber);
-        }
-
-        let device = unsafe {
-            let fd = libc::socket(PF_SYSTEM, SOCK_DGRAM, SYSPROTO_CONTROL);
-            let tun = posix::Fd::new(fd, true).map_err(|_| io::Error::last_os_error())?;
-
-            let mut info = ctl_info {
-                ctl_id: 0,
-                ctl_name: {
-                    let mut buffer = [0; 96];
-                    for (i, o) in UTUN_CONTROL_NAME.as_bytes().iter().zip(buffer.iter_mut()) {
-                        *o = *i as _;
-                    }
-                    buffer
-                },
-            };
-
-            if let Err(err) = ctliocginfo(tun.inner, &mut info as *mut _ as *mut _) {
-                return Err(io::Error::from(err).into());
-            }
-
-            let addr = libc::sockaddr_ctl {
-                sc_id: info.ctl_id,
-                sc_len: mem::size_of::<libc::sockaddr_ctl>() as _,
-                sc_family: AF_SYSTEM as _,
-                ss_sysaddr: AF_SYS_CONTROL as _,
-                sc_unit: id as c_uint,
-                sc_reserved: [0; 5],
-            };
-
-            let address = &addr as *const libc::sockaddr_ctl as *const sockaddr;
-            if libc::connect(tun.inner, address, mem::size_of_val(&addr) as socklen_t) < 0 {
-                return Err(io::Error::last_os_error().into());
-            }
-
-            let mut tun_name = [0u8; 64];
-            let mut name_len: socklen_t = 64;
-
-            let optval = &mut tun_name as *mut _ as *mut c_void;
-            let optlen = &mut name_len as *mut socklen_t;
-            if libc::getsockopt(tun.inner, SYSPROTO_CONTROL, UTUN_OPT_IFNAME, optval, optlen) < 0 {
-                return Err(io::Error::last_os_error().into());
-            }
-
-            let ctl = Some(posix::Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)?);
-
-            Device {
-                tun_name: Some(
-                    CStr::from_ptr(tun_name.as_ptr() as *const c_char)
-                        .to_string_lossy()
-                        .into(),
-                ),
-                tun: posix::Tun::new(tun, mtu, config.platform_config.packet_information),
-                ctl,
-                route: Mutex::new(None),
-            }
-        };
-
-        device.configure(config)?;
-        device.set_alias(
-            config
-                .address
-                .unwrap_or(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1))),
-            config
-                .destination
-                .unwrap_or(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 255))),
-            config
-                .netmask
-                .unwrap_or(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 0))),
-        )?;
-
-        Ok(device)
     }
 
     /// Prepare a new request.
@@ -302,11 +309,6 @@ impl Write for Device {
 impl AbstractDevice for Device {
     fn tun_name(&self) -> Result<String> {
         self.tun_name.as_ref().cloned().ok_or(Error::InvalidConfig)
-    }
-
-    // XXX: Cannot set interface name on Darwin.
-    fn set_tun_name(&self, value: &str) -> Result<()> {
-        Err(Error::InvalidName)
     }
 
     fn enabled(&self, value: bool) -> Result<()> {
@@ -486,6 +488,20 @@ impl AbstractDevice for Device {
             self.tun.set_mtu(value);
             Ok(())
         }
+    }
+
+    fn set_network_address(
+        &self,
+        address: IpAddr,
+        netmask: IpAddr,
+        destination: Option<IpAddr>,
+    ) -> Result<()> {
+        self.set_address(address)?;
+        self.set_netmask(netmask)?;
+        if let Some(dest) = destination {
+            self.set_destination(dest)?;
+        }
+        Ok(())
     }
 
     fn packet_information(&self) -> bool {

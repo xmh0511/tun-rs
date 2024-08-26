@@ -28,19 +28,11 @@ pub trait AbstractDevice {
     fn tun_name(&self) -> Result<String>;
 
     /// Set the device tun name.
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "freebsd"
-    ))]
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
     fn set_tun_name(&self, tun_name: &str) -> Result<()>;
 
     /// Turn on or off the interface.
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
     fn enabled(&self, value: bool) -> Result<()>;
 
     /// Get the address.
@@ -53,11 +45,7 @@ pub trait AbstractDevice {
     fn address(&self) -> Result<IpAddr>;
 
     /// Set the address.
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
     fn set_address(&self, value: IpAddr) -> Result<()>;
 
     /// Get the destination address.
@@ -70,11 +58,7 @@ pub trait AbstractDevice {
     fn destination(&self) -> Result<IpAddr>;
 
     /// Set the destination address.
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
     fn set_destination(&self, value: IpAddr) -> Result<()>;
 
     /// Get the broadcast address.
@@ -87,11 +71,7 @@ pub trait AbstractDevice {
     fn broadcast(&self) -> Result<IpAddr>;
 
     /// Set the broadcast address.
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
     fn set_broadcast(&self, value: IpAddr) -> Result<()>;
 
     /// Get the netmask.
@@ -104,11 +84,7 @@ pub trait AbstractDevice {
     fn netmask(&self) -> Result<IpAddr>;
 
     /// Set the netmask.
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
     fn set_netmask(&self, value: IpAddr) -> Result<()>;
 
     /// Sets the network addresses of this adapter, including network address, subnet mask, and gateway
@@ -118,14 +94,21 @@ pub trait AbstractDevice {
         target_os = "macos",
         target_os = "freebsd"
     ))]
-    fn set_network_address(&self,address: IpAddr,netmask:IpAddr,destination:Option<IpAddr>) -> Result<()>;
+    fn set_network_address(
+        &self,
+        address: IpAddr,
+        netmask: IpAddr,
+        destination: Option<IpAddr>,
+    ) -> Result<()>;
 
     /// Get the MTU.
     #[cfg(any(
         target_os = "windows",
         target_os = "linux",
         target_os = "macos",
-        target_os = "freebsd"
+        target_os = "freebsd",
+        target_os = "ios",
+        target_os = "android"
     ))]
     fn mtu(&self) -> Result<u16>;
 
@@ -134,7 +117,9 @@ pub trait AbstractDevice {
         target_os = "windows",
         target_os = "linux",
         target_os = "macos",
-        target_os = "freebsd"
+        target_os = "freebsd",
+        target_os = "ios",
+        target_os = "android"
     ))]
     fn set_mtu(&self, value: u16) -> Result<()>;
 
