@@ -12,13 +12,9 @@
 //
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
 
-use libc::{
-    self, c_char, c_short, ifreq, AF_INET, IFF_MULTI_QUEUE, IFF_NO_PI, IFF_RUNNING, IFF_TAP,
-    IFF_TUN, IFF_UP, IFNAMSIZ, O_RDWR, SOCK_DGRAM,
-};
 use std::{
     ffi::{CStr, CString},
-    io::{self, Read, Write},
+    io::{self},
     mem,
     net::IpAddr,
     os::unix::io::{AsRawFd, IntoRawFd, RawFd},
@@ -26,13 +22,19 @@ use std::{
     sync::RwLock,
 };
 
+use libc::{
+    self, AF_INET, c_char, c_short, IFF_MULTI_QUEUE, IFF_NO_PI, IFF_RUNNING, IFF_TAP, IFF_TUN,
+    IFF_UP, IFNAMSIZ, ifreq, O_RDWR, SOCK_DGRAM,
+};
+
 use crate::{
     configuration::{Configuration, Layer},
     device::AbstractDevice,
     error::{Error, Result},
     platform::linux::sys::*,
-    platform::posix::{self, ipaddr_to_sockaddr, sockaddr_union, Fd, Tun},
+    platform::posix::{self, Fd, ipaddr_to_sockaddr, sockaddr_union, Tun},
 };
+use crate::configuration::configure;
 
 const OVERWRITE_SIZE: usize = std::mem::size_of::<libc::__c_anonymous_ifr_ifru>();
 
@@ -133,9 +135,7 @@ impl Device {
                 }
             };
 
-            if config.platform_config.ensure_root_privileges {
-                crate::configuration::configure(&mut device, config)?;
-            }
+            configure(&mut device,config)?;
 
             Ok(device)
         } else {
@@ -203,30 +203,6 @@ impl Device {
     /// Send a packet to tun device
     pub fn send(&self, buf: &[u8]) -> io::Result<usize> {
         self.tun.send(buf)
-    }
-}
-
-impl Read for Device {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.tun.read(buf)
-    }
-
-    fn read_vectored(&mut self, bufs: &mut [io::IoSliceMut<'_>]) -> io::Result<usize> {
-        self.tun.read_vectored(bufs)
-    }
-}
-
-impl Write for Device {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.tun.write(buf)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.tun.flush()
-    }
-
-    fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
-        self.tun.write_vectored(bufs)
     }
 }
 
@@ -370,6 +346,15 @@ impl AbstractDevice for Device {
         }
     }
 
+    fn set_network_address(&self, address: IpAddr, netmask: IpAddr, destination: Option<IpAddr>) -> Result<()> {
+        self.set_address(address)?;
+        self.set_netmask(netmask)?;
+        if let Some(destination) = destination{
+            self.set_destination(destination)?;
+        }
+        Ok(())
+    }
+
     fn mtu(&self) -> Result<u16> {
         unsafe {
             let mut req = self.request();
@@ -396,20 +381,6 @@ impl AbstractDevice for Device {
             self.tun.set_mtu(value);
             Ok(())
         }
-    }
-
-    fn set_network_address(
-        &self,
-        address: IpAddr,
-        netmask: IpAddr,
-        destination: Option<IpAddr>,
-    ) -> Result<()> {
-        self.set_address(address)?;
-        self.set_netmask(netmask)?;
-        if let Some(dest) = destination {
-            self.set_destination(dest)?;
-        }
-        Ok(())
     }
 
     fn packet_information(&self) -> bool {
