@@ -12,18 +12,10 @@
 //
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
 
-use std::io::{self, Read, Write};
+use std::io;
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
 
-use crate::configuration::{configure, Configuration};
-use crate::device::AbstractDevice;
-use crate::error::{Error, Result};
-use crate::platform::windows::netsh;
-use crate::platform::windows::verify_dll_file::{
-    get_dll_absolute_path, get_signer_name, verify_embedded_signature,
-};
-use crate::Layer;
 use winapi::shared::ifdef::NET_LUID;
 use winapi::shared::minwindef::DWORD;
 use winapi::um::fileapi::OPEN_EXISTING;
@@ -33,6 +25,15 @@ use winapi::um::winnt::{
     FILE_ATTRIBUTE_SYSTEM, FILE_SHARE_READ, FILE_SHARE_WRITE, GENERIC_READ, GENERIC_WRITE, HANDLE,
 };
 use wintun::{Packet, Session};
+
+use crate::configuration::{configure, Configuration};
+use crate::device::AbstractDevice;
+use crate::error::{Error, Result};
+use crate::platform::windows::netsh;
+use crate::platform::windows::verify_dll_file::{
+    get_dll_absolute_path, get_signer_name, verify_embedded_signature,
+};
+use crate::Layer;
 
 use super::ffi;
 
@@ -129,8 +130,7 @@ impl Driver {
 
 /// A TUN device using the wintun driver.
 pub struct Device {
-    pub(crate) driver: Arc<Driver>,
-    mtu: u16,
+    pub(crate) driver: Driver,
 }
 
 macro_rules! driver_case {
@@ -147,16 +147,8 @@ impl Device {
     pub fn new(config: &Configuration) -> Result<Self> {
         let layer = config.layer.unwrap_or(Layer::L3);
         let tun_name = config.name.as_deref().unwrap_or("wintun");
-        let address = config
-            .address
-            .unwrap_or(IpAddr::V4(Ipv4Addr::new(10, 1, 0, 2)));
 
-        let mask = config
-            .netmask
-            .unwrap_or(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 0)));
-        let mtu = config.mtu.unwrap_or(crate::DEFAULT_MTU);
-
-        let mut device = if layer == Layer::L3 {
+        let device = if layer == Layer::L3 {
             let wintun_file = &config.platform_config.wintun_file;
             let wintun = unsafe {
                 // Ensure the dll file has not been tampered with.
@@ -176,9 +168,6 @@ impl Device {
                 Ok(a) => a,
                 Err(_) => wintun::Adapter::create(&wintun, tun_name, tun_name, guid)?,
             };
-            if let Some(metric) = config.metric {
-                netsh::set_interface_metric(adapter.get_adapter_index()?, metric)?;
-            }
 
             #[cfg(feature = "wintun-dns")]
             if let Some(dns_servers) = &config.platform_config.dns_servers {
@@ -187,32 +176,30 @@ impl Device {
 
             let session =
                 adapter.start_session(config.ring_capacity.unwrap_or(wintun::MAX_RING_CAPACITY))?;
-            adapter.set_mtu(mtu as _)?;
             Device {
-                driver: Arc::new(Driver::Tun(Tun {
+                driver: Driver::Tun(Tun {
                     session: Arc::new(session),
-                })),
-                mtu,
+                }),
             }
         } else if layer == Layer::L2 {
             let tap = Tap::new(tun_name.to_owned())?;
-            tap.set_ip(address, mask)?;
-            tap.set_mtu(mtu as u32)?;
             Device {
-                driver: Arc::new(Driver::Tap(tap)),
-                mtu,
+                driver: Driver::Tap(tap),
             }
         } else {
             panic!("unknow layer {:?}", layer);
         };
-        configure(&mut device, config)?;
+        configure(&device, config)?;
+        if let Some(metric) = config.metric {
+            netsh::set_interface_metric(device.driver.index()?, metric)?;
+        }
         Ok(device)
     }
 
     /// Recv a packet from tun device
     pub(crate) fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
         driver_case!(
-            &*self.driver;
+            &self.driver;
             tun =>{
                 tun.recv(buf)
             };
@@ -226,7 +213,7 @@ impl Device {
     /// Send a packet to tun device
     pub(crate) fn send(&self, buf: &[u8]) -> io::Result<usize> {
         driver_case!(
-            &*self.driver;
+            &self.driver;
             tun=>  {
                 tun.send(buf)
             };
@@ -241,7 +228,7 @@ impl Device {
 impl AbstractDevice for Device {
     fn tun_name(&self) -> Result<String> {
         driver_case!(
-            &*self.driver;
+            &self.driver;
             tun=>  {
                 Ok(tun.session.get_adapter().get_name()?)
             };
@@ -254,7 +241,7 @@ impl AbstractDevice for Device {
 
     fn set_tun_name(&self, value: &str) -> Result<()> {
         driver_case!(
-            &*self.driver;
+            &self.driver;
             tun=>  {
                 tun.session.get_adapter().set_name(value)?;
                 Ok(())
@@ -268,7 +255,7 @@ impl AbstractDevice for Device {
 
     fn address(&self) -> Result<IpAddr> {
         driver_case!(
-            &*self.driver;
+            &self.driver;
             tun=>  {
                 let addresses =tun.session.get_adapter().get_addresses()?;
                 addresses
@@ -289,7 +276,7 @@ impl AbstractDevice for Device {
     fn destination(&self) -> Result<IpAddr> {
         // It's just the default gateway in windows.
         driver_case!(
-            &*self.driver;
+            &self.driver;
             tun=>  {
                tun
                 .session
@@ -316,7 +303,7 @@ impl AbstractDevice for Device {
     fn netmask(&self) -> Result<IpAddr> {
         let current_addr = self.address()?;
         driver_case!(
-            &*self.driver;
+            &self.driver;
             tun=>  {
                 tun .session
                 .get_adapter()
@@ -347,13 +334,24 @@ impl AbstractDevice for Device {
 
     /// The return value is always `Ok(65535)` due to wintun
     fn mtu(&self) -> Result<u16> {
-        Ok(self.mtu)
+        driver_case!(
+              &self.driver;
+            tun=>  {
+                let mtu = tun.session.get_adapter().get_mtu()?;
+                Ok(mtu as _)
+            };
+            tap=>
+            {
+                let mtu = tap.mtu()?;
+                 Ok(mtu as _)
+            }
+        )
     }
 
     /// This setting has no effect since the mtu of wintun is always 65535
     fn set_mtu(&self, mtu: u16) -> Result<()> {
         driver_case!(
-            &*self.driver;
+            &self.driver;
             tun=>  {
                 tun.session.get_adapter().set_mtu(mtu as _)?;
                 Ok(())
@@ -536,26 +534,4 @@ fn decode_utf16(string: &[u16]) -> String {
 }
 const fn ctl_code(device_type: DWORD, function: DWORD, method: DWORD, access: DWORD) -> DWORD {
     (device_type << 16) | (access << 14) | (function << 2) | method
-}
-
-#[repr(transparent)]
-pub struct Reader(Arc<Driver>);
-
-impl Read for Reader {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.0.read_by_ref(buf)
-    }
-}
-
-#[repr(transparent)]
-pub struct Writer(Arc<Driver>);
-
-impl Write for Writer {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.0.write_by_ref(buf)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
 }

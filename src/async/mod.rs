@@ -30,7 +30,7 @@ pub use unix_device::AsyncDevice;
 #[cfg(target_os = "windows")]
 mod win_device;
 #[cfg(target_os = "windows")]
-pub use win_device::{AsyncDevice, DeviceReader, DeviceWriter};
+pub use win_device::AsyncDevice;
 
 /// Create a TUN device with the given name.
 pub fn create_as_async(configuration: &Configuration) -> Result<AsyncDevice, error::Error> {
