@@ -80,6 +80,7 @@ impl Configuration {
         since = "1.1.2",
         note = "Since the API `name` may have an easy name conflict when IDE prompts, it is replaced by `tun_name` for better coding experience"
     )]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn name<S: AsRef<str>>(&mut self, tun_name: S) -> &mut Self {
         self.tun_name_ = Some(tun_name.as_ref().into());
         self
@@ -88,6 +89,7 @@ impl Configuration {
     /// Set the tun name.
     ///
     /// [Note: on macOS, the tun name must be the form `utunx` where `x` is a number, such as `utun3`. -- end note]
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn tun_name<S: AsRef<str>>(&mut self, tun_name: S) -> &mut Self {
         self.tun_name_ = Some(tun_name.as_ref().into());
         self
