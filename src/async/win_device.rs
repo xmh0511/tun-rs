@@ -31,6 +31,11 @@ impl core::ops::Deref for AsyncDevice {
         &self.inner
     }
 }
+impl Drop for AsyncDevice {
+    fn drop(&mut self) {
+        let _ = self.shutdown();
+    }
+}
 
 impl AsyncDevice {
     /// Create a new `AsyncDevice` wrapping around a `Device`.
