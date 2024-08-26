@@ -14,7 +14,9 @@
 
 use packet::{builder::Builder, icmp, ip, Packet};
 use std::io::{Read, Write};
-use std::{net::Ipv4Addr, sync::mpsc::Receiver};
+#[cfg(not(target_os = "windows"))]
+use std::net::Ipv4Addr;
+use std::sync::mpsc::Receiver;
 use tun2::{AbstractDevice, BoxError};
 
 fn main() -> Result<(), BoxError> {
