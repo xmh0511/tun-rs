@@ -84,7 +84,7 @@ impl Device {
                 return Ok(device);
             }
 
-            let id = if let Some(tun_name) = config.tun_name.as_ref() {
+            let id = if let Some(tun_name) = config.tun_name_.as_ref() {
                 if tun_name.len() > IFNAMSIZ {
                     return Err(Error::NameTooLong);
                 }

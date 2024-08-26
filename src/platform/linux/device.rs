@@ -72,7 +72,7 @@ impl Device {
                 return Ok(device);
             }
             let mut device = unsafe {
-                let dev_name = match config.tun_name.as_ref() {
+                let dev_name = match config.tun_name_.as_ref() {
                     Some(tun_name) => {
                         let tun_name = CString::new(tun_name.clone())?;
 
