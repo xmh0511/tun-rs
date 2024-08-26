@@ -124,7 +124,7 @@ impl Device {
                 let mtu = config.mtu.unwrap_or(crate::DEFAULT_MTU);
 
                 Device {
-                    tun_name,
+                    tun_name:RwLock::new(tun_name),
                     tun: Tun::new(tun, mtu, false),
                     ctl,
                     route: Mutex::new(None),
