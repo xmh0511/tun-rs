@@ -17,11 +17,10 @@ use crate::{
     configuration::Configuration,
     device::AbstractDevice,
     error::{Error, Result},
-    platform::posix::{self, Fd, Tun},
+    platform::posix::{Fd, Tun},
 };
 use std::{
     io::{Read, Write},
-    net::IpAddr,
     os::unix::io::{AsRawFd, IntoRawFd, RawFd},
 };
 
@@ -107,7 +106,7 @@ impl AbstractDevice for Device {
         Ok(self.tun.mtu())
     }
 
-    fn set_mtu(&mut self, value: u16) -> Result<()> {
+    fn set_mtu(&self, value: u16) -> Result<()> {
         // TODO: must set the mtu to the underlying device driver
         self.tun.set_mtu(value);
         Ok(())

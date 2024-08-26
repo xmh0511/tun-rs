@@ -14,13 +14,12 @@
 #![allow(unused_variables)]
 
 use std::io::{Read, Write};
-use std::net::IpAddr;
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 
 use crate::configuration::Configuration;
 use crate::device::AbstractDevice;
 use crate::error::{Error, Result};
-use crate::platform::posix::{self, Fd, Tun};
+use crate::platform::posix::{Fd, Tun};
 
 /// A TUN device for Android.
 pub struct Device {
@@ -97,7 +96,7 @@ impl AbstractDevice for Device {
         Ok(self.tun.mtu())
     }
 
-    fn set_mtu(&mut self, value: u16) -> Result<()> {
+    fn set_mtu(&self, value: u16) -> Result<()> {
         // TODO: must set the mtu to the underlying device driver
         self.tun.set_mtu(value);
         Ok(())

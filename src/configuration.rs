@@ -41,7 +41,7 @@ pub enum Layer {
 #[derive(Clone, Default, Debug)]
 pub struct Configuration {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub(crate) tun_name: Option<String>,
+    pub(crate) tun_name_: Option<String>,
     pub(crate) platform_config: PlatformConfig,
     pub(crate) address: Option<IpAddr>,
     pub(crate) destination: Option<IpAddr>,
@@ -81,7 +81,7 @@ impl Configuration {
         note = "Since the API `name` may have an easy name conflict when IDE prompts, it is replaced by `tun_name` for better coding experience"
     )]
     pub fn name<S: AsRef<str>>(&mut self, tun_name: S) -> &mut Self {
-        self.tun_name = Some(tun_name.as_ref().into());
+        self.tun_name_ = Some(tun_name.as_ref().into());
         self
     }
 
@@ -89,7 +89,7 @@ impl Configuration {
     ///
     /// [Note: on macOS, the tun name must be the form `utunx` where `x` is a number, such as `utun3`. -- end note]
     pub fn tun_name<S: AsRef<str>>(&mut self, tun_name: S) -> &mut Self {
-        self.tun_name = Some(tun_name.as_ref().into());
+        self.tun_name_ = Some(tun_name.as_ref().into());
         self
     }
 
@@ -219,6 +219,7 @@ pub(crate) fn configure<D: AbstractDevice>(
     if let Some(enabled) = config.enabled {
         device.enabled(enabled)?;
     }
-
+    _ = device;
+    _ = config;
     Ok(())
 }
