@@ -45,94 +45,78 @@ pub struct Device {
     ctl: Fd,
 }
 
-impl AsRef<dyn AbstractDevice + 'static> for Device {
-    fn as_ref(&self) -> &(dyn AbstractDevice + 'static) {
-        self
-    }
-}
-
-impl AsMut<dyn AbstractDevice + 'static> for Device {
-    fn as_mut(&mut self) -> &mut (dyn AbstractDevice + 'static) {
-        self
-    }
-}
-
 impl Device {
     /// Create a new `Device` for the given `Configuration`.
     pub fn new(config: &Configuration) -> Result<Self> {
         let layer = config.layer.unwrap_or(Layer::L3);
         let mtu = config.mtu.unwrap_or(crate::DEFAULT_MTU);
-        if layer == Layer::L3 {
-            if let Some(fd) = config.raw_fd {
-                let close_fd_on_drop = config.close_fd_on_drop.unwrap_or(true);
-                let tun = Fd::new(fd, close_fd_on_drop).map_err(|_| io::Error::last_os_error())?;
-                let device = Device {
-                    tun_name: RwLock::new(String::new()),
-                    tun: posix::Tun::new(tun, mtu, config.platform_config.packet_information),
-                    ctl: Fd::new(unsafe { libc::socket(AF_INET, SOCK_DGRAM, 0) }, true)?,
-                };
-                return Ok(device);
-            }
-            let mut device = unsafe {
-                let dev_name = match config.tun_name_.as_ref() {
-                    Some(tun_name) => {
-                        let tun_name = CString::new(tun_name.clone())?;
+        if let Some(fd) = config.raw_fd {
+            let close_fd_on_drop = config.close_fd_on_drop.unwrap_or(true);
+            let tun = Fd::new(fd, close_fd_on_drop).map_err(|_| io::Error::last_os_error())?;
+            let device = Device {
+                name: RwLock::new(String::new()),
+                tun: posix::Tun::new(tun, mtu, config.platform_config.packet_information),
+                ctl: Fd::new(unsafe { libc::socket(AF_INET, SOCK_DGRAM, 0) }, true)?,
+            };
+            return Ok(device);
+        }
+        let mut device = unsafe {
+            let dev_name = match config.name.as_ref() {
+                Some(tun_name) => {
+                    let tun_name = CString::new(tun_name.clone())?;
 
-                        if tun_name.as_bytes_with_nul().len() > IFNAMSIZ {
-                            return Err(Error::NameTooLong);
-                        }
-
-                        Some(tun_name)
+                    if tun_name.as_bytes_with_nul().len() > IFNAMSIZ {
+                        return Err(Error::NameTooLong);
                     }
 
-                    None => None,
-                };
-
-                let mut req: ifreq = mem::zeroed();
-
-                if let Some(dev_name) = dev_name.as_ref() {
-                    ptr::copy_nonoverlapping(
-                        dev_name.as_ptr() as *const c_char,
-                        req.ifr_name.as_mut_ptr(),
-                        dev_name.as_bytes_with_nul().len(),
-                    );
+                    Some(tun_name)
                 }
 
-                let device_type: c_short = layer.into();
-                let queues_num = 1;
-                let iff_no_pi = IFF_NO_PI as c_short;
-                let iff_multi_queue = IFF_MULTI_QUEUE as c_short;
-                let packet_information = config.platform_config.packet_information;
-                req.ifr_ifru.ifru_flags = device_type
-                    | if packet_information { 0 } else { iff_no_pi }
-                    | if queues_num > 1 { iff_multi_queue } else { 0 };
-
-                let tun_fd = {
-                    let fd = libc::open(b"/dev/net/tun\0".as_ptr() as *const _, O_RDWR);
-                    let tun_fd = Fd::new(fd, true).map_err(|_| io::Error::last_os_error())?;
-                    if let Err(err) = tunsetiff(tun_fd.inner, &mut req as *mut _ as *mut _) {
-                        return Err(io::Error::from(err).into());
-                    }
-                    tun_fd
-                };
-
-                let ctl = Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)?;
-
-                let tun_name = CStr::from_ptr(req.ifr_name.as_ptr())
-                    .to_string_lossy()
-                    .to_string();
-                Device {
-                    tun_name: RwLock::new(tun_name),
-                    tun: Tun::new(tun_fd, mtu, packet_information),
-                    ctl,
-                }
+                None => None,
             };
 
-            configure(&mut device, config)?;
-            Ok(device)
-        } else {
-            unimplemented!()
-        }
+            let mut req: ifreq = mem::zeroed();
+
+            if let Some(dev_name) = dev_name.as_ref() {
+                ptr::copy_nonoverlapping(
+                    dev_name.as_ptr() as *const c_char,
+                    req.ifr_name.as_mut_ptr(),
+                    dev_name.as_bytes_with_nul().len(),
+                );
+            }
+
+            let device_type: c_short = layer.into();
+            let queues_num = 1;
+            let iff_no_pi = IFF_NO_PI as c_short;
+            let iff_multi_queue = IFF_MULTI_QUEUE as c_short;
+            let packet_information = config.platform_config.packet_information;
+            req.ifr_ifru.ifru_flags = device_type
+                | if packet_information { 0 } else { iff_no_pi }
+                | if queues_num > 1 { iff_multi_queue } else { 0 };
+
+            let tun_fd = {
+                let fd = libc::open(b"/dev/net/tun\0".as_ptr() as *const _, O_RDWR);
+                let tun_fd = Fd::new(fd, true).map_err(|_| io::Error::last_os_error())?;
+                if let Err(err) = tunsetiff(tun_fd.inner, &mut req as *mut _ as *mut _) {
+                    return Err(io::Error::from(err).into());
+                }
+                tun_fd
+            };
+
+            let ctl = Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)?;
+
+            let tun_name = CStr::from_ptr(req.ifr_name.as_ptr())
+                .to_string_lossy()
+                .to_string();
+            Device {
+                name: RwLock::new(tun_name),
+                tun: Tun::new(tun_fd, mtu, packet_information),
+                ctl,
+            }
+        };
+
+        configure(&mut device, config)?;
+        Ok(device)
     }
 
     /// Prepare a new request.
@@ -377,20 +361,6 @@ impl AbstractDevice for Device {
             self.tun.set_mtu(value);
             Ok(())
         }
-    }
-
-    fn set_network_address(
-        &self,
-        address: IpAddr,
-        netmask: IpAddr,
-        destination: Option<IpAddr>,
-    ) -> Result<()> {
-        self.set_address(address)?;
-        self.set_netmask(netmask)?;
-        if let Some(dest) = destination {
-            self.set_destination(dest)?;
-        }
-        Ok(())
     }
 
     fn packet_information(&self) -> bool {
