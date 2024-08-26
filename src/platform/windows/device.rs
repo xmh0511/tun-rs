@@ -408,7 +408,6 @@ impl Tun {
     }
 }
 
-
 pub struct Tap {
     handle: HANDLE,
     index: u32,
@@ -525,7 +524,6 @@ impl Tap {
         unimplemented!()
     }
 }
-
 
 fn encode_utf16(string: &str) -> Vec<u16> {
     use std::iter::once;

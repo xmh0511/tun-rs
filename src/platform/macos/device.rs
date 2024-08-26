@@ -75,7 +75,7 @@ impl Device {
             let tun = Fd::new(fd, close_fd_on_drop).map_err(|_| io::Error::last_os_error())?;
             let device = Device {
                 tun_name: None,
-                tun: posix::Tun::new(tun, mtu, config.platform_config.packet_information),
+                tun: posix::Tun::new(tun, config.platform_config.packet_information),
                 ctl: None,
                 route: Mutex::new(None),
             };
@@ -145,7 +145,7 @@ impl Device {
                         .to_string_lossy()
                         .into(),
                 ),
-                tun: posix::Tun::new(tun, mtu, config.platform_config.packet_information),
+                tun: posix::Tun::new(tun, config.platform_config.packet_information),
                 ctl,
                 route: Mutex::new(None),
             }
@@ -468,7 +468,6 @@ impl AbstractDevice for Device {
             if let Err(err) = siocsifmtu(ctl.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
-            self.tun.set_mtu(value);
             Ok(())
         }
     }
