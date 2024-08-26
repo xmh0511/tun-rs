@@ -85,12 +85,7 @@ pub struct Configuration {
     pub(crate) mtu: Option<u16>,
     #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
     pub(crate) enabled: Option<bool>,
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "freebsd",
-        target_os = "macos"
-    ))]
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
     pub(crate) layer: Option<Layer>,
     #[cfg(unix)]
     pub(crate) raw_fd: Option<RawFd>,
@@ -209,12 +204,7 @@ impl Configuration {
     }
 
     /// Set the OSI layer of operation.
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "freebsd",
-        target_os = "macos"
-    ))]
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
     pub fn layer(&mut self, value: Layer) -> &mut Self {
         self.layer = Some(value);
         self
