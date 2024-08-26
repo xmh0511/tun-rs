@@ -35,5 +35,5 @@ pub use win_device::{AsyncDevice, DeviceReader, DeviceWriter};
 /// Create a TUN device with the given name.
 pub fn create_as_async(configuration: &Configuration) -> Result<AsyncDevice, error::Error> {
     let device = create(configuration)?;
-    AsyncDevice::new(device).map_err(|err| err.into())
+    AsyncDevice::new(device.0).map_err(|err| err.into())
 }

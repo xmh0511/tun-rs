@@ -69,7 +69,8 @@ impl PlatformConfig {
     }
 }
 
+use super::Device as DeviceWrapper;
 /// Create a TUN device with the given name.
-pub fn create(configuration: &Configuration) -> Result<Device> {
-    Device::new(configuration)
+pub fn create(configuration: &Configuration) -> Result<DeviceWrapper> {
+    Ok(DeviceWrapper(Device::new(configuration)?))
 }

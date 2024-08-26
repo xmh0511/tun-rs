@@ -23,16 +23,16 @@ use tokio::io::Interest;
 
 // use super::TunPacketCodec;
 // use crate::device::AbstractDevice;
-use crate::platform::Device;
+use crate::platform::DeviceInner;
 
 /// An async TUN device wrapper around a TUN device.
 pub struct AsyncDevice {
-    inner: AsyncFd<Device>,
+    inner: AsyncFd<DeviceInner>,
 }
 
 /// Returns a shared reference to the underlying Device object.
 impl core::ops::Deref for AsyncDevice {
-    type Target = Device;
+    type Target = DeviceInner;
 
     fn deref(&self) -> &Self::Target {
         self.inner.get_ref()
@@ -48,7 +48,7 @@ impl core::ops::DerefMut for AsyncDevice {
 
 impl AsyncDevice {
     /// Create a new `AsyncDevice` wrapping around a `Device`.
-    pub fn new(device: Device) -> std::io::Result<AsyncDevice> {
+    pub fn new(device: DeviceInner) -> std::io::Result<AsyncDevice> {
         device.set_nonblock()?;
         Ok(AsyncDevice {
             inner: AsyncFd::new(device)?,
