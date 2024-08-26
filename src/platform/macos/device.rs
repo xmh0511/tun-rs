@@ -84,7 +84,7 @@ impl Device {
                 return Ok(device);
             }
 
-            let id = if let Some(tun_name) = config.tun_name_.as_ref() {
+            let id = if let Some(tun_name) = config.name.as_ref() {
                 if tun_name.len() > IFNAMSIZ {
                     return Err(Error::NameTooLong);
                 }
@@ -100,11 +100,6 @@ impl Device {
 
             if config.layer.filter(|l| *l != Layer::L3).is_some() {
                 return Err(Error::UnsupportedLayer);
-            }
-
-            let queues_number = config.queues.unwrap_or(1);
-            if queues_number != 1 {
-                return Err(Error::InvalidQueuesNumber);
             }
 
             let mut device = unsafe {

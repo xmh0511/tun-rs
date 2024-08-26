@@ -149,7 +149,7 @@ impl Device {
     /// Create a new `Device` for the given `Configuration`.
     pub fn new(config: &Configuration) -> Result<Self> {
         let layer = config.layer.unwrap_or(Layer::L3);
-        let tun_name = config.tun_name_.as_deref().unwrap_or("wintun");
+        let tun_name = config.name.as_deref().unwrap_or("wintun");
         let address = config
             .address
             .unwrap_or(IpAddr::V4(Ipv4Addr::new(10, 1, 0, 2)));

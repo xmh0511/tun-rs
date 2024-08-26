@@ -40,17 +40,61 @@ pub enum Layer {
 /// Configuration builder for a TUN interface.
 #[derive(Clone, Default, Debug)]
 pub struct Configuration {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub(crate) tun_name_: Option<String>,
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
+    pub(crate) name: Option<String>,
     pub(crate) platform_config: PlatformConfig,
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
     pub(crate) address: Option<IpAddr>,
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
     pub(crate) destination: Option<IpAddr>,
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
     pub(crate) broadcast: Option<IpAddr>,
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
     pub(crate) netmask: Option<IpAddr>,
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
     pub(crate) mtu: Option<u16>,
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
     pub(crate) enabled: Option<bool>,
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "freebsd"
+    ))]
     pub(crate) layer: Option<Layer>,
-    pub(crate) queues: Option<usize>,
     #[cfg(unix)]
     pub(crate) raw_fd: Option<RawFd>,
     #[cfg(not(unix))]
@@ -75,45 +119,63 @@ impl Configuration {
         self
     }
 
-    /// Functionally equivalent to `tun_name`
-    #[deprecated(
-        since = "1.1.2",
-        note = "Since the API `name` may have an easy name conflict when IDE prompts, it is replaced by `tun_name` for better coding experience"
-    )]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub fn name<S: AsRef<str>>(&mut self, tun_name: S) -> &mut Self {
-        self.tun_name_ = Some(tun_name.as_ref().into());
-        self
-    }
-
     /// Set the tun name.
     ///
     /// [Note: on macOS, the tun name must be the form `utunx` where `x` is a number, such as `utun3`. -- end note]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub fn tun_name<S: AsRef<str>>(&mut self, tun_name: S) -> &mut Self {
-        self.tun_name_ = Some(tun_name.as_ref().into());
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
+    pub fn name<S: AsRef<str>>(&mut self, tun_name: S) -> &mut Self {
+        self.name = Some(tun_name.as_ref().into());
         self
     }
 
     /// Set the address.
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
     pub fn address<A: IntoAddress>(&mut self, value: A) -> &mut Self {
         self.address = Some(value.into_address().unwrap());
         self
     }
 
     /// Set the destination address.
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
     pub fn destination<A: IntoAddress>(&mut self, value: A) -> &mut Self {
         self.destination = Some(value.into_address().unwrap());
         self
     }
 
     /// Set the broadcast address.
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
     pub fn broadcast<A: IntoAddress>(&mut self, value: A) -> &mut Self {
         self.broadcast = Some(value.into_address().unwrap());
         self
     }
 
     /// Set the netmask.
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
     pub fn netmask<A: IntoAddress>(&mut self, value: A) -> &mut Self {
         self.netmask = Some(value.into_address().unwrap());
         self
@@ -121,7 +183,12 @@ impl Configuration {
 
     /// Set the MTU.
     ///
-    /// [Note: mtu on the Windows platform is always 65535 due to wintun -- end note]
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
     pub fn mtu(&mut self, value: u16) -> &mut Self {
         // mtu on windows platform is always 65535 due to wintun
         if cfg!(target_family = "unix") {
@@ -131,28 +198,35 @@ impl Configuration {
     }
 
     /// Set the interface to be enabled once created.
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
     pub fn up(&mut self) -> &mut Self {
         self.enabled = Some(true);
         self
     }
 
     /// Set the interface to be disabled once created.
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
     pub fn down(&mut self) -> &mut Self {
         self.enabled = Some(false);
         self
     }
 
     /// Set the OSI layer of operation.
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "freebsd"
+    ))]
     pub fn layer(&mut self, value: Layer) -> &mut Self {
         self.layer = Some(value);
-        self
-    }
-
-    /// Set the number of queues.
-    /// Note: The queues must be 1, otherwise will failed.
-    #[deprecated(since = "1.0.0", note = "The queues will always be 1.")]
-    pub fn queues(&mut self, value: usize) -> &mut Self {
-        self.queues = Some(value);
         self
     }
 

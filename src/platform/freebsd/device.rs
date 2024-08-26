@@ -66,7 +66,7 @@ impl Device {
         let layer = config.layer.unwrap_or(Layer::L3);
         if layer == Layer::L3 {
             let mut device = unsafe {
-                let dev = match config.tun_name_.as_ref() {
+                let dev = match config.name.as_ref() {
                     Some(tun_name) => {
                         let tun_name = tun_name.clone();
 
