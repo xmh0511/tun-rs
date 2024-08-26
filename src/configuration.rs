@@ -194,6 +194,7 @@ impl Configuration {
 }
 
 /// Reconfigure the device.
+#[allow(dead_code)]
 pub(crate) fn configure<D: AbstractDevice>(
     device: &mut D,
     config: &Configuration,
