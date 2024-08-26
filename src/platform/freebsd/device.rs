@@ -283,7 +283,7 @@ impl Write for Device {
 
 impl AbstractDevice for Device {
     fn tun_name(&self) -> Result<String> {
-        Ok(self.tun_name.read().unwrap().clone())
+        Ok(self.tun_name.read().clone())
     }
 
     fn set_tun_name(&self, value: &str) -> Result<()> {
@@ -304,7 +304,7 @@ impl AbstractDevice for Device {
                 return Err(io::Error::from(err).into());
             }
 
-            *self.tun_name.write().unwrap() = value.to_string();
+            *self.tun_name.write() = value.to_string();
             Ok(())
         }
     }
