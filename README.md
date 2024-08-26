@@ -25,14 +25,14 @@ First, add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-tun2 = "2"
+tun2 = "3"
 ```
 
 If you want to use the TUN interface with mio/tokio, you need to enable the `async` feature:
 
 ```toml
 [dependencies]
-tun2 = { version = "2", features = ["async"] }
+tun2 = { version = "3", features = ["async"] }
 ```
 
 Example
@@ -51,17 +51,11 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         .destination((10, 0, 0, 1))
         .up();
 
-    #[cfg(target_os = "linux")]
-    config.platform_config(|config| {
-        // requiring root privilege to acquire complete functions
-        config.ensure_root_privileges(true);
-    });
-
-    let mut dev = tun2::create(&config)?;
+    let dev = tun2::create(&config)?;
     let mut buf = [0; 4096];
 
     loop {
-        let amount = dev.read(&mut buf)?;
+        let amount = dev.recv(&mut buf)?;
         println!("{:?}", &buf[0..amount]);
     }
 }
@@ -123,9 +117,9 @@ pub extern "C" fn start_tun(fd: std::os::raw::c_int) {
         cfg.platform_config(|p_cfg| {
             p_cfg.packet_information(true);
         });
-        let mut tun = tun2::create_as_async(&cfg).unwrap();
-        let mut framed = tun.into_framed();
-        while let Some(packet) = framed.next().await {
+        let tun = tun2::create_as_async(&cfg).unwrap();
+		let mut buf = [0u8;1500];
+        while let Ok(packet) = tun.recv(& mut buf).await {
             ...
         }
     });
