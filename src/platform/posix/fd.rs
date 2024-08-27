@@ -20,6 +20,7 @@ use mio::unix::SourceFd;
 use mio::{Events, Interest, Poll, Token, Waker};
 use std::io;
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
+#[cfg(feature = "experimental")]
 use std::sync::Mutex;
 
 #[cfg(feature = "experimental")]
