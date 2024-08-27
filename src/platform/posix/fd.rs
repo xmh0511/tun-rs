@@ -21,7 +21,7 @@ use mio::{Events, Interest, Poll, Token, Waker};
 use std::io;
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 #[cfg(feature = "experimental")]
-use std::sync::Mutex;
+use std::sync::RwLock;
 
 #[cfg(feature = "experimental")]
 const READREADY: Token = Token(1);
@@ -33,7 +33,9 @@ pub(crate) struct Fd {
     pub(crate) inner: RawFd,
     close_fd_on_drop: bool,
     #[cfg(feature = "experimental")]
-    shutdown: Mutex<Option<Waker>>,
+    poll: RwLock<Poll>,
+    #[cfg(feature = "experimental")]
+    shutdown: Waker,
 }
 
 impl Fd {
@@ -41,11 +43,19 @@ impl Fd {
         if value < 0 {
             return Err(Error::InvalidDescriptor);
         }
+        #[cfg(feature = "experimental")]
+        let (waker, poll) = {
+            let poll = Poll::new()?;
+            let waker = Waker::new(poll.registry(), SHUTDOWN)?;
+            (waker, RwLock::new(poll))
+        };
         Ok(Fd {
             inner: value,
             close_fd_on_drop,
             #[cfg(feature = "experimental")]
-            shutdown: Mutex::new(None),
+            poll,
+            #[cfg(feature = "experimental")]
+            shutdown: waker,
         })
     }
 
@@ -69,18 +79,27 @@ impl Fd {
 
     #[cfg(feature = "experimental")]
     pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
-        let fd = self.as_raw_fd();
-        let mut poll = Poll::new()?;
-        poll.registry()
-            .register(&mut SourceFd(&fd), READREADY, Interest::READABLE)?;
-        let waker = Waker::new(poll.registry(), SHUTDOWN)?;
-        {
-            *self.shutdown.lock().unwrap() = Some(waker);
+        use std::sync::RwLockWriteGuard;
+
+        struct Guard<'a>(RwLockWriteGuard<'a, Poll>, i32);
+        impl Drop for Guard<'_> {
+            fn drop(&mut self) {
+                self.0
+                    .registry()
+                    .deregister(&mut SourceFd(&self.1))
+                    .unwrap();
+            }
         }
+        let fd = self.as_raw_fd();
+        let poll = self.poll.write().unwrap();
+        let mut poll = Guard(poll, fd);
+        poll.0
+            .registry()
+            .register(&mut SourceFd(&fd), READREADY, Interest::READABLE)?;
         let mut events = Events::with_capacity(128);
         #[allow(clippy::never_loop)]
         loop {
-            poll.poll(&mut events, None)?;
+            poll.0.poll(&mut events, None)?;
             for event in events.iter() {
                 match event.token() {
                     SHUTDOWN => {
@@ -110,12 +129,7 @@ impl Fd {
     }
     #[cfg(feature = "experimental")]
     pub fn shutdown(&self) -> io::Result<()> {
-        use std::ops::Deref;
-
-        if let Some(v) = self.shutdown.lock().unwrap().deref() {
-            return v.wake();
-        }
-        Ok(())
+        self.shutdown.wake()
     }
 }
 
