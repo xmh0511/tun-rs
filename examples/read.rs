@@ -34,8 +34,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     let mut config = tun2::Configuration::default();
 
     config
-        .address((10, 0, 0, 9))
-        .netmask((255, 255, 255, 0))
+        .address_with_prefix((10, 0, 0, 9), 24)
         .destination((10, 0, 0, 1))
         .up();
 

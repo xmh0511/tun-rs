@@ -13,8 +13,6 @@
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
 
 use packet::{builder::Builder, icmp, ip, Packet};
-#[cfg(not(target_os = "windows"))]
-use std::net::Ipv4Addr;
 use std::sync::mpsc::Receiver;
 use tun2::{AbstractDevice, BoxError};
 
@@ -37,8 +35,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     let mut config = tun2::Configuration::default();
 
     config
-        .address((10, 0, 0, 9))
-        .netmask((255, 255, 255, 0))
+        .address_with_prefix((10, 0, 0, 9), 24)
         .destination((10, 0, 0, 1))
         .up();
 
@@ -52,12 +49,6 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     let r = dev.netmask()?;
     println!("{:?}", r);
 
-    #[cfg(not(target_os = "windows"))]
-    {
-        dev.set_address(std::net::IpAddr::V4(Ipv4Addr::new(10, 0, 0, 20)))?;
-        dev.set_destination(std::net::IpAddr::V4(Ipv4Addr::new(10, 0, 0, 66)))?;
-        dev.set_netmask(std::net::IpAddr::V4(Ipv4Addr::new(255, 255, 0, 0)))?;
-    }
     dev.set_mtu(65535)?;
 
     //dev.set_tun_name("tun8")?;

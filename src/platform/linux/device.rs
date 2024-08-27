@@ -183,6 +183,26 @@ impl Device {
     pub(crate) fn shutdown(&self) -> io::Result<()> {
         self.tun.shutdown()
     }
+    fn set_address(&self, value: IpAddr) -> Result<()> {
+        unsafe {
+            let mut req = self.request();
+            ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_addr, OVERWRITE_SIZE);
+            if let Err(err) = siocsifaddr(self.ctl.as_raw_fd(), &req) {
+                return Err(io::Error::from(err).into());
+            }
+            Ok(())
+        }
+    }
+    fn set_netmask(&self, value: IpAddr) -> Result<()> {
+        unsafe {
+            let mut req = self.request();
+            ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_netmask, OVERWRITE_SIZE);
+            if let Err(err) = siocsifnetmask(self.ctl.as_raw_fd(), &req) {
+                return Err(io::Error::from(err).into());
+            }
+            Ok(())
+        }
+    }
 }
 
 impl AbstractDevice for Device {
@@ -247,17 +267,6 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_address(&self, value: IpAddr) -> Result<()> {
-        unsafe {
-            let mut req = self.request();
-            ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_addr, OVERWRITE_SIZE);
-            if let Err(err) = siocsifaddr(self.ctl.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
-            }
-            Ok(())
-        }
-    }
-
     fn destination(&self) -> Result<IpAddr> {
         unsafe {
             let mut req = self.request();
@@ -310,17 +319,6 @@ impl AbstractDevice for Device {
             }
             let sa = sockaddr_union::from(req.ifr_ifru.ifru_netmask);
             Ok(std::net::SocketAddr::try_from(sa)?.ip())
-        }
-    }
-
-    fn set_netmask(&self, value: IpAddr) -> Result<()> {
-        unsafe {
-            let mut req = self.request();
-            ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_netmask, OVERWRITE_SIZE);
-            if let Err(err) = siocsifnetmask(self.ctl.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
-            }
-            Ok(())
         }
     }
 

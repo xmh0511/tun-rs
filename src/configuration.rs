@@ -139,8 +139,9 @@ impl Configuration {
         target_os = "macos",
         target_os = "freebsd"
     ))]
-    pub fn address<A: IntoAddress>(&mut self, value: A) -> &mut Self {
+    pub fn address_with_prefix<A: IntoAddress>(&mut self, value: A, prefix: u8) -> &mut Self {
         self.address = Some(value.into_address().unwrap());
+        self.netmask = Some(prefix.into_address().unwrap());
         self
     }
 
@@ -165,18 +166,6 @@ impl Configuration {
     ))]
     pub fn broadcast<A: IntoAddress>(&mut self, value: A) -> &mut Self {
         self.broadcast = Some(value.into_address().unwrap());
-        self
-    }
-
-    /// Set the netmask.
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
-    pub fn netmask<A: IntoAddress>(&mut self, value: A) -> &mut Self {
-        self.netmask = Some(value.into_address().unwrap());
         self
     }
 

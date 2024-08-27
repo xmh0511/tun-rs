@@ -48,10 +48,6 @@ pub trait AbstractDevice {
     ))]
     fn address(&self) -> Result<IpAddr>;
 
-    /// Set the address.
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
-    fn set_address(&self, value: IpAddr) -> Result<()>;
-
     /// Get the destination address.
     #[cfg(any(
         target_os = "windows",
@@ -81,10 +77,6 @@ pub trait AbstractDevice {
         target_os = "freebsd"
     ))]
     fn netmask(&self) -> Result<IpAddr>;
-
-    /// Set the netmask.
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
-    fn set_netmask(&self, value: IpAddr) -> Result<()>;
 
     /// Sets the network addresses of this adapter, including network address, subnet mask, and gateway
     #[cfg(any(

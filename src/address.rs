@@ -33,6 +33,17 @@ impl IntoAddress for u32 {
         )))
     }
 }
+impl IntoAddress for u8 {
+    fn into_address(&self) -> Result<IpAddr> {
+        let prefix = *self;
+        let mask = if prefix == 0 {
+            0
+        } else {
+            (!0u32) << (32 - prefix)
+        };
+        Ok(Ipv4Addr::from(mask).into())
+    }
+}
 
 impl IntoAddress for i32 {
     fn into_address(&self) -> Result<IpAddr> {

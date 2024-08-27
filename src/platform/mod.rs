@@ -92,8 +92,7 @@ mod test {
         let dev = super::create(
             Configuration::default()
                 .name("utun6")
-                .address("192.168.50.1")
-                .netmask("255.255.0.0")
+                .address_with_prefix("192.168.50.1", 24)
                 .mtu(crate::DEFAULT_MTU)
                 .up(),
         )

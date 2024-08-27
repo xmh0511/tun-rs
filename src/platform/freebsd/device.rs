@@ -254,31 +254,35 @@ impl Device {
     pub(crate) fn shutdown(&self) -> io::Result<()> {
         self.tun.shutdown()
     }
+
+    fn set_address(&self, value: IpAddr) -> Result<()> {
+        unsafe {
+            let req = self.request();
+            if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &req) {
+                return Err(io::Error::from(err).into());
+            }
+            let previous = { (*self.route.lock().unwrap()).ok_or(Error::InvalidConfig)? };
+            self.set_alias(
+                value,
+                IpAddr::V4(previous.dest),
+                IpAddr::V4(previous.netmask),
+            )?;
+        }
+        Ok(())
+    }
+
+    fn set_netmask(&self, value: IpAddr) -> Result<()> {
+        unsafe {
+            let req = self.request();
+            if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &req) {
+                return Err(io::Error::from(err).into());
+            }
+            let previous = { (*self.route.lock().unwrap()).ok_or(Error::InvalidConfig)? };
+            self.set_alias(IpAddr::V4(previous.addr), IpAddr::V4(previous.dest), value)?;
+        }
+        Ok(())
+    }
 }
-
-// impl Read for Device {
-//     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-//         self.tun.read(buf)
-//     }
-
-//     fn read_vectored(&mut self, bufs: &mut [io::IoSliceMut<'_>]) -> io::Result<usize> {
-//         self.tun.read_vectored(bufs)
-//     }
-// }
-
-// impl Write for Device {
-//     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-//         self.tun.write(buf)
-//     }
-
-//     fn flush(&mut self) -> io::Result<()> {
-//         self.tun.flush()
-//     }
-
-//     fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
-//         self.tun.write_vectored(bufs)
-//     }
-// }
 
 impl AbstractDevice for Device {
     fn tun_name(&self) -> Result<String> {
@@ -341,22 +345,6 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_address(&self, value: IpAddr) -> Result<()> {
-        unsafe {
-            let req = self.request();
-            if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
-            }
-            let previous = { (*self.route.lock().unwrap()).ok_or(Error::InvalidConfig)? };
-            self.set_alias(
-                value,
-                IpAddr::V4(previous.dest),
-                IpAddr::V4(previous.netmask),
-            )?;
-        }
-        Ok(())
-    }
-
     fn destination(&self) -> Result<IpAddr> {
         unsafe {
             let mut req = self.request();
@@ -409,18 +397,6 @@ impl AbstractDevice for Device {
             let sa = sockaddr_union::from(req.ifr_ifru.ifru_addr);
             Ok(std::net::SocketAddr::try_from(sa)?.ip())
         }
-    }
-
-    fn set_netmask(&self, value: IpAddr) -> Result<()> {
-        unsafe {
-            let req = self.request();
-            if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
-            }
-            let previous = { (*self.route.lock().unwrap()).ok_or(Error::InvalidConfig)? };
-            self.set_alias(IpAddr::V4(previous.addr), IpAddr::V4(previous.dest), value)?;
-        }
-        Ok(())
     }
 
     fn mtu(&self) -> Result<u16> {

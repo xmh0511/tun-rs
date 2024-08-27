@@ -275,6 +275,45 @@ impl Device {
     pub(crate) fn shutdown(&self) -> io::Result<()> {
         self.tun.shutdown()
     }
+    fn set_address(&self, value: IpAddr) -> Result<()> {
+        let IpAddr::V4(value) = value else {
+            unimplemented!("do not support IPv6 yet")
+        };
+        let ctl = self.ctl.as_ref().ok_or(Error::InvalidConfig)?;
+        unsafe {
+            let mut req = self.request()?;
+            ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_addr, OVERWRITE_SIZE);
+            if let Err(err) = siocsifaddr(ctl.as_raw_fd(), &req) {
+                return Err(io::Error::from(err).into());
+            }
+            let route = { *self.route.lock().unwrap() };
+            if let Some(mut route) = route {
+                route.addr = value;
+                self.set_route(route)?;
+            }
+            Ok(())
+        }
+    }
+    fn set_netmask(&self, value: IpAddr) -> Result<()> {
+        let IpAddr::V4(value) = value else {
+            unimplemented!("do not support IPv6 yet")
+        };
+        let ctl = self.ctl.as_ref().ok_or(Error::InvalidConfig)?;
+        unsafe {
+            let mut req = self.request()?;
+            // Note: Here should be `ifru_netmask`, but it is not defined in `ifreq`.
+            ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_addr, OVERWRITE_SIZE);
+            if let Err(err) = siocsifnetmask(ctl.as_raw_fd(), &req) {
+                return Err(io::Error::from(err).into());
+            }
+            let route = { *self.route.lock().unwrap() };
+            if let Some(mut route) = route {
+                route.netmask = value;
+                self.set_route(route)?;
+            }
+            Ok(())
+        }
+    }
 }
 
 impl AbstractDevice for Device {
@@ -314,26 +353,6 @@ impl AbstractDevice for Device {
             }
             let sa = sockaddr_union::from(req.ifr_ifru.ifru_addr);
             Ok(std::net::SocketAddr::try_from(sa)?.ip())
-        }
-    }
-
-    fn set_address(&self, value: IpAddr) -> Result<()> {
-        let IpAddr::V4(value) = value else {
-            unimplemented!("do not support IPv6 yet")
-        };
-        let ctl = self.ctl.as_ref().ok_or(Error::InvalidConfig)?;
-        unsafe {
-            let mut req = self.request()?;
-            ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_addr, OVERWRITE_SIZE);
-            if let Err(err) = siocsifaddr(ctl.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
-            }
-            let route = { *self.route.lock().unwrap() };
-            if let Some(mut route) = route {
-                route.addr = value;
-                self.set_route(route)?;
-            }
-            Ok(())
         }
     }
 
@@ -407,27 +426,6 @@ impl AbstractDevice for Device {
             }
             let sa = sockaddr_union::from(req.ifr_ifru.ifru_addr);
             Ok(std::net::SocketAddr::try_from(sa)?.ip())
-        }
-    }
-
-    fn set_netmask(&self, value: IpAddr) -> Result<()> {
-        let IpAddr::V4(value) = value else {
-            unimplemented!("do not support IPv6 yet")
-        };
-        let ctl = self.ctl.as_ref().ok_or(Error::InvalidConfig)?;
-        unsafe {
-            let mut req = self.request()?;
-            // Note: Here should be `ifru_netmask`, but it is not defined in `ifreq`.
-            ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_addr, OVERWRITE_SIZE);
-            if let Err(err) = siocsifnetmask(ctl.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
-            }
-            let route = { *self.route.lock().unwrap() };
-            if let Some(mut route) = route {
-                route.netmask = value;
-                self.set_route(route)?;
-            }
-            Ok(())
         }
     }
 
