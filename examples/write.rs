@@ -31,7 +31,7 @@ fn main() -> Result<(), BoxError> {
     Ok(())
 }
 
-fn main_entry(_quit: Receiver<()>) -> Result<(), BoxError> {
+fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     let mut config = tun2::Configuration::default();
 
     config
@@ -48,41 +48,49 @@ fn main_entry(_quit: Receiver<()>) -> Result<(), BoxError> {
     let dev = Arc::new(tun2::create(&config)?);
     let mut buf = [0; 4096];
 
-    //let dev2 = dev.clone();
-    // std::thread::spawn(move || {
-    //     std::thread::sleep(std::time::Duration::from_secs(5));
-    //     dev2.shutdown().unwrap();
-    // });
-    //dev2.shutdown().unwrap();
-    loop {
-        let amount = dev.recv(&mut buf);
-        println!("amount == {amount:?}");
-        let amount = amount?;
-        let pkt = &buf[0..amount];
-        match ip::Packet::new(pkt) {
-            Ok(ip::Packet::V4(pkt)) => {
-                if let Ok(icmp) = icmp::Packet::new(pkt.payload()) {
-                    if let Ok(icmp) = icmp.echo() {
-                        println!("{:?} - {:?}", icmp.sequence(), pkt.destination());
-                        let reply = ip::v4::Builder::default()
-                            .id(0x42)?
-                            .ttl(64)?
-                            .source(pkt.destination())?
-                            .destination(pkt.source())?
-                            .icmp()?
-                            .echo()?
-                            .reply()?
-                            .identifier(icmp.identifier())?
-                            .sequence(icmp.sequence())?
-                            .payload(icmp.payload())?
-                            .build()?;
-                        let size = dev.send(&reply[..])?;
-                        println!("write {size} len {}", reply.len());
+    #[cfg(feature = "experimental")]
+    let dev2 = dev.clone();
+    #[cfg(feature = "experimental")]
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(5));
+        dev2.shutdown().unwrap();
+    });
+
+    std::thread::spawn(move || {
+        loop {
+            let amount = dev.recv(&mut buf);
+            println!("amount == {amount:?}");
+            let amount = amount?;
+            let pkt = &buf[0..amount];
+            match ip::Packet::new(pkt) {
+                Ok(ip::Packet::V4(pkt)) => {
+                    if let Ok(icmp) = icmp::Packet::new(pkt.payload()) {
+                        if let Ok(icmp) = icmp.echo() {
+                            println!("{:?} - {:?}", icmp.sequence(), pkt.destination());
+                            let reply = ip::v4::Builder::default()
+                                .id(0x42)?
+                                .ttl(64)?
+                                .source(pkt.destination())?
+                                .destination(pkt.source())?
+                                .icmp()?
+                                .echo()?
+                                .reply()?
+                                .identifier(icmp.identifier())?
+                                .sequence(icmp.sequence())?
+                                .payload(icmp.payload())?
+                                .build()?;
+                            let size = dev.send(&reply[..])?;
+                            println!("write {size} len {}", reply.len());
+                        }
                     }
                 }
+                Err(err) => println!("Received an invalid packet: {:?}", err),
+                _ => {}
             }
-            Err(err) => println!("Received an invalid packet: {:?}", err),
-            _ => {}
         }
-    }
+        #[allow(unreachable_code)]
+        Ok::<(), BoxError>(())
+    });
+    quit.recv().expect("Quit error.");
+    Ok(())
 }

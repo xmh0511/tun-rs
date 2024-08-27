@@ -32,9 +32,7 @@ pub(crate) struct Fd {
     pub(crate) inner: RawFd,
     close_fd_on_drop: bool,
     #[cfg(feature = "experimental")]
-    poll: Mutex<Poll>,
-    #[cfg(feature = "experimental")]
-    shutdown: Waker,
+    shutdown: Mutex<Option<Waker>>,
 }
 
 impl Fd {
@@ -42,23 +40,11 @@ impl Fd {
         if value < 0 {
             return Err(Error::InvalidDescriptor);
         }
-        #[cfg(feature = "experimental")]
-        let poll = Poll::new()?;
-        // tun readable?
-        #[cfg(feature = "experimental")]
-        poll.registry()
-            .register(&mut SourceFd(&value), READREADY, Interest::READABLE)?;
-        #[cfg(feature = "experimental")]
-        let waker = Waker::new(poll.registry(), SHUTDOWN)?;
-        #[cfg(feature = "experimental")]
-        let poll = Mutex::new(poll);
         Ok(Fd {
             inner: value,
             close_fd_on_drop,
             #[cfg(feature = "experimental")]
-            poll,
-            #[cfg(feature = "experimental")]
-            shutdown: waker,
+            shutdown: Mutex::new(None),
         })
     }
 
@@ -83,10 +69,17 @@ impl Fd {
     #[cfg(feature = "experimental")]
     pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
         let fd = self.as_raw_fd();
+        let mut poll = Poll::new()?;
+        poll.registry()
+            .register(&mut SourceFd(&fd), READREADY, Interest::READABLE)?;
+        let waker = Waker::new(poll.registry(), SHUTDOWN)?;
+        {
+            *self.shutdown.lock().unwrap() = Some(waker);
+        }
         let mut events = Events::with_capacity(128);
         #[allow(clippy::never_loop)]
         loop {
-            self.poll.lock().unwrap().poll(&mut events, None)?;
+            poll.poll(&mut events, None)?;
             for event in events.iter() {
                 match event.token() {
                     SHUTDOWN => {
@@ -116,7 +109,12 @@ impl Fd {
     }
     #[cfg(feature = "experimental")]
     pub fn shutdown(&self) -> io::Result<()> {
-        self.shutdown.wake()
+        use std::ops::Deref;
+
+        if let Some(v) = self.shutdown.lock().unwrap().deref() {
+            return v.wake();
+        }
+        Ok(())
     }
 }
 
