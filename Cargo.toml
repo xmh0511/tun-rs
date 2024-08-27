@@ -77,7 +77,8 @@ wintun-dns = []
 experimental = ["mio/os-ext"]
 
 [package.metadata.docs.rs]
-features = ["async"]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [[example]]
 name = "read-async"

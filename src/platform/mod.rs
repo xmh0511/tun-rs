@@ -67,7 +67,10 @@ impl Device {
     pub fn send(&self, buf: &[u8]) -> std::io::Result<usize> {
         self.0.send(buf)
     }
+
+    #[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
     #[cfg(feature = "experimental")]
+    /// Do not use nonblocking fd when you want to use shutdown
     pub fn shutdown(&self) -> std::io::Result<()> {
         self.0.shutdown()
     }
