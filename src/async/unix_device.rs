@@ -59,7 +59,7 @@ impl AsyncDevice {
             .async_io(Interest::READABLE, |device| device.send(buf))
             .await
     }
-    pub fn shutdown(&self) -> std::io::Result {
+    pub fn shutdown(&self) -> std::io::Result<()> {
         todo!()
     }
 }

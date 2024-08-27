@@ -193,6 +193,9 @@ impl Tun {
             self.fd.read(in_buf)
         }
     }
+    pub(crate) fn shutdown(&self) -> io::Result<()> {
+        self.fd.shutdown()
+    }
 }
 
 impl Read for Tun {

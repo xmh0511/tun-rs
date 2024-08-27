@@ -14,13 +14,21 @@
 
 use crate::error::{Error, Result};
 use libc::{self, fcntl, F_GETFL, F_SETFL, O_NONBLOCK};
+use mio::unix::SourceFd;
+use mio::{Events, Interest, Poll, Token, Waker};
 use std::io;
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
+use std::sync::Mutex;
+
+const READREADY: Token = Token(1);
+const SHUTDOWN: Token = Token(0);
 
 /// POSIX file descriptor support for `io` traits.
 pub(crate) struct Fd {
     pub(crate) inner: RawFd,
     close_fd_on_drop: bool,
+    poll: Mutex<Poll>,
+    shutdown: Waker,
 }
 
 impl Fd {
@@ -28,9 +36,17 @@ impl Fd {
         if value < 0 {
             return Err(Error::InvalidDescriptor);
         }
+        let poll = Poll::new()?;
+        // tun readable?
+        poll.registry()
+            .register(&mut SourceFd(&value), READREADY, Interest::READABLE)?;
+        let waker = Waker::new(poll.registry(), SHUTDOWN)?;
+        let poll = Mutex::new(poll);
         Ok(Fd {
             inner: value,
             close_fd_on_drop,
+            poll,
+            shutdown: waker,
         })
     }
 
@@ -42,13 +58,37 @@ impl Fd {
         }
     }
 
+    // pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
+    //     let fd = self.as_raw_fd();
+    //     let amount = unsafe { libc::read(fd, buf.as_mut_ptr() as *mut _, buf.len()) };
+    //     if amount < 0 {
+    //         return Err(io::Error::last_os_error());
+    //     }
+    //     Ok(amount as usize)
+    // }
+
     pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
         let fd = self.as_raw_fd();
-        let amount = unsafe { libc::read(fd, buf.as_mut_ptr() as *mut _, buf.len()) };
-        if amount < 0 {
-            return Err(io::Error::last_os_error());
+        let mut events = Events::with_capacity(128);
+        loop {
+            self.poll.lock().unwrap().poll(&mut events, None)?;
+            for event in events.iter() {
+                match event.token() {
+                    SHUTDOWN => {
+                        return Err(io::Error::new(io::ErrorKind::ConnectionAborted, "close"));
+                    }
+                    READREADY => {
+                        let amount =
+                            unsafe { libc::read(fd, buf.as_mut_ptr() as *mut _, buf.len()) };
+                        if amount < 0 {
+                            return Err(io::Error::last_os_error());
+                        }
+                        return Ok(amount as usize);
+                    }
+                    _ => unreachable!(),
+                }
+            }
         }
-        Ok(amount as usize)
     }
 
     pub fn write(&self, buf: &[u8]) -> io::Result<usize> {
@@ -58,6 +98,9 @@ impl Fd {
             return Err(io::Error::last_os_error());
         }
         Ok(amount as usize)
+    }
+    pub fn shutdown(&self) -> io::Result<()> {
+        self.shutdown.wake()
     }
 }
 
