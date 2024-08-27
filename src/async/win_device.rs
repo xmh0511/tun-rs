@@ -33,7 +33,7 @@ impl core::ops::Deref for AsyncDevice {
 }
 impl Drop for AsyncDevice {
     fn drop(&mut self) {
-        let _ = self.shutdown();
+        let _ = self.inner.shutdown();
     }
 }
 
@@ -69,8 +69,5 @@ impl AsyncDevice {
     /// Send a packet to tun device - Not implemented for windows
     pub async fn send(&self, buf: &[u8]) -> std::io::Result<usize> {
         self.inner.send(buf)
-    }
-    pub fn shutdown(&self) -> io::Result<()> {
-        self.inner.shutdown()
     }
 }
