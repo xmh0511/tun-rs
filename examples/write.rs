@@ -48,12 +48,12 @@ fn main_entry(_quit: Receiver<()>) -> Result<(), BoxError> {
     let dev = Arc::new(tun2::create(&config)?);
     let mut buf = [0; 4096];
 
-    // let dev2 = dev.clone();
+    let dev2 = dev.clone();
     // std::thread::spawn(move || {
     //     std::thread::sleep(std::time::Duration::from_secs(5));
     //     dev2.shutdown().unwrap();
     // });
-    //dev2.shutdown().unwrap();
+    dev2.shutdown().unwrap();
     loop {
         let amount = dev.recv(&mut buf);
         println!("amount == {amount:?}");
