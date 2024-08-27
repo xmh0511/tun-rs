@@ -21,6 +21,8 @@ use mio::{Events, Interest, Poll, Token, Waker};
 use std::io;
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 #[cfg(feature = "experimental")]
+use std::sync::atomic::AtomicBool;
+#[cfg(feature = "experimental")]
 use std::sync::RwLock;
 
 #[cfg(feature = "experimental")]
@@ -36,6 +38,8 @@ pub(crate) struct Fd {
     poll: RwLock<Poll>,
     #[cfg(feature = "experimental")]
     shutdown: Waker,
+    #[cfg(feature = "experimental")]
+    is_shutdown: AtomicBool,
 }
 
 impl Fd {
@@ -56,6 +60,8 @@ impl Fd {
             poll,
             #[cfg(feature = "experimental")]
             shutdown: waker,
+            #[cfg(feature = "experimental")]
+            is_shutdown: AtomicBool::new(false),
         })
     }
 
@@ -79,7 +85,10 @@ impl Fd {
 
     #[cfg(feature = "experimental")]
     pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
-        use std::sync::RwLockWriteGuard;
+        if self.is_shutdown.load(Ordering::Acquire) {
+            return Err(io::Error::new(io::ErrorKind::ConnectionAborted, "close"));
+        }
+        use std::sync::{atomic::Ordering, RwLockWriteGuard};
 
         struct Guard<'a>(RwLockWriteGuard<'a, Poll>, i32);
         impl Drop for Guard<'_> {
@@ -103,6 +112,7 @@ impl Fd {
             for event in events.iter() {
                 match event.token() {
                     SHUTDOWN => {
+                        self.is_shutdown.store(true, Ordering::Release);
                         return Err(io::Error::new(io::ErrorKind::ConnectionAborted, "close"));
                     }
                     READREADY => {
