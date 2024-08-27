@@ -39,7 +39,7 @@ impl core::ops::DerefMut for AsyncDevice {
 
 impl AsyncDevice {
     /// Create a new `AsyncDevice` wrapping around a `Device`.
-    pub fn new(device: DeviceInner) -> std::io::Result<AsyncDevice> {
+    pub(crate) fn new(device: DeviceInner) -> std::io::Result<AsyncDevice> {
         device.set_nonblock()?;
         Ok(AsyncDevice {
             inner: AsyncFd::new(device)?,
@@ -56,7 +56,7 @@ impl AsyncDevice {
     /// Send a packet to tun device
     pub async fn send(&self, buf: &[u8]) -> std::io::Result<usize> {
         self.inner
-            .async_io(Interest::READABLE, |device| device.send(buf))
+            .async_io(Interest::WRITABLE, |device| device.send(buf))
             .await
     }
     pub fn shutdown(&self) -> std::io::Result<()> {

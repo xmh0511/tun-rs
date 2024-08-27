@@ -39,7 +39,7 @@ impl Drop for AsyncDevice {
 
 impl AsyncDevice {
     /// Create a new `AsyncDevice` wrapping around a `Device`.
-    pub fn new(device: DeviceInner) -> io::Result<AsyncDevice> {
+    pub(crate) fn new(device: DeviceInner) -> io::Result<AsyncDevice> {
         let inner = Arc::new(device);
 
         Ok(AsyncDevice { inner })
