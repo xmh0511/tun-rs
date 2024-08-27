@@ -474,7 +474,6 @@ impl Tap {
             luid,
             mac,
         };
-        tap.enabled(true)?;
         Ok(tap)
     }
 

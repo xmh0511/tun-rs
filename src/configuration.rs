@@ -85,7 +85,12 @@ pub struct Configuration {
         target_os = "freebsd"
     ))]
     pub(crate) mtu: Option<u16>,
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "windows"
+    ))]
     pub(crate) enabled: Option<bool>,
     #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
     pub(crate) layer: Option<Layer>,
@@ -189,24 +194,26 @@ impl Configuration {
     }
 
     /// Set the interface to be enabled once created.
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd",))]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "windows"
+    ))]
     pub fn up(&mut self) -> &mut Self {
         self.enabled = Some(true);
         self
     }
-    #[cfg(windows)]
-    pub fn up(&mut self) -> &mut Self {
-        self
-    }
 
     /// Set the interface to be disabled once created.
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd",))]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "windows"
+    ))]
     pub fn down(&mut self) -> &mut Self {
         self.enabled = Some(false);
-        self
-    }
-    #[cfg(windows)]
-    pub fn down(&mut self) -> &mut Self {
         self
     }
 
@@ -279,7 +286,12 @@ pub(crate) fn configure<D: AbstractDevice>(
         device.set_broadcast(ip)?;
     }
 
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "windows"
+    ))]
     if let Some(enabled) = config.enabled {
         device.enabled(enabled)?;
     }
