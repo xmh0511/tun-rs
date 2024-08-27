@@ -13,6 +13,7 @@
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
 #[allow(unused_imports)]
 use crate::error::Result;
+#[allow(unused_imports)]
 use crate::IntoAddress;
 #[allow(unused_imports)]
 use std::net::IpAddr;

@@ -54,18 +54,6 @@ pub struct Device {
     route: Mutex<Option<Route>>,
 }
 
-impl AsRef<dyn AbstractDevice + 'static> for Device {
-    fn as_ref(&self) -> &(dyn AbstractDevice + 'static) {
-        self
-    }
-}
-
-impl AsMut<dyn AbstractDevice + 'static> for Device {
-    fn as_mut(&mut self) -> &mut (dyn AbstractDevice + 'static) {
-        self
-    }
-}
-
 impl Device {
     /// Create a new `Device` for the given `Configuration`.
     pub fn new(config: &Configuration) -> Result<Self> {
@@ -369,7 +357,7 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_destination<A: IntoAddress>(&self, value: IpAddr) -> Result<()> {
+    fn set_destination<A: IntoAddress>(&self, value: A) -> Result<()> {
         let value = value.into_address()?;
         let IpAddr::V4(value) = value else {
             unimplemented!("do not support IPv6 yet")
