@@ -42,16 +42,22 @@ impl Fd {
         if value < 0 {
             return Err(Error::InvalidDescriptor);
         }
+        #[cfg(feature = "experimental")]
         let poll = Poll::new()?;
         // tun readable?
+        #[cfg(feature = "experimental")]
         poll.registry()
             .register(&mut SourceFd(&value), READREADY, Interest::READABLE)?;
+        #[cfg(feature = "experimental")]
         let waker = Waker::new(poll.registry(), SHUTDOWN)?;
+        #[cfg(feature = "experimental")]
         let poll = Mutex::new(poll);
         Ok(Fd {
             inner: value,
             close_fd_on_drop,
+            #[cfg(feature = "experimental")]
             poll,
+            #[cfg(feature = "experimental")]
             shutdown: waker,
         })
     }
