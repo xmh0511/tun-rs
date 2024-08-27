@@ -49,7 +49,9 @@ impl AsyncDevice {
     /// Recv a packet from tun device
     pub async fn recv(&self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.inner
-            .async_io(Interest::READABLE, |device| device.recv(buf))
+            .async_io(Interest::READABLE.add(Interest::ERROR), |device| {
+                device.recv(buf)
+            })
             .await
     }
 
