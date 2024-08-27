@@ -203,8 +203,7 @@ impl Device {
             tun =>{
                 tun.recv(buf)
             };
-            tap=>
-            {
+            tap=>{
                tap.recv(buf)
             }
         )
@@ -214,11 +213,10 @@ impl Device {
     pub(crate) fn send(&self, buf: &[u8]) -> io::Result<usize> {
         driver_case!(
             &self.driver;
-            tun=>  {
+            tun=>{
                 tun.send(buf)
             };
-            tap=>
-            {
+            tap=>{
                tap.send(buf)
             }
         )
@@ -240,11 +238,10 @@ impl AbstractDevice for Device {
     fn tun_name(&self) -> Result<String> {
         driver_case!(
             &self.driver;
-            tun=>  {
+            tun=>{
                 Ok(tun.session.get_adapter().get_name()?)
             };
-            tap=>
-            {
+            tap=>{
                Ok(tap.name()?)
             }
         )
@@ -253,21 +250,37 @@ impl AbstractDevice for Device {
     fn set_tun_name(&self, value: &str) -> Result<()> {
         driver_case!(
             &self.driver;
-            tun=>  {
+            tun=>{
                 tun.session.get_adapter().set_name(value)?;
-                Ok(())
             };
-            tap=>
-            {
-               tap.set_name(value).map_err(|e|e.into())
+            tap=>{
+               tap.set_name(value)?
             }
-        )
+        );
+        Ok(())
+    }
+
+    fn enabled(&self, value: bool) -> Result<()> {
+        driver_case!(
+            &self.driver;
+            tun=>{
+                if value{
+                    Err(io::Error::from(io::ErrorKind::Unsupported))?
+                }else{
+                    tun.session.shutdown()?;
+                }
+            };
+            tap=>{
+               tap.enabled(value)?;
+            }
+        );
+        Ok(())
     }
 
     fn address(&self) -> Result<IpAddr> {
         driver_case!(
             &self.driver;
-            tun=>  {
+            tun=>{
                 let addresses =tun.session.get_adapter().get_addresses()?;
                 addresses
                     .iter()
@@ -277,8 +290,7 @@ impl AbstractDevice for Device {
                     })
                     .ok_or(Error::InvalidConfig)
             };
-            tap=>
-            {
+            tap=>{
                 tap.address()
             }
         )
@@ -288,7 +300,7 @@ impl AbstractDevice for Device {
         // It's just the default gateway in windows.
         driver_case!(
             &self.driver;
-            tun=>  {
+            tun=>{
                tun
                 .session
                 .get_adapter()
@@ -300,29 +312,23 @@ impl AbstractDevice for Device {
                 })
                 .ok_or(Error::InvalidConfig)
             };
-            tap=>
-            {
+            tap=>{
                 tap.destination()
             }
         )
-    }
-
-    fn broadcast(&self) -> Result<IpAddr> {
-        Err(Error::NotImplemented)
     }
 
     fn netmask(&self) -> Result<IpAddr> {
         let current_addr = self.address()?;
         driver_case!(
             &self.driver;
-            tun=>  {
+            tun=>{
                 tun .session
                 .get_adapter()
                 .get_netmask_of_address(&current_addr)
                 .map_err(Error::WintunError)
             };
-            tap=>
-            {
+            tap=>{
                tap.netmask()
             }
         )
@@ -347,12 +353,11 @@ impl AbstractDevice for Device {
     fn mtu(&self) -> Result<u16> {
         driver_case!(
               &self.driver;
-            tun=>  {
+            tun=>{
                 let mtu = tun.session.get_adapter().get_mtu()?;
                 Ok(mtu as _)
             };
-            tap=>
-            {
+            tap=>{
                 let mtu = tap.mtu()?;
                  Ok(mtu as _)
             }
@@ -363,12 +368,11 @@ impl AbstractDevice for Device {
     fn set_mtu(&self, mtu: u16) -> Result<()> {
         driver_case!(
             &self.driver;
-            tun=>  {
+            tun=>{
                 tun.session.get_adapter().set_mtu(mtu as _)?;
                 Ok(())
             };
-            tap=>
-            {
+            tap=>{
                 tap.set_mtu(mtu as u32).map_err(|e|e.into())
             }
         )

@@ -12,12 +12,6 @@
 //
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
 
-#[cfg(any(
-    target_os = "windows",
-    target_os = "linux",
-    target_os = "macos",
-    target_os = "freebsd"
-))]
 use crate::error::Result;
 #[allow(unused_imports)]
 use std::net::IpAddr;
@@ -37,7 +31,12 @@ pub trait AbstractDevice {
     fn set_tun_name(&self, tun_name: &str) -> Result<()>;
 
     /// Turn on or off the interface.
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "windows"
+    ))]
     fn enabled(&self, value: bool) -> Result<()>;
 
     /// Get the address.
@@ -67,12 +66,7 @@ pub trait AbstractDevice {
     fn set_destination(&self, value: IpAddr) -> Result<()>;
 
     /// Get the broadcast address.
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
     fn broadcast(&self) -> Result<IpAddr>;
 
     /// Set the broadcast address.
