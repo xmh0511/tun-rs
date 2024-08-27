@@ -72,7 +72,7 @@ impl Device {
     }
 
     #[cfg(feature = "experimental")]
-    pub(crate) fn shutdown(&self) -> io::Result<()> {
+    pub(crate) fn shutdown(&self) -> std::io::Result<()> {
         self.tun.shutdown()
     }
 }
