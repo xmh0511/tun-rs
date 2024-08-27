@@ -29,9 +29,9 @@ pub fn exe_cmd(cmd: &str) -> io::Result<()> {
 /// 设置网卡ip
 pub fn set_interface_ip(
     index: u32,
-    address: &IpAddr,
-    netmask: &IpAddr,
-    gateway: Option<&IpAddr>,
+    address: IpAddr,
+    netmask: IpAddr,
+    gateway: Option<IpAddr>,
 ) -> io::Result<()> {
     let mut binding = std::process::Command::new("netsh");
     let mut cmd = binding

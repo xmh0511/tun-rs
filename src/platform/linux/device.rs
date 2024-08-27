@@ -34,6 +34,7 @@ use crate::{
     error::{Error, Result},
     platform::linux::sys::*,
     platform::posix::{self, ipaddr_to_sockaddr, sockaddr_union, Fd, Tun},
+    IntoAddress,
 };
 
 const OVERWRITE_SIZE: usize = std::mem::size_of::<libc::__c_anonymous_ifr_ifru>();
@@ -278,7 +279,8 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_destination(&self, value: IpAddr) -> Result<()> {
+    fn set_destination<A: IntoAddress>(&self, value: A) -> Result<()> {
+        let value = value.into_address()?;
         unsafe {
             let mut req = self.request();
             ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_dstaddr, OVERWRITE_SIZE);
@@ -300,7 +302,8 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_broadcast(&self, value: IpAddr) -> Result<()> {
+    fn set_broadcast<A: IntoAddress>(&self, value: A) -> Result<()> {
+        let value = value.into_address()?;
         unsafe {
             let mut req = self.request();
             ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_broadaddr, OVERWRITE_SIZE);
@@ -322,16 +325,16 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_network_address(
+    fn set_network_address<A: IntoAddress>(
         &self,
-        address: IpAddr,
-        netmask: IpAddr,
-        destination: Option<IpAddr>,
+        address: A,
+        netmask: A,
+        destination: Option<A>,
     ) -> Result<()> {
-        self.set_address(address)?;
-        self.set_netmask(netmask)?;
+        self.set_address(address.into_address()?)?;
+        self.set_netmask(netmask.into_address()?)?;
         if let Some(destination) = destination {
-            self.set_destination(destination)?;
+            self.set_destination(destination.into_address()?)?;
         }
         Ok(())
     }

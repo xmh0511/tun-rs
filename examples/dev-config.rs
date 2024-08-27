@@ -48,7 +48,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
 
     let r = dev.netmask()?;
     println!("{:?}", r);
-
+    dev.set_network_address((10, 0, 0, 2), (255, 255, 255, 0), None)?;
     dev.set_mtu(65535)?;
 
     //dev.set_tun_name("tun8")?;

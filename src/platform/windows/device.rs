@@ -33,7 +33,7 @@ use crate::platform::windows::netsh;
 use crate::platform::windows::verify_dll_file::{
     get_dll_absolute_path, get_signer_name, verify_embedded_signature,
 };
-use crate::Layer;
+use crate::{IntoAddress, Layer};
 
 use super::ffi;
 
@@ -332,17 +332,22 @@ impl AbstractDevice for Device {
         )
     }
 
-    fn set_network_address(
+    fn set_network_address<A: IntoAddress>(
         &self,
-        address: IpAddr,
-        netmask: IpAddr,
-        destination: Option<IpAddr>,
+        address: A,
+        netmask: A,
+        destination: Option<A>,
     ) -> Result<()> {
+        let destination = if let Some(destination) = destination {
+            Some(destination.into_address()?)
+        } else {
+            None
+        };
         netsh::set_interface_ip(
             self.driver.index()?,
-            &address,
-            &netmask,
-            destination.as_ref(),
+            address.into_address()?,
+            netmask.into_address()?,
+            destination,
         )?;
         Ok(())
     }
@@ -512,7 +517,7 @@ impl Tap {
     }
 
     pub fn set_ip(&self, address: IpAddr, mask: IpAddr) -> io::Result<()> {
-        netsh::set_interface_ip(self.index, &address, &mask, None)
+        netsh::set_interface_ip(self.index, address, mask, None)
     }
 
     pub fn address(&self) -> Result<IpAddr> {

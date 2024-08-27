@@ -21,6 +21,7 @@ use crate::{
         macos::sys::*,
         posix::{self, ipaddr_to_sockaddr, sockaddr_union, Fd},
     },
+    IntoAddress,
 };
 
 const OVERWRITE_SIZE: usize = std::mem::size_of::<libc::__c_anonymous_ifr_ifru>();
@@ -368,7 +369,8 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_destination(&self, value: IpAddr) -> Result<()> {
+    fn set_destination<A: IntoAddress>(&self, value: IpAddr) -> Result<()> {
+        let value = value.into_address()?;
         let IpAddr::V4(value) = value else {
             unimplemented!("do not support IPv6 yet")
         };
@@ -402,7 +404,8 @@ impl AbstractDevice for Device {
     }
 
     /// Question on macOS
-    fn set_broadcast(&self, value: IpAddr) -> Result<()> {
+    fn set_broadcast<A: IntoAddress>(&self, value: A) -> Result<()> {
+        let value = value.into_address()?;
         let IpAddr::V4(value) = value else {
             unimplemented!("do not support IPv6 yet")
         };
@@ -458,16 +461,16 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_network_address(
+    fn set_network_address<A: IntoAddress>(
         &self,
-        address: IpAddr,
-        netmask: IpAddr,
-        destination: Option<IpAddr>,
+        address: A,
+        netmask: A,
+        destination: Option<A>,
     ) -> Result<()> {
-        self.set_address(address)?;
-        self.set_netmask(netmask)?;
+        self.set_address(address.into_address()?)?;
+        self.set_netmask(netmask.into_address()?)?;
         if let Some(dest) = destination {
-            self.set_destination(dest)?;
+            self.set_destination(dest.into_address()?)?;
         }
         Ok(())
     }

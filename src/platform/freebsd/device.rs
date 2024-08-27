@@ -31,6 +31,7 @@ use crate::{
     error::{Error, Result},
     platform::freebsd::sys::*,
     platform::posix::{self, sockaddr_union, Fd, Tun},
+    IntoAddress,
 };
 
 #[derive(Clone, Copy)]
@@ -356,7 +357,8 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_destination(&self, value: IpAddr) -> Result<()> {
+    fn set_destination<A: IntoAddress>(&self, value: A) -> Result<()> {
+        let value = value.into_address()?;
         unsafe {
             let req = self.request();
             if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &req) {
@@ -383,7 +385,7 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_broadcast(&self, _value: IpAddr) -> Result<()> {
+    fn set_broadcast<A: IntoAddress>(&self, _value: A) -> Result<()> {
         Ok(())
     }
 
@@ -426,16 +428,16 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_network_address(
+    fn set_network_address<A: IntoAddress>(
         &self,
-        address: IpAddr,
-        netmask: IpAddr,
-        destination: Option<IpAddr>,
+        address: A,
+        netmask: A,
+        destination: Option<A>,
     ) -> Result<()> {
-        self.set_address(address)?;
-        self.set_netmask(netmask)?;
+        self.set_address(address.into_address()?)?;
+        self.set_netmask(netmask.into_address()?)?;
         if let Some(dest) = destination {
-            self.set_destination(dest)?;
+            self.set_destination(dest.into_address()?)?;
         }
         Ok(())
     }

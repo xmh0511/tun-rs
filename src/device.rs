@@ -13,8 +13,10 @@
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
 #[allow(unused_imports)]
 use crate::error::Result;
+use crate::IntoAddress;
 #[allow(unused_imports)]
 use std::net::IpAddr;
+
 /// A TUN abstract device interface.
 pub trait AbstractDevice {
     /// Get the device tun name.
@@ -59,7 +61,7 @@ pub trait AbstractDevice {
 
     /// Set the destination address.
     #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
-    fn set_destination(&self, value: IpAddr) -> Result<()>;
+    fn set_destination<A: IntoAddress>(&self, value: A) -> Result<()>;
 
     /// Get the broadcast address.
     #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
@@ -67,7 +69,7 @@ pub trait AbstractDevice {
 
     /// Set the broadcast address.
     #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
-    fn set_broadcast(&self, value: IpAddr) -> Result<()>;
+    fn set_broadcast<A: IntoAddress>(&self, value: A) -> Result<()>;
 
     /// Get the netmask.
     #[cfg(any(
@@ -85,11 +87,11 @@ pub trait AbstractDevice {
         target_os = "macos",
         target_os = "freebsd"
     ))]
-    fn set_network_address(
+    fn set_network_address<A: IntoAddress>(
         &self,
-        address: IpAddr,
-        netmask: IpAddr,
-        destination: Option<IpAddr>,
+        address: A,
+        netmask: A,
+        destination: Option<A>,
     ) -> Result<()>;
 
     /// Get the MTU.
