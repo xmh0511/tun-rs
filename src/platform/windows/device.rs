@@ -264,9 +264,7 @@ impl AbstractDevice for Device {
         driver_case!(
             &self.driver;
             tun=>{
-                if value{
-                    Err(io::Error::from(io::ErrorKind::Unsupported))?
-                }else{
+                if !value{
                     tun.session.shutdown()?;
                 }
             };
