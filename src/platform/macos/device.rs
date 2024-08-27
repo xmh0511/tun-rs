@@ -94,7 +94,7 @@ impl Device {
             0_u32
         };
 
-        let mut device = unsafe {
+        let device = unsafe {
             let fd = libc::socket(PF_SYSTEM, SOCK_DGRAM, SYSPROTO_CONTROL);
             let tun = posix::Fd::new(fd, true).map_err(|_| io::Error::last_os_error())?;
 
@@ -150,7 +150,7 @@ impl Device {
             }
         };
 
-        crate::configuration::configure(&mut device, config)?;
+        crate::configuration::configure(&device, config)?;
         device.set_alias(
             config
                 .address

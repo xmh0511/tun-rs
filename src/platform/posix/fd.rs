@@ -70,6 +70,7 @@ impl Fd {
     pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
         let fd = self.as_raw_fd();
         let mut events = Events::with_capacity(128);
+		#[allow(clippy::never_loop)]
         loop {
             self.poll.lock().unwrap().poll(&mut events, None)?;
             for event in events.iter() {
