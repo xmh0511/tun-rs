@@ -44,12 +44,6 @@ async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
     let dev = Arc::new(tun2::create_as_async(&config)?);
     let size = dev.mtu()? as usize + tun2::PACKET_INFORMATION_LENGTH;
     let mut buf = vec![0; size];
-    let _dev2 = dev.clone();
-    tokio::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-        println!("prepare to shutdown");
-        //dev2.shutdown().unwrap();
-    });
     loop {
         tokio::select! {
             _ = quit.recv() => {

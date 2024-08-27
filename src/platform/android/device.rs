@@ -59,6 +59,7 @@ impl Device {
         self.tun.send(buf)
     }
 
+    #[cfg(feature = "experimental")]
     pub(crate) fn shutdown(&self) -> io::Result<()> {
         self.tun.shutdown()
     }

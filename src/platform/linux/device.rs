@@ -179,6 +179,7 @@ impl Device {
     pub(crate) fn send(&self, buf: &[u8]) -> io::Result<usize> {
         self.tun.send(buf)
     }
+    #[cfg(feature = "experimental")]
     pub(crate) fn shutdown(&self) -> io::Result<()> {
         self.tun.shutdown()
     }

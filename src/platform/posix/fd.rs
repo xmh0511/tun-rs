@@ -14,20 +14,26 @@
 
 use crate::error::{Error, Result};
 use libc::{self, fcntl, F_GETFL, F_SETFL, O_NONBLOCK};
+#[cfg(feature = "experimental")]
 use mio::unix::SourceFd;
+#[cfg(feature = "experimental")]
 use mio::{Events, Interest, Poll, Token, Waker};
 use std::io;
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 use std::sync::Mutex;
 
+#[cfg(feature = "experimental")]
 const READREADY: Token = Token(1);
+#[cfg(feature = "experimental")]
 const SHUTDOWN: Token = Token(0);
 
 /// POSIX file descriptor support for `io` traits.
 pub(crate) struct Fd {
     pub(crate) inner: RawFd,
     close_fd_on_drop: bool,
+    #[cfg(feature = "experimental")]
     poll: Mutex<Poll>,
+    #[cfg(feature = "experimental")]
     shutdown: Waker,
 }
 
@@ -58,19 +64,21 @@ impl Fd {
         }
     }
 
-    // pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
-    //     let fd = self.as_raw_fd();
-    //     let amount = unsafe { libc::read(fd, buf.as_mut_ptr() as *mut _, buf.len()) };
-    //     if amount < 0 {
-    //         return Err(io::Error::last_os_error());
-    //     }
-    //     Ok(amount as usize)
-    // }
+    #[cfg(not(feature = "experimental"))]
+    pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
+        let fd = self.as_raw_fd();
+        let amount = unsafe { libc::read(fd, buf.as_mut_ptr() as *mut _, buf.len()) };
+        if amount < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(amount as usize)
+    }
 
+    #[cfg(feature = "experimental")]
     pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
         let fd = self.as_raw_fd();
         let mut events = Events::with_capacity(128);
-		#[allow(clippy::never_loop)]
+        #[allow(clippy::never_loop)]
         loop {
             self.poll.lock().unwrap().poll(&mut events, None)?;
             for event in events.iter() {
@@ -100,6 +108,7 @@ impl Fd {
         }
         Ok(amount as usize)
     }
+    #[cfg(feature = "experimental")]
     pub fn shutdown(&self) -> io::Result<()> {
         self.shutdown.wake()
     }

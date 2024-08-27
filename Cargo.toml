@@ -31,7 +31,7 @@ rustversion = "1.0.17"
 nix = { version = "0.29", features = ["ioctl"] }
 
 [target.'cfg(target_family = "unix")'.dependencies]
-mio = {version = "1.0.2", features = ["os-ext"]}
+mio = {version = "1.0.2", optional = true}
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { version = "0.59", features = [
@@ -74,6 +74,7 @@ tokio = { version = "1", features = ["rt-multi-thread","time"] }
 default = ["wintun-dns"]
 async = ["tokio", "futures-core", "tokio-util"]
 wintun-dns = []
+experimental = ["mio?/os-ext"]
 
 [package.metadata.docs.rs]
 features = ["async"]

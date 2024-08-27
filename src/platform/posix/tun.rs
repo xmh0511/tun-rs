@@ -193,6 +193,7 @@ impl Tun {
             self.fd.read(in_buf)
         }
     }
+    #[cfg(feature = "experimental")]
     pub(crate) fn shutdown(&self) -> io::Result<()> {
         self.fd.shutdown()
     }
