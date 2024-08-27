@@ -60,10 +60,6 @@ pub trait AbstractDevice {
     ))]
     fn destination(&self) -> Result<IpAddr>;
 
-    /// Set the destination address.
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
-    fn set_destination<A: IntoAddress>(&self, value: A) -> Result<()>;
-
     /// Get the broadcast address.
     #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
     fn broadcast(&self) -> Result<IpAddr>;

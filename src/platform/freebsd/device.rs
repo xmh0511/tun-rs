@@ -283,6 +283,23 @@ impl Device {
         }
         Ok(())
     }
+
+    fn set_destination<A: IntoAddress>(&self, value: A) -> Result<()> {
+        let value = value.into_address()?;
+        unsafe {
+            let req = self.request();
+            if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &req) {
+                return Err(io::Error::from(err).into());
+            }
+            let previous = { (*self.route.lock().unwrap()).ok_or(Error::InvalidConfig)? };
+            self.set_alias(
+                IpAddr::V4(previous.addr),
+                value,
+                IpAddr::V4(previous.netmask),
+            )?;
+        }
+        Ok(())
+    }
 }
 
 impl AbstractDevice for Device {
@@ -355,23 +372,6 @@ impl AbstractDevice for Device {
             let sa = sockaddr_union::from(req.ifr_ifru.ifru_dstaddr);
             Ok(std::net::SocketAddr::try_from(sa)?.ip())
         }
-    }
-
-    fn set_destination<A: IntoAddress>(&self, value: A) -> Result<()> {
-        let value = value.into_address()?;
-        unsafe {
-            let req = self.request();
-            if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
-            }
-            let previous = { (*self.route.lock().unwrap()).ok_or(Error::InvalidConfig)? };
-            self.set_alias(
-                IpAddr::V4(previous.addr),
-                value,
-                IpAddr::V4(previous.netmask),
-            )?;
-        }
-        Ok(())
     }
 
     fn broadcast(&self) -> Result<IpAddr> {

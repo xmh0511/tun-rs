@@ -204,6 +204,18 @@ impl Device {
             Ok(())
         }
     }
+
+    fn set_destination<A: IntoAddress>(&self, value: A) -> Result<()> {
+        let value = value.into_address()?;
+        unsafe {
+            let mut req = self.request();
+            ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_dstaddr, OVERWRITE_SIZE);
+            if let Err(err) = siocsifdstaddr(self.ctl.as_raw_fd(), &req) {
+                return Err(io::Error::from(err).into());
+            }
+            Ok(())
+        }
+    }
 }
 
 impl AbstractDevice for Device {
@@ -276,18 +288,6 @@ impl AbstractDevice for Device {
             }
             let sa = sockaddr_union::from(req.ifr_ifru.ifru_dstaddr);
             Ok(std::net::SocketAddr::try_from(sa)?.ip())
-        }
-    }
-
-    fn set_destination<A: IntoAddress>(&self, value: A) -> Result<()> {
-        let value = value.into_address()?;
-        unsafe {
-            let mut req = self.request();
-            ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_dstaddr, OVERWRITE_SIZE);
-            if let Err(err) = siocsifdstaddr(self.ctl.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
-            }
-            Ok(())
         }
     }
 
