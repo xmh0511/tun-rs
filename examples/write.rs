@@ -49,6 +49,11 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
         // .destination((10, 0, 0, 1))
         .up();
 
+    #[cfg(target_os = "freebsd")]
+    {
+        use tun2::Layer;
+        config.layer(Layer::L2);
+    }
     #[cfg(target_os = "macos")]
     config.platform_config(|config| {
         config.packet_information(false);
