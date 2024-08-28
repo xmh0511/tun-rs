@@ -178,13 +178,13 @@ impl Device {
 
     /// Set the IPv4 alias of the device.
     fn set_alias(&self, addr: IpAddr, dest: IpAddr, mask: IpAddr) -> Result<()> {
-        let IpAddr::V4(addr_v4) = addr else {
+        let IpAddr::V4(_) = addr else {
             unimplemented!("do not support IPv6 yet")
         };
-        let IpAddr::V4(dest_v4) = dest else {
+        let IpAddr::V4(_) = dest else {
             unimplemented!("do not support IPv6 yet")
         };
-        let IpAddr::V4(mask_v4) = mask else {
+        let IpAddr::V4(_) = mask else {
             unimplemented!("do not support IPv6 yet")
         };
         let _guard = self.alias_lock.lock().unwrap();

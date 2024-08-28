@@ -34,11 +34,11 @@ use crate::{
     IntoAddress,
 };
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 struct Route {
-    addr: Ipv4Addr,
-    netmask: Ipv4Addr,
-    dest: Ipv4Addr,
+    addr: IpAddr,
+    netmask: IpAddr,
+    dest: IpAddr,
 }
 
 /// A TUN device using the TUN/TAP Linux driver.
@@ -46,7 +46,7 @@ pub struct Device {
     tun_name: RwLock<String>,
     tun: Tun,
     ctl: Fd,
-    route: Mutex<Option<Route>>,
+    alias_lock: Mutex<()>,
 }
 
 impl AsRef<dyn AbstractDevice + 'static> for Device {
@@ -66,7 +66,7 @@ impl Device {
     pub fn new(config: &Configuration) -> Result<Self> {
         let layer = config.layer.unwrap_or(Layer::L3);
         if layer == Layer::L3 {
-            let mut device = unsafe {
+            let device = unsafe {
                 let dev = match config.name.as_ref() {
                     Some(tun_name) => {
                         let tun_name = tun_name.clone();
@@ -80,10 +80,6 @@ impl Device {
 
                     None => None,
                 };
-
-                if config.layer.filter(|l| *l != Layer::L3).is_some() {
-                    return Err(Error::UnsupportedLayer);
-                }
 
                 let ctl = Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)?;
 
@@ -118,41 +114,51 @@ impl Device {
                     tun_name: RwLock::new(tun_name),
                     tun: Tun::new(tun, false),
                     ctl,
-                    route: Mutex::new(None),
+                    alias_lock: Mutex::new(()),
                 }
             };
 
-            device.set_alias(
-                config
-                    .address
-                    .unwrap_or(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1))),
-                config
-                    .destination
-                    .unwrap_or(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 255))),
-                config
-                    .netmask
-                    .unwrap_or(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 0))),
-            )?;
-
-            crate::configuration::configure(&mut device, config)?;
+            crate::configuration::configure(&device, config)?;
 
             Ok(device)
         } else {
-            unimplemented!()
+            return Err(Error::UnsupportedLayer);
         }
+    }
+
+    fn current_route(&self) -> Option<Route> {
+        let addr = self.address().ok()?;
+        let netmask = self.netmask().ok()?;
+        let dest = self
+            .destination()
+            .unwrap_or(self.calc_dest_addr(addr, netmask).ok()?);
+        Some(Route {
+            addr,
+            netmask,
+            dest,
+        })
+    }
+
+    fn calc_dest_addr(&self, addr: IpAddr, netmask: IpAddr) -> Result<IpAddr> {
+        let prefix_len = ipnet::ip_mask_to_prefix(netmask).map_err(|_| Error::InvalidConfig)?;
+        Ok(ipnet::IpNet::new(addr, prefix_len)
+            .map_err(|_| Error::InvalidConfig)?
+            .broadcast())
     }
 
     /// Set the IPv4 alias of the device.
     fn set_alias(&self, addr: IpAddr, dest: IpAddr, mask: IpAddr) -> Result<()> {
-        let IpAddr::V4(addr) = addr else {
+        let IpAddr::V4(_) = addr else {
             unimplemented!("do not support IPv6 yet")
         };
-        let IpAddr::V4(dest) = dest else {
+        let IpAddr::V4(_) = dest else {
             unimplemented!("do not support IPv6 yet")
         };
-        let IpAddr::V4(mask) = mask else {
+        let IpAddr::V4(_) = mask else {
             unimplemented!("do not support IPv6 yet")
         };
+        let _guard = self.alias_lock.lock().unwrap();
+        // let old_route = self.current_route();
         let ctl = &self.ctl;
         unsafe {
             let mut req: ifaliasreq = mem::zeroed();
@@ -172,13 +178,12 @@ impl Device {
                 return Err(io::Error::from(err).into());
             }
 
-            let route = Route {
+            let new_route = Route {
                 addr,
                 netmask: mask,
                 dest,
             };
-            let mut route_guard = self.route.lock().unwrap();
-            if let Err(e) = self.set_route(route, &mut route_guard) {
+            if let Err(e) = self.set_route(None, new_route) {
                 log::warn!("{e:?}");
             }
 
@@ -205,39 +210,18 @@ impl Device {
         self.tun.set_nonblock()
     }
 
-    fn set_route(&self, route: Route, route_guard: &mut Option<Route>) -> Result<()> {
-        // if let Some(v) = &self.route {
-        //     let prefix_len = ipnet::ip_mask_to_prefix(IpAddr::V4(v.netmask))
-        //         .map_err(|_| Error::InvalidConfig)?;
-        //     let network = ipnet::Ipv4Net::new(v.addr, prefix_len)
-        //         .map_err(|e| Error::InvalidConfig)?
-        //         .network();
-        //     // command: route -n delete -net 10.0.0.0/24 10.0.0.1
-        //     let args = [
-        //         "-n",
-        //         "delete",
-        //         "-net",
-        //         &format!("{}/{}", network, prefix_len),
-        //         &v.dest.to_string(),
-        //     ];
-        // 	println!("{args:?}");
-        //     run_command("route", &args);
-        //     log::info!("route {}", args.join(" "));
-        // }
-
-        // command: route -n add -net 10.0.0.9/24 10.0.0.1
-        let prefix_len = ipnet::ip_mask_to_prefix(IpAddr::V4(route.netmask))
+    fn set_route(&self, old_route: Option<Route>, new_route: Route) -> Result<()> {
+        let prefix_len = ipnet::ip_mask_to_prefix(IpAddr::V4(new_route.netmask))
             .map_err(|_| Error::InvalidConfig)?;
         let args = [
             "-n",
             "add",
             "-net",
-            &format!("{}/{}", route.addr, prefix_len),
-            &route.dest.to_string(),
+            &format!("{}/{}", new_route.addr, prefix_len),
+            &new_route.dest.to_string(),
         ];
         run_command("route", &args)?;
         log::info!("route {}", args.join(" "));
-        *route_guard = Some(route);
         Ok(())
     }
 
