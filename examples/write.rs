@@ -49,6 +49,11 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
         // .destination((10, 0, 0, 1))
         .up();
 
+    #[cfg(target_os = "freebsd")]
+    {
+        use tun2::Layer;
+        config.layer(Layer::L2);
+    }
     #[cfg(target_os = "macos")]
     config.platform_config(|config| {
         config.packet_information(false);
@@ -71,6 +76,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
             println!("amount == {amount:?}");
             let amount = amount?;
             let pkt = &buf[0..amount];
+            println!("pkt = {pkt:?}");
             match ip::Packet::new(pkt) {
                 Ok(ip::Packet::V4(pkt)) => {
                     if let Ok(icmp) = icmp::Packet::new(pkt.payload()) {

@@ -53,65 +53,73 @@ impl Device {
     /// Create a new `Device` for the given `Configuration`.
     pub fn new(config: &Configuration) -> Result<Self> {
         let layer = config.layer.unwrap_or(Layer::L3);
-        if layer == Layer::L3 {
-            let device = unsafe {
-                let dev = match config.name.as_ref() {
-                    Some(tun_name) => {
-                        let tun_name = tun_name.clone();
+        let device_prefix = if layer == Layer::L3 {
+            format!("tun")
+        } else {
+            format!("tap")
+        };
+        let device = unsafe {
+            let dev_index = match config.name.as_ref() {
+                Some(tun_name) => {
+                    let tun_name = tun_name.clone();
 
-                        if tun_name.len() > IFNAMSIZ {
-                            return Err(Error::NameTooLong);
-                        }
-
-                        Some(tun_name)
+                    if tun_name.len() > IFNAMSIZ {
+                        return Err(Error::NameTooLong);
                     }
 
-                    None => None,
-                };
+                    if layer == Layer::L3 && !tun_name.starts_with("tun") {
+                        return Err(Error::InvalidName);
+                    }
+                    if layer == Layer::L2 && !tun_name.starts_with("tap") {
+                        return Err(Error::InvalidName);
+                    }
+                    Some(tun_name[3..].parse::<u32>()? + 1_u32)
+                }
 
-                let ctl = Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)?;
+                None => None,
+            };
 
-                let (tun, tun_name) = {
-                    if let Some(name) = dev.as_ref() {
-                        let device_path = format!("/dev/{}\0", name);
-                        let fd = libc::open(device_path.as_ptr() as *const _, O_RDWR);
-                        let tun = Fd::new(fd, true).map_err(|_| io::Error::last_os_error())?;
-                        (tun, name.clone())
-                    } else {
-                        let (tun, device_name) = 'End: {
-                            for i in 0..256 {
-                                let device_name = format!("tun{i}");
-                                let device_path = format!("/dev/{device_name}\0");
-                                let fd = libc::open(device_path.as_ptr() as *const _, O_RDWR);
-                                if fd > 0 {
-                                    let tun = Fd::new(fd, true)
-                                        .map_err(|_| io::Error::last_os_error())?;
-                                    break 'End (tun, device_name);
-                                }
+            let ctl = Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)?;
+
+            let (tun, tun_name) = {
+                if let Some(name_index) = dev_index.as_ref() {
+                    let device_name = format!("{}{}", device_prefix, name_index);
+                    let device_path = format!("/dev/{}\0", device_name);
+                    let fd = libc::open(device_path.as_ptr() as *const _, O_RDWR);
+                    let tun = Fd::new(fd, true).map_err(|_| io::Error::last_os_error())?;
+                    (tun, device_name)
+                } else {
+                    let (tun, device_name) = 'End: {
+                        for i in 0..256 {
+                            let device_name = format!("{device_prefix}{i}");
+                            let device_path = format!("/dev/{device_name}\0");
+                            let fd = libc::open(device_path.as_ptr() as *const _, O_RDWR);
+                            if fd > 0 {
+                                let tun =
+                                    Fd::new(fd, true).map_err(|_| io::Error::last_os_error())?;
+                                break 'End (tun, device_name);
                             }
-                            return Err(Error::Io(std::io::Error::new(
-                                std::io::ErrorKind::AlreadyExists,
-                                "no avaiable file descriptor",
-                            )));
-                        };
-                        (tun, device_name)
-                    }
-                };
-
-                Device {
-                    tun_name: RwLock::new(tun_name),
-                    tun: Tun::new(tun, false),
-                    ctl,
-                    alias_lock: Mutex::new(()),
+                        }
+                        return Err(Error::Io(std::io::Error::new(
+                            std::io::ErrorKind::AlreadyExists,
+                            "no avaiable file descriptor",
+                        )));
+                    };
+                    (tun, device_name)
                 }
             };
 
-            crate::configuration::configure(&device, config)?;
+            Device {
+                tun_name: RwLock::new(tun_name),
+                tun: Tun::new(tun, false),
+                ctl,
+                alias_lock: Mutex::new(()),
+            }
+        };
 
-            Ok(device)
-        } else {
-            return Err(Error::UnsupportedLayer);
-        }
+        crate::configuration::configure(&device, config)?;
+
+        Ok(device)
     }
 
     // fn current_route(&self) -> Option<Route> {
