@@ -21,8 +21,6 @@ use mio::{Events, Interest, Poll, Token, Waker};
 use std::io;
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 #[cfg(feature = "experimental")]
-use std::sync::atomic::AtomicBool;
-#[cfg(feature = "experimental")]
 use std::sync::RwLock;
 
 #[cfg(feature = "experimental")]
@@ -39,7 +37,7 @@ pub(crate) struct Fd {
     #[cfg(feature = "experimental")]
     shutdown: Waker,
     #[cfg(feature = "experimental")]
-    is_shutdown: AtomicBool,
+    is_shutdown: RwLock<bool>,
 }
 
 impl Fd {
@@ -61,7 +59,7 @@ impl Fd {
             #[cfg(feature = "experimental")]
             shutdown: waker,
             #[cfg(feature = "experimental")]
-            is_shutdown: AtomicBool::new(false),
+            is_shutdown: RwLock::new(false),
         })
     }
 
@@ -83,12 +81,16 @@ impl Fd {
         Ok(amount as usize)
     }
 
+    fn is_shutdown(&self) -> bool {
+        *self.is_shutdown.read().unwrap()
+    }
+
     #[cfg(feature = "experimental")]
     pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
-        if self.is_shutdown.load(Ordering::Acquire) {
+        if self.is_shutdown() {
             return Err(io::Error::new(io::ErrorKind::ConnectionAborted, "close"));
         }
-        use std::sync::{atomic::Ordering, RwLockWriteGuard};
+        use std::sync::RwLockWriteGuard;
 
         struct Guard<'a>(RwLockWriteGuard<'a, Poll>, i32);
         impl Drop for Guard<'_> {
@@ -112,7 +114,6 @@ impl Fd {
             for event in events.iter() {
                 match event.token() {
                     SHUTDOWN => {
-                        self.is_shutdown.store(true, Ordering::Release);
                         return Err(io::Error::new(io::ErrorKind::ConnectionAborted, "close"));
                     }
                     READREADY => {
@@ -139,6 +140,7 @@ impl Fd {
     }
     #[cfg(feature = "experimental")]
     pub fn shutdown(&self) -> io::Result<()> {
+        *self.is_shutdown.write().unwrap() = true;
         self.shutdown.wake()
     }
 }
