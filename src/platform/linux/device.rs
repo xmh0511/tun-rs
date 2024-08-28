@@ -205,7 +205,7 @@ impl Device {
 
 impl AbstractDevice for Device {
     fn name(&self) -> Result<String> {
-        let mut req: ifreq = unsafe{mem::zeroed()};
+        let mut req: ifreq = unsafe { mem::zeroed() };
         if let Err(err) = unsafe { tungetiff(self.tun.as_raw_fd(), &mut req as *mut _ as *mut _) } {
             return Err(io::Error::from(err).into());
         }
