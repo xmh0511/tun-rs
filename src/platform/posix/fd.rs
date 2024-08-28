@@ -154,7 +154,7 @@ impl EventFd {
     fn wake(&self) -> io::Result<()> {
         use std::io::Write;
         let buf: [u8; 8] = 1u64.to_ne_bytes();
-        match (&self.0).write(&buf) {
+        match (&self.0).write_all(&buf) {
             Ok(_) => Ok(()),
             Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => Ok(()),
             Err(err) => Err(err),
