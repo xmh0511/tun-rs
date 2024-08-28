@@ -76,7 +76,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
             println!("amount == {amount:?}");
             let amount = amount?;
             let pkt = &buf[0..amount];
-            println!("pkt = {pkt:#?}");
+            println!("pkt = {pkt:?}");
             match ip::Packet::new(pkt) {
                 Ok(ip::Packet::V4(pkt)) => {
                     if let Ok(icmp) = icmp::Packet::new(pkt.payload()) {
