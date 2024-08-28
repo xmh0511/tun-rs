@@ -234,7 +234,7 @@ impl Device {
             if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
-            let previous = self.current_route()?;
+            let previous = self.current_route().ok_or(Error::InvalidConfig)?;
             self.set_alias(value, previous.dest, previous.netmask)?;
         }
         Ok(())
@@ -246,7 +246,7 @@ impl Device {
             if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
-            let previous = self.current_route()?;
+            let previous = self.current_route().ok_or(Error::InvalidConfig)?;
             self.set_alias(previous.addr, previous.dest, value)?;
         }
         Ok(())
@@ -259,7 +259,7 @@ impl Device {
             if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
-            let previous = self.current_route()?;
+            let previous = self.current_route().ok_or(Error::InvalidConfig)?;
             self.set_alias(previous.addr, value, previous.netmask)?;
         }
         Ok(())
