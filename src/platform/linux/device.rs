@@ -100,7 +100,6 @@ impl Device {
             tun: Tun::new(tun, config.platform_config.packet_information),
             ctl,
         };
-        println!("name {:?}",device.name());
         configure(&device, config)?;
         Ok(device)
     }

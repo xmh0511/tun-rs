@@ -31,7 +31,7 @@ ioctl_read_bad!(siocgifmtu, 0x8921, ifreq);
 ioctl_write_ptr_bad!(siocsifmtu, 0x8922, ifreq);
 ioctl_write_ptr_bad!(siocsifname, 0x8923, ifreq);
 
-ioctl_read!(tungetiff, b'T', 210, u32);
+ioctl_read!(tungetiff, b'T', 210, c_int);
 
 ioctl_write_ptr!(tunsetiff, b'T', 202, c_int);
 ioctl_write_ptr!(tunsetpersist, b'T', 203, c_int);
