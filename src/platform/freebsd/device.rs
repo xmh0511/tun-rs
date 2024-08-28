@@ -198,7 +198,7 @@ impl Device {
         self.tun.set_nonblock()
     }
 
-    fn set_route(&self, old_route: Option<Route>, new_route: Route) -> Result<()> {
+    fn set_route(&self, _old_route: Option<Route>, new_route: Route) -> Result<()> {
         let prefix_len =
             ipnet::ip_mask_to_prefix(new_route.netmask).map_err(|_| Error::InvalidConfig)?;
         let args = [
@@ -398,11 +398,13 @@ impl AbstractDevice for Device {
         netmask: A,
         destination: Option<A>,
     ) -> Result<()> {
-        self.set_address(address.into_address()?)?;
-        self.set_netmask(netmask.into_address()?)?;
-        if let Some(dest) = destination {
-            self.set_destination(dest.into_address()?)?;
-        }
+        let addr = address.into_address()?;
+        let netmask = netmask.into_address()?;
+        let default_dest = self.calc_dest_addr(addr, netmask)?;
+        let dest = destination
+            .map(|d| d.into_address().unwrap_or(default_dest))
+            .unwrap_or(default_dest);
+        self.set_alias(addr, dest, netmask)?;
         Ok(())
     }
 }
