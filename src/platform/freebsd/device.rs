@@ -199,8 +199,8 @@ impl Device {
     }
 
     fn set_route(&self, old_route: Option<Route>, new_route: Route) -> Result<()> {
-        let prefix_len = ipnet::ip_mask_to_prefix(IpAddr::V4(new_route.netmask))
-            .map_err(|_| Error::InvalidConfig)?;
+        let prefix_len =
+            ipnet::ip_mask_to_prefix(new_route.netmask).map_err(|_| Error::InvalidConfig)?;
         let args = [
             "-n",
             "add",
@@ -234,12 +234,8 @@ impl Device {
             if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
-            let previous = { (*self.route.lock().unwrap()).ok_or(Error::InvalidConfig)? };
-            self.set_alias(
-                value,
-                IpAddr::V4(previous.dest),
-                IpAddr::V4(previous.netmask),
-            )?;
+            let previous = self.current_route()?;
+            self.set_alias(value, previous.dest, previous.netmask)?;
         }
         Ok(())
     }
@@ -250,8 +246,8 @@ impl Device {
             if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
-            let previous = { (*self.route.lock().unwrap()).ok_or(Error::InvalidConfig)? };
-            self.set_alias(IpAddr::V4(previous.addr), IpAddr::V4(previous.dest), value)?;
+            let previous = self.current_route()?;
+            self.set_alias(previous.addr, previous.dest, value)?;
         }
         Ok(())
     }
@@ -263,12 +259,8 @@ impl Device {
             if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
-            let previous = { (*self.route.lock().unwrap()).ok_or(Error::InvalidConfig)? };
-            self.set_alias(
-                IpAddr::V4(previous.addr),
-                value,
-                IpAddr::V4(previous.netmask),
-            )?;
+            let previous = self.current_route()?;
+            self.set_alias(previous.addr, value, previous.netmask)?;
         }
         Ok(())
     }
