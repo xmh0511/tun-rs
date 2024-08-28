@@ -82,11 +82,12 @@ impl Device {
             let ctl = Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)?;
 
             let (tun, tun_name) = {
-                if let Some(name_index) = dev.as_ref() {
-                    let device_path = format!("/dev/{}{}\0", device_prefix, name_index);
+                if let Some(name_index) = dev_index.as_ref() {
+                    let device_name = format!("{}{}", device_prefix, name_index);
+                    let device_path = format!("/dev/{}\0", device_name);
                     let fd = libc::open(device_path.as_ptr() as *const _, O_RDWR);
                     let tun = Fd::new(fd, true).map_err(|_| io::Error::last_os_error())?;
-                    (tun, name.clone())
+                    (tun, device_name)
                 } else {
                     let (tun, device_name) = 'End: {
                         for i in 0..256 {
