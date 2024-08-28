@@ -238,7 +238,7 @@ impl Device {
                 &format!("{}/{}", network, prefix_len),
                 &v.dest.to_string(),
             ];
-            if let Err(_) = run_command("route", &args) {
+            if run_command("route", &args).is_err() {
                 log::error!("route {}", args.join(" "));
             } else {
                 log::info!("route {}", args.join(" "));
