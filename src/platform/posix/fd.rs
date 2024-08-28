@@ -131,9 +131,11 @@ impl Fd {
     }
 }
 
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 #[cfg(feature = "experimental")]
 struct EventFd(std::fs::File);
 #[cfg(feature = "experimental")]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 impl EventFd {
     fn new() -> io::Result<Self> {
         #[cfg(not(target_os = "espidf"))]
@@ -162,7 +164,44 @@ impl EventFd {
         self.0.as_raw_fd() as _
     }
 }
-
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+#[cfg(feature = "experimental")]
+struct EventFd(libc::c_int, libc::c_int);
+#[cfg(feature = "experimental")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+impl EventFd {
+    fn new() -> io::Result<Self> {
+        let mut fds: [libc::c_int; 2] = [0; 2];
+        if unsafe { libc::pipe(fds.as_mut_ptr()) } == -1 {
+            return Err(io::Error::last_os_error());
+        }
+        let read_fd = fds[0];
+        let write_fd = fds[1];
+        Ok(Self(read_fd, write_fd))
+    }
+    fn wake(&self) -> io::Result<()> {
+        let buf: [u8; 8] = 1u64.to_ne_bytes();
+        let res = unsafe { libc::write(self.1, buf.as_ptr() as *const libc::c_void, buf.len()) };
+        if res == -1 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(())
+        }
+    }
+    fn as_event_fd(&self) -> libc::c_int {
+        self.0
+    }
+}
+#[cfg(feature = "experimental")]
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+impl Drop for EventFd {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = libc::close(self.0);
+            let _ = libc::close(self.1);
+        }
+    }
+}
 impl AsRawFd for Fd {
     fn as_raw_fd(&self) -> RawFd {
         self.inner
