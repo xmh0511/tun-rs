@@ -84,6 +84,12 @@ impl Deref for Device {
     }
 }
 
+#[cfg(any(
+    target_os = "windows",
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "freebsd",
+))]
 #[cfg(test)]
 mod test {
     use crate::configuration::Configuration;

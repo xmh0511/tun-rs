@@ -153,11 +153,14 @@ fn test_conversion() {
     let addr = rs_addr_to_sockaddr(old);
     let ip = unsafe { sockaddr_to_rs_addr(&addr).unwrap() };
     assert_eq!(ip, old);
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        let old = std::net::IpAddr::V4([10, 0, 0, 33].into());
+        let mut addr: sockaddr_union = unsafe { std::mem::zeroed() };
+        let size = std::mem::size_of::<libc::sockaddr_in>();
 
-    let old = std::net::IpAddr::V4([10, 0, 0, 33].into());
-    let mut addr: sockaddr_union = unsafe { std::mem::zeroed() };
-    let size = std::mem::size_of::<libc::sockaddr_in>();
-    unsafe { ipaddr_to_sockaddr(old, 0x0208, &mut addr.addr, size) };
-    let ip = unsafe { sockaddr_to_rs_addr(&addr).unwrap() };
-    assert_eq!(ip, std::net::SocketAddr::new(old, 0x0208));
+        unsafe { ipaddr_to_sockaddr(old, 0x0208, &mut addr.addr, size) };
+        let ip = unsafe { sockaddr_to_rs_addr(&addr).unwrap() };
+        assert_eq!(ip, std::net::SocketAddr::new(old, 0x0208));
+    }
 }

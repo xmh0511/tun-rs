@@ -11,9 +11,10 @@
 //   TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
 //
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
-
+#[allow(unused_imports)]
 use packet::{builder::Builder, icmp, ip, Packet};
 use std::sync::mpsc::Receiver;
+#[allow(unused_imports)]
 use tun2::{AbstractDevice, BoxError};
 
 fn main() -> Result<(), BoxError> {
@@ -30,7 +31,16 @@ fn main() -> Result<(), BoxError> {
     handle.join().unwrap();
     Ok(())
 }
-
+#[cfg(any(target_os = "ios", target_os = "android",))]
+fn main_entry(_quit: Receiver<()>) -> Result<(), BoxError> {
+    unimplemented!()
+}
+#[cfg(any(
+    target_os = "windows",
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "freebsd",
+))]
 fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     let mut config = tun2::Configuration::default();
 

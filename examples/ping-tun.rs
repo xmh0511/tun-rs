@@ -11,11 +11,11 @@
 //   TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
 //
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
-
+#[allow(unused_imports)]
 use packet::{builder::Builder, icmp, ip, Packet};
 use tokio::sync::mpsc::Receiver;
-use tun2::AbstractDevice;
-use tun2::{self, BoxError, Configuration};
+#[allow(unused_imports)]
+use tun2::{self, AbstractDevice, BoxError, Configuration};
 
 #[tokio::main]
 async fn main() -> Result<(), BoxError> {
@@ -30,7 +30,16 @@ async fn main() -> Result<(), BoxError> {
     main_entry(rx).await?;
     Ok(())
 }
-
+#[cfg(any(target_os = "ios", target_os = "android",))]
+async fn main_entry(_quit: Receiver<()>) -> Result<(), BoxError> {
+    unimplemented!()
+}
+#[cfg(any(
+    target_os = "windows",
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "freebsd",
+))]
 async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
     let mut config = Configuration::default();
 
