@@ -12,32 +12,23 @@
 //
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
 
-use crate::error::{Error, Result};
-use libc::{self, fcntl, F_GETFL, F_SETFL, O_NONBLOCK};
-#[cfg(feature = "experimental")]
-use mio::unix::SourceFd;
-#[cfg(feature = "experimental")]
-use mio::{Events, Interest, Poll, Token, Waker};
 use std::io;
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 #[cfg(feature = "experimental")]
-use std::sync::RwLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 
-#[cfg(feature = "experimental")]
-const READREADY: Token = Token(1);
-#[cfg(feature = "experimental")]
-const SHUTDOWN: Token = Token(0);
+use libc::{self, fcntl, F_GETFL, F_SETFL, O_NONBLOCK};
+
+use crate::error::{Error, Result};
 
 /// POSIX file descriptor support for `io` traits.
 pub(crate) struct Fd {
     pub(crate) inner: RawFd,
     close_fd_on_drop: bool,
     #[cfg(feature = "experimental")]
-    poll: RwLock<Poll>,
+    is_shutdown: AtomicBool,
     #[cfg(feature = "experimental")]
-    shutdown: Waker,
-    #[cfg(feature = "experimental")]
-    is_shutdown_: RwLock<bool>,
+    event_fd: EventFd,
 }
 
 impl Fd {
@@ -45,21 +36,13 @@ impl Fd {
         if value < 0 {
             return Err(Error::InvalidDescriptor);
         }
-        #[cfg(feature = "experimental")]
-        let (waker, poll) = {
-            let poll = Poll::new()?;
-            let waker = Waker::new(poll.registry(), SHUTDOWN)?;
-            (waker, RwLock::new(poll))
-        };
         Ok(Fd {
             inner: value,
             close_fd_on_drop,
             #[cfg(feature = "experimental")]
-            poll,
+            is_shutdown: AtomicBool::new(false),
             #[cfg(feature = "experimental")]
-            shutdown: waker,
-            #[cfg(feature = "experimental")]
-            is_shutdown_: RwLock::new(false),
+            event_fd: EventFd::new()?,
         })
     }
 
@@ -71,64 +54,14 @@ impl Fd {
         }
     }
 
-    #[cfg(not(feature = "experimental"))]
-    pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
+    #[inline]
+    fn read0(&self, buf: &mut [u8]) -> io::Result<usize> {
         let fd = self.as_raw_fd();
         let amount = unsafe { libc::read(fd, buf.as_mut_ptr() as *mut _, buf.len()) };
         if amount < 0 {
             return Err(io::Error::last_os_error());
         }
         Ok(amount as usize)
-    }
-
-    #[cfg(feature = "experimental")]
-    fn is_shutdown(&self) -> bool {
-        *self.is_shutdown_.read().unwrap()
-    }
-
-    #[cfg(feature = "experimental")]
-    pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
-        if self.is_shutdown() {
-            return Err(io::Error::new(io::ErrorKind::ConnectionAborted, "close"));
-        }
-        use std::sync::RwLockWriteGuard;
-
-        struct Guard<'a>(RwLockWriteGuard<'a, Poll>, i32);
-        impl Drop for Guard<'_> {
-            fn drop(&mut self) {
-                self.0
-                    .registry()
-                    .deregister(&mut SourceFd(&self.1))
-                    .unwrap();
-            }
-        }
-        let fd = self.as_raw_fd();
-        let poll = self.poll.write().unwrap();
-        let mut poll = Guard(poll, fd);
-        poll.0
-            .registry()
-            .register(&mut SourceFd(&fd), READREADY, Interest::READABLE)?;
-        let mut events = Events::with_capacity(128);
-        #[allow(clippy::never_loop)]
-        loop {
-            poll.0.poll(&mut events, None)?;
-            for event in events.iter() {
-                match event.token() {
-                    SHUTDOWN => {
-                        return Err(io::Error::new(io::ErrorKind::ConnectionAborted, "close"));
-                    }
-                    READREADY => {
-                        let amount =
-                            unsafe { libc::read(fd, buf.as_mut_ptr() as *mut _, buf.len()) };
-                        if amount < 0 {
-                            return Err(io::Error::last_os_error());
-                        }
-                        return Ok(amount as usize);
-                    }
-                    _ => unreachable!(),
-                }
-            }
-        }
     }
 
     pub fn write(&self, buf: &[u8]) -> io::Result<usize> {
@@ -139,10 +72,94 @@ impl Fd {
         }
         Ok(amount as usize)
     }
-    #[cfg(feature = "experimental")]
+}
+#[cfg(not(feature = "experimental"))]
+impl Fd {
+    pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
+        self.read0(buf)
+    }
+}
+#[cfg(feature = "experimental")]
+impl Fd {
+    fn is_fd_nonblocking(&self) -> io::Result<bool> {
+        unsafe {
+            let flags = fcntl(self.inner, F_GETFL);
+            if flags == -1 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok((flags & O_NONBLOCK) != 0)
+        }
+    }
+    pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
+        if self.is_shutdown.load(Ordering::Relaxed) {
+            return Err(io::Error::new(io::ErrorKind::ConnectionAborted, "close"));
+        }
+        if self.is_fd_nonblocking()? {
+            return self.read0(buf);
+        }
+        let fd = self.as_raw_fd() as libc::c_int;
+
+        let event_fd = self.event_fd.as_event_fd();
+        let mut readfds: libc::fd_set = unsafe { std::mem::zeroed() };
+        unsafe {
+            libc::FD_SET(fd, &mut readfds);
+            libc::FD_SET(event_fd, &mut readfds);
+        }
+        let result = unsafe {
+            libc::select(
+                fd.max(event_fd) + 1,
+                &mut readfds,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            )
+        };
+        if self.is_shutdown.load(Ordering::SeqCst) {
+            return Err(io::Error::new(io::ErrorKind::ConnectionAborted, "close"));
+        }
+        if result == -1 {
+            return Err(io::Error::last_os_error());
+        }
+        if result == 0 {
+            return Err(io::Error::from(io::ErrorKind::TimedOut));
+        }
+        self.read0(buf)
+    }
     pub fn shutdown(&self) -> io::Result<()> {
-        *self.is_shutdown_.write().unwrap() = true;
-        self.shutdown.wake()
+        self.is_shutdown.store(true, Ordering::SeqCst);
+        self.event_fd.wake()
+    }
+}
+
+#[cfg(feature = "experimental")]
+struct EventFd(std::fs::File);
+#[cfg(feature = "experimental")]
+impl EventFd {
+    fn new() -> io::Result<Self> {
+        #[cfg(not(target_os = "espidf"))]
+        let flags = libc::EFD_CLOEXEC | libc::EFD_NONBLOCK;
+        // ESP-IDF is EFD_NONBLOCK by default and errors if you try to pass this flag.
+        #[cfg(target_os = "espidf")]
+        let flags = 0;
+        let event_fd = unsafe { libc::eventfd(0, flags) };
+        if event_fd < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        use std::os::fd::FromRawFd;
+        let file = unsafe { std::fs::File::from_raw_fd(event_fd) };
+        Ok(Self(file))
+    }
+    fn wake(&self) -> io::Result<()> {
+        use std::io::Write;
+        let buf: [u8; 8] = 1u64.to_ne_bytes();
+        match (&self.0).write(&buf) {
+            Ok(_) => Ok(()),
+            Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => Ok(()),
+            Err(err) => Err(err),
+        }
+    }
+    fn as_event_fd(&self) -> libc::c_int {
+        self.0.as_raw_fd() as _
     }
 }
 
