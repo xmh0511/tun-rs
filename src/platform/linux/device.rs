@@ -13,7 +13,7 @@
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
 
 use std::{
-    ffi::{CStr, CString},
+    ffi::CString,
     io::{self},
     mem,
     net::IpAddr,
@@ -32,7 +32,7 @@ use crate::{
     device::AbstractDevice,
     error::{Error, Result},
     platform::linux::sys::*,
-    platform::posix::{self, ipaddr_to_sockaddr, sockaddr_union, Fd, Tun},
+    platform::posix::{ipaddr_to_sockaddr, sockaddr_union, Fd, Tun},
     IntoAddress,
 };
 
@@ -40,7 +40,6 @@ const OVERWRITE_SIZE: usize = std::mem::size_of::<libc::__c_anonymous_ifr_ifru>(
 
 /// A TUN device using the TUN/TAP Linux driver.
 pub struct Device {
-    index: libc::c_uint,
     tun: Tun,
     ctl: Fd,
 }
@@ -49,17 +48,10 @@ impl Device {
     /// Create a new `Device` for the given `Configuration`.
     pub fn new(config: &Configuration) -> Result<Self> {
         let layer = config.layer.unwrap_or(Layer::L3);
-        if let Some(fd) = config.raw_fd {
+        let tun = if let Some(fd) = config.raw_fd {
             let close_fd_on_drop = config.close_fd_on_drop.unwrap_or(true);
-            let tun = Fd::new(fd, close_fd_on_drop).map_err(|_| io::Error::last_os_error())?;
-            let device = Device {
-                index: 0,
-                tun: posix::Tun::new(tun, config.platform_config.packet_information),
-                ctl: Fd::new(unsafe { libc::socket(AF_INET, SOCK_DGRAM, 0) }, true)?,
-            };
-            return Ok(device);
-        }
-        let device = unsafe {
+            Fd::new(fd, close_fd_on_drop).map_err(|_| io::Error::last_os_error())?
+        } else {
             let dev_name = match config.name.as_ref() {
                 Some(tun_name) => {
                     let tun_name = CString::new(tun_name.clone())?;
@@ -73,47 +65,42 @@ impl Device {
 
                 None => None,
             };
+            unsafe {
+                let mut req: ifreq = mem::zeroed();
 
-            let mut req: ifreq = mem::zeroed();
+                if let Some(dev_name) = dev_name.as_ref() {
+                    ptr::copy_nonoverlapping(
+                        dev_name.as_ptr() as *const c_char,
+                        req.ifr_name.as_mut_ptr(),
+                        dev_name.as_bytes_with_nul().len(),
+                    );
+                }
 
-            if let Some(dev_name) = dev_name.as_ref() {
-                ptr::copy_nonoverlapping(
-                    dev_name.as_ptr() as *const c_char,
-                    req.ifr_name.as_mut_ptr(),
-                    dev_name.as_bytes_with_nul().len(),
-                );
-            }
+                let device_type: c_short = layer.into();
+                let queues_num = 1;
+                let iff_no_pi = IFF_NO_PI as c_short;
+                let iff_multi_queue = IFF_MULTI_QUEUE as c_short;
+                let packet_information = config.platform_config.packet_information;
+                req.ifr_ifru.ifru_flags = device_type
+                    | if packet_information { 0 } else { iff_no_pi }
+                    | if queues_num > 1 { iff_multi_queue } else { 0 };
 
-            let device_type: c_short = layer.into();
-            let queues_num = 1;
-            let iff_no_pi = IFF_NO_PI as c_short;
-            let iff_multi_queue = IFF_MULTI_QUEUE as c_short;
-            let packet_information = config.platform_config.packet_information;
-            req.ifr_ifru.ifru_flags = device_type
-                | if packet_information { 0 } else { iff_no_pi }
-                | if queues_num > 1 { iff_multi_queue } else { 0 };
-
-            let tun_fd = {
                 let fd = libc::open(b"/dev/net/tun\0".as_ptr() as *const _, O_RDWR);
                 let tun_fd = Fd::new(fd, true).map_err(|_| io::Error::last_os_error())?;
                 if let Err(err) = tunsetiff(tun_fd.inner, &mut req as *mut _ as *mut _) {
                     return Err(io::Error::from(err).into());
                 }
                 tun_fd
-            };
-
-            let ctl = Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)?;
-
-            let c_ifname = CStr::from_ptr(req.ifr_name.as_ptr());
-
-            let index = libc::if_nametoindex(c_ifname.as_ptr());
-            Device {
-                index,
-                tun: Tun::new(tun_fd, packet_information),
-                ctl,
             }
         };
 
+        let ctl = Fd::new(unsafe { libc::socket(AF_INET, SOCK_DGRAM, 0) }, true)?;
+
+        let device = Device {
+            tun: Tun::new(tun, config.platform_config.packet_information),
+            ctl,
+        };
+        println!("name {:?}",device.name());
         configure(&device, config)?;
         Ok(device)
     }
@@ -219,15 +206,13 @@ impl Device {
 
 impl AbstractDevice for Device {
     fn name(&self) -> Result<String> {
-        let mut ifname: [c_char; IFNAMSIZ] = unsafe { std::mem::zeroed() };
-        let result = unsafe { libc::if_indextoname(self.index, ifname.as_mut_ptr()) };
-
-        if result.is_null() {
-            Err(io::Error::last_os_error())?
-        } else {
-            let name = unsafe { CStr::from_ptr(ifname.as_ptr()).to_string_lossy() };
-            Ok(name.into())
+        let mut req: ifreq = unsafe{mem::zeroed()};
+        if let Err(err) = unsafe { tungetiff(self.tun.as_raw_fd(), &mut req as *mut _ as *mut _) } {
+            return Err(io::Error::from(err).into());
         }
+        let c_str = unsafe { std::ffi::CStr::from_ptr(req.ifr_name.as_ptr() as *const c_char) };
+        let tun_name = c_str.to_string_lossy().into_owned();
+        Ok(tun_name)
     }
 
     fn set_name(&self, value: &str) -> Result<()> {
