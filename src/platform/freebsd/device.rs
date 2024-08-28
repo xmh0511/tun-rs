@@ -114,18 +114,18 @@ impl Device {
         }
     }
 
-    fn current_route(&self) -> Option<Route> {
-        let addr = self.address().ok()?;
-        let netmask = self.netmask().ok()?;
-        let dest = self
-            .destination()
-            .unwrap_or(self.calc_dest_addr(addr, netmask).ok()?);
-        Some(Route {
-            addr,
-            netmask,
-            dest,
-        })
-    }
+    // fn current_route(&self) -> Option<Route> {
+    //     let addr = self.address().ok()?;
+    //     let netmask = self.netmask().ok()?;
+    //     let dest = self
+    //         .destination()
+    //         .unwrap_or(self.calc_dest_addr(addr, netmask).ok()?);
+    //     Some(Route {
+    //         addr,
+    //         netmask,
+    //         dest,
+    //     })
+    // }
 
     fn calc_dest_addr(&self, addr: IpAddr, netmask: IpAddr) -> Result<IpAddr> {
         let prefix_len = ipnet::ip_mask_to_prefix(netmask).map_err(|_| Error::InvalidConfig)?;
@@ -228,42 +228,42 @@ impl Device {
         self.tun.shutdown()
     }
 
-    fn set_address(&self, value: IpAddr) -> Result<()> {
-        unsafe {
-            let req = self.request();
-            if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
-            }
-            let previous = self.current_route().ok_or(Error::InvalidConfig)?;
-            self.set_alias(value, previous.dest, previous.netmask)?;
-        }
-        Ok(())
-    }
+    // fn set_address(&self, value: IpAddr) -> Result<()> {
+    //     unsafe {
+    //         let req = self.request();
+    //         if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &req) {
+    //             return Err(io::Error::from(err).into());
+    //         }
+    //         let previous = self.current_route().ok_or(Error::InvalidConfig)?;
+    //         self.set_alias(value, previous.dest, previous.netmask)?;
+    //     }
+    //     Ok(())
+    // }
 
-    fn set_netmask(&self, value: IpAddr) -> Result<()> {
-        unsafe {
-            let req = self.request();
-            if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
-            }
-            let previous = self.current_route().ok_or(Error::InvalidConfig)?;
-            self.set_alias(previous.addr, previous.dest, value)?;
-        }
-        Ok(())
-    }
+    // fn set_netmask(&self, value: IpAddr) -> Result<()> {
+    //     unsafe {
+    //         let req = self.request();
+    //         if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &req) {
+    //             return Err(io::Error::from(err).into());
+    //         }
+    //         let previous = self.current_route().ok_or(Error::InvalidConfig)?;
+    //         self.set_alias(previous.addr, previous.dest, value)?;
+    //     }
+    //     Ok(())
+    // }
 
-    fn set_destination<A: IntoAddress>(&self, value: A) -> Result<()> {
-        let value = value.into_address()?;
-        unsafe {
-            let req = self.request();
-            if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
-            }
-            let previous = self.current_route().ok_or(Error::InvalidConfig)?;
-            self.set_alias(previous.addr, value, previous.netmask)?;
-        }
-        Ok(())
-    }
+    // fn set_destination<A: IntoAddress>(&self, value: A) -> Result<()> {
+    //     let value = value.into_address()?;
+    //     unsafe {
+    //         let req = self.request();
+    //         if let Err(err) = siocdifaddr(self.ctl.as_raw_fd(), &req) {
+    //             return Err(io::Error::from(err).into());
+    //         }
+    //         let previous = self.current_route().ok_or(Error::InvalidConfig)?;
+    //         self.set_alias(previous.addr, value, previous.netmask)?;
+    //     }
+    //     Ok(())
+    // }
 }
 
 impl AbstractDevice for Device {
