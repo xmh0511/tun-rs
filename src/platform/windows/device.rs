@@ -235,7 +235,7 @@ impl Device {
 }
 
 impl AbstractDevice for Device {
-    fn tun_name(&self) -> Result<String> {
+    fn name(&self) -> Result<String> {
         driver_case!(
             &self.driver;
             tun=>{
@@ -247,7 +247,7 @@ impl AbstractDevice for Device {
         )
     }
 
-    fn set_tun_name(&self, value: &str) -> Result<()> {
+    fn set_name(&self, value: &str) -> Result<()> {
         driver_case!(
             &self.driver;
             tun=>{

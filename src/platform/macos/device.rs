@@ -337,7 +337,7 @@ impl Device {
 }
 
 impl AbstractDevice for Device {
-    fn tun_name(&self) -> Result<String> {
+    fn name(&self) -> Result<String> {
         self.tun_name.as_ref().cloned().ok_or(Error::InvalidConfig)
     }
 

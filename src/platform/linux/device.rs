@@ -121,7 +121,7 @@ impl Device {
     /// Prepare a new request.
     unsafe fn request(&self) -> Result<ifreq> {
         let mut req: ifreq = mem::zeroed();
-        let tun_name = self.tun_name()?;
+        let tun_name = self.name()?;
         let tun_name = &*tun_name;
         ptr::copy_nonoverlapping(
             tun_name.as_ptr() as *const c_char,
@@ -218,7 +218,7 @@ impl Device {
 }
 
 impl AbstractDevice for Device {
-    fn tun_name(&self) -> Result<String> {
+    fn name(&self) -> Result<String> {
         let mut ifname: [c_char; IFNAMSIZ] = unsafe { std::mem::zeroed() };
         let result = unsafe { libc::if_indextoname(self.index, ifname.as_mut_ptr()) };
 
@@ -230,7 +230,7 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_tun_name(&self, value: &str) -> Result<()> {
+    fn set_name(&self, value: &str) -> Result<()> {
         unsafe {
             let tun_name = CString::new(value)?;
 

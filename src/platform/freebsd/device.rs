@@ -275,11 +275,11 @@ impl Device {
 }
 
 impl AbstractDevice for Device {
-    fn tun_name(&self) -> Result<String> {
+    fn name(&self) -> Result<String> {
         Ok(self.tun_name.read().unwrap().clone())
     }
 
-    fn set_tun_name(&self, value: &str) -> Result<()> {
+    fn set_name(&self, value: &str) -> Result<()> {
         use std::ffi::CString;
         unsafe {
             if value.len() > IFNAMSIZ {

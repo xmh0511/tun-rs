@@ -27,11 +27,11 @@ pub trait AbstractDevice {
         target_os = "macos",
         target_os = "freebsd"
     ))]
-    fn tun_name(&self) -> Result<String>;
+    fn name(&self) -> Result<String>;
 
     /// Set the device tun name.
     #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
-    fn set_tun_name(&self, tun_name: &str) -> Result<()>;
+    fn set_name(&self, tun_name: &str) -> Result<()>;
 
     /// Turn on or off the interface.
     #[cfg(any(
