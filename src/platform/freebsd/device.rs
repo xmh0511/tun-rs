@@ -19,7 +19,7 @@ use std::{
     // ffi::{CStr, CString},
     io,
     mem,
-    net::{IpAddr, Ipv4Addr},
+    net::IpAddr,
     os::unix::io::{AsRawFd, IntoRawFd, RawFd},
     ptr,
     sync::{Mutex, RwLock},
@@ -47,18 +47,6 @@ pub struct Device {
     tun: Tun,
     ctl: Fd,
     alias_lock: Mutex<()>,
-}
-
-impl AsRef<dyn AbstractDevice + 'static> for Device {
-    fn as_ref(&self) -> &(dyn AbstractDevice + 'static) {
-        self
-    }
-}
-
-impl AsMut<dyn AbstractDevice + 'static> for Device {
-    fn as_mut(&mut self) -> &mut (dyn AbstractDevice + 'static) {
-        self
-    }
 }
 
 impl Device {
