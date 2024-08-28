@@ -219,8 +219,11 @@ impl Device {
                 &format!("{}/{}", network, prefix_len),
                 &v.dest.to_string(),
             ];
-            run_command("route", &args)?;
-            log::info!("route {}", args.join(" "));
+            if let Err(_) = run_command("route", &args) {
+                log::error!("route {}", args.join(" "));
+            } else {
+                log::info!("route {}", args.join(" "));
+            }
         }
 
         // command: route -n add -net 10.0.0.9/24 10.0.0.1
