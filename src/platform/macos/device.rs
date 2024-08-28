@@ -41,9 +41,9 @@ use std::{
 
 #[derive(Clone, Copy)]
 struct Route {
-    addr: Ipv4Addr,
-    netmask: Ipv4Addr,
-    dest: Ipv4Addr,
+    addr: IpAddr,
+    netmask: IpAddr,
+    dest: IpAddr,
 }
 
 /// A TUN device using the TUN macOS driver.
@@ -140,18 +140,6 @@ impl Device {
         };
 
         crate::configuration::configure(&device, config)?;
-        device.set_alias(
-            config
-                .address
-                .unwrap_or(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1))),
-            config
-                .destination
-                .unwrap_or(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 255))),
-            config
-                .netmask
-                .unwrap_or(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 0))),
-        )?;
-
         Ok(device)
     }
 
@@ -171,13 +159,13 @@ impl Device {
 
     /// Set the IPv4 alias of the device.
     fn set_alias(&self, addr: IpAddr, dest: IpAddr, mask: IpAddr) -> Result<()> {
-        let IpAddr::V4(addr) = addr else {
+        let IpAddr::V4(addr_v4) = addr else {
             unimplemented!("do not support IPv6 yet")
         };
-        let IpAddr::V4(dest) = dest else {
+        let IpAddr::V4(dest_v4) = dest else {
             unimplemented!("do not support IPv6 yet")
         };
-        let IpAddr::V4(mask) = mask else {
+        let IpAddr::V4(mask_v4) = mask else {
             unimplemented!("do not support IPv6 yet")
         };
         let tun_name = self.tun_name.as_ref().ok_or(Error::InvalidConfig)?;
@@ -216,10 +204,11 @@ impl Device {
 
     fn set_route(&self, route: Route) -> Result<()> {
         let mut route_guard = self.route.lock().unwrap();
+        println!("invoke set_route");
         if let Some(v) = &*route_guard {
-            let prefix_len = ipnet::ip_mask_to_prefix(IpAddr::V4(v.netmask))
-                .map_err(|_| Error::InvalidConfig)?;
-            let network = ipnet::Ipv4Net::new(v.addr, prefix_len)
+            let prefix_len =
+                ipnet::ip_mask_to_prefix(v.netmask).map_err(|_| Error::InvalidConfig)?;
+            let network = ipnet::IpNet::new(v.addr, prefix_len)
                 .map_err(|e| Error::InvalidConfig)?
                 .network();
             // command: route -n delete -net 10.0.0.0/24 10.0.0.1
@@ -235,8 +224,8 @@ impl Device {
         }
 
         // command: route -n add -net 10.0.0.9/24 10.0.0.1
-        let prefix_len = ipnet::ip_mask_to_prefix(IpAddr::V4(route.netmask))
-            .map_err(|_| Error::InvalidConfig)?;
+        let prefix_len =
+            ipnet::ip_mask_to_prefix(route.netmask).map_err(|_| Error::InvalidConfig)?;
         let args = [
             "-n",
             "add",
@@ -264,66 +253,66 @@ impl Device {
     pub(crate) fn shutdown(&self) -> io::Result<()> {
         self.tun.shutdown()
     }
-    fn set_address(&self, value: IpAddr) -> Result<()> {
-        let IpAddr::V4(value) = value else {
-            unimplemented!("do not support IPv6 yet")
-        };
-        let ctl = self.ctl.as_ref().ok_or(Error::InvalidConfig)?;
-        unsafe {
-            let mut req = self.request()?;
-            ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_addr, OVERWRITE_SIZE);
-            if let Err(err) = siocsifaddr(ctl.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
-            }
-            let route = { *self.route.lock().unwrap() };
-            if let Some(mut route) = route {
-                route.addr = value;
-                self.set_route(route)?;
-            }
-            Ok(())
-        }
-    }
-    fn set_netmask(&self, value: IpAddr) -> Result<()> {
-        let IpAddr::V4(value) = value else {
-            unimplemented!("do not support IPv6 yet")
-        };
-        let ctl = self.ctl.as_ref().ok_or(Error::InvalidConfig)?;
-        unsafe {
-            let mut req = self.request()?;
-            // Note: Here should be `ifru_netmask`, but it is not defined in `ifreq`.
-            ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_addr, OVERWRITE_SIZE);
-            if let Err(err) = siocsifnetmask(ctl.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
-            }
-            let route = { *self.route.lock().unwrap() };
-            if let Some(mut route) = route {
-                route.netmask = value;
-                self.set_route(route)?;
-            }
-            Ok(())
-        }
-    }
+    // fn set_address(&self, value: IpAddr) -> Result<()> {
+    //     let IpAddr::V4(value) = value else {
+    //         unimplemented!("do not support IPv6 yet")
+    //     };
+    //     let ctl = self.ctl.as_ref().ok_or(Error::InvalidConfig)?;
+    //     unsafe {
+    //         let mut req = self.request()?;
+    //         ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_addr, OVERWRITE_SIZE);
+    //         if let Err(err) = siocsifaddr(ctl.as_raw_fd(), &req) {
+    //             return Err(io::Error::from(err).into());
+    //         }
+    //         let route = { *self.route.lock().unwrap() };
+    //         if let Some(mut route) = route {
+    //             route.addr = value;
+    //             self.set_route(route)?;
+    //         }
+    //         Ok(())
+    //     }
+    // }
+    // fn set_netmask(&self, value: IpAddr) -> Result<()> {
+    //     let IpAddr::V4(value) = value else {
+    //         unimplemented!("do not support IPv6 yet")
+    //     };
+    //     let ctl = self.ctl.as_ref().ok_or(Error::InvalidConfig)?;
+    //     unsafe {
+    //         let mut req = self.request()?;
+    //         // Note: Here should be `ifru_netmask`, but it is not defined in `ifreq`.
+    //         ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_addr, OVERWRITE_SIZE);
+    //         if let Err(err) = siocsifnetmask(ctl.as_raw_fd(), &req) {
+    //             return Err(io::Error::from(err).into());
+    //         }
+    //         let route = { *self.route.lock().unwrap() };
+    //         if let Some(mut route) = route {
+    //             route.netmask = value;
+    //             self.set_route(route)?;
+    //         }
+    //         Ok(())
+    //     }
+    // }
 
-    fn set_destination<A: IntoAddress>(&self, value: A) -> Result<()> {
-        let value = value.into_address()?;
-        let IpAddr::V4(value) = value else {
-            unimplemented!("do not support IPv6 yet")
-        };
-        let ctl = self.ctl.as_ref().ok_or(Error::InvalidConfig)?;
-        unsafe {
-            let mut req = self.request()?;
-            ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_dstaddr, OVERWRITE_SIZE);
-            if let Err(err) = siocsifdstaddr(ctl.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
-            }
-            let route = { *self.route.lock().unwrap() };
-            if let Some(mut route) = route {
-                route.dest = value;
-                self.set_route(route)?;
-            }
-            Ok(())
-        }
-    }
+    // fn set_destination<A: IntoAddress>(&self, value: A) -> Result<()> {
+    //     let value = value.into_address()?;
+    //     let IpAddr::V4(value) = value else {
+    //         unimplemented!("do not support IPv6 yet")
+    //     };
+    //     let ctl = self.ctl.as_ref().ok_or(Error::InvalidConfig)?;
+    //     unsafe {
+    //         let mut req = self.request()?;
+    //         ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_dstaddr, OVERWRITE_SIZE);
+    //         if let Err(err) = siocsifdstaddr(ctl.as_raw_fd(), &req) {
+    //             return Err(io::Error::from(err).into());
+    //         }
+    //         let route = { *self.route.lock().unwrap() };
+    //         if let Some(mut route) = route {
+    //             route.dest = value;
+    //             self.set_route(route)?;
+    //         }
+    //         Ok(())
+    //     }
+    // }
 }
 
 impl AbstractDevice for Device {
@@ -455,11 +444,18 @@ impl AbstractDevice for Device {
         netmask: A,
         destination: Option<A>,
     ) -> Result<()> {
-        self.set_address(address.into_address()?)?;
-        self.set_netmask(netmask.into_address()?)?;
-        if let Some(dest) = destination {
-            self.set_destination(dest.into_address()?)?;
-        }
+        // self.set_address(address.into_address()?)?;
+        // self.set_netmask(netmask.into_address()?)?;
+        // if let Some(dest) = destination {
+        //     self.set_destination(dest.into_address()?)?;
+        // }
+        let default = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
+        let addr = address.into_address()?;
+        let dest = destination
+            .map(|d| d.into_address().unwrap_or(default))
+            .unwrap_or(default);
+        let netmask = netmask.into_address()?;
+        self.set_alias(addr, dest, netmask)?;
         Ok(())
     }
 

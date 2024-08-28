@@ -37,7 +37,7 @@ pub(crate) struct Fd {
     #[cfg(feature = "experimental")]
     shutdown: Waker,
     #[cfg(feature = "experimental")]
-    is_shutdown: RwLock<bool>,
+    is_shutdown_: RwLock<bool>,
 }
 
 impl Fd {
@@ -59,7 +59,7 @@ impl Fd {
             #[cfg(feature = "experimental")]
             shutdown: waker,
             #[cfg(feature = "experimental")]
-            is_shutdown: RwLock::new(false),
+            is_shutdown_: RwLock::new(false),
         })
     }
 
@@ -81,8 +81,9 @@ impl Fd {
         Ok(amount as usize)
     }
 
+    #[cfg(feature = "experimental")]
     fn is_shutdown(&self) -> bool {
-        *self.is_shutdown.read().unwrap()
+        *self.is_shutdown_.read().unwrap()
     }
 
     #[cfg(feature = "experimental")]
@@ -140,7 +141,7 @@ impl Fd {
     }
     #[cfg(feature = "experimental")]
     pub fn shutdown(&self) -> io::Result<()> {
-        *self.is_shutdown.write().unwrap() = true;
+        *self.is_shutdown_.write().unwrap() = true;
         self.shutdown.wake()
     }
 }
