@@ -1,23 +1,11 @@
-TUN interfaces 
+Tun/Tap interfaces 
 ==============
 [![Crates.io](https://img.shields.io/crates/v/tun2.svg)](https://crates.io/crates/tun2)
 ![tun2](https://docs.rs/tun2/badge.svg)
 ![WTFPL](http://img.shields.io/badge/license-WTFPL-blue.svg)
 
-This crate allows the creation and usage of TUN interfaces, the aim is to make this cross-platform.
+This crate allows the creation and usage of Tun/Tap interfaces, the aim is to make this cross-platform.
 
-> Since the original maintainer @meh is no longer interested in continuing to maintain
-> [tun](https://crates.io/crates/tun) at [repo](https://github.com/meh/rust-tun),
-> We (@ssrlive, @xmh0511) created the [tun2](https://github.com/ssrlive/rust-tun) branch repo and
-> continued to actively update. Welcome to any interested contributor.
-> If you want to be a co-contributor and publisher of [tun2](https://crates.io/crates/tun2),
-> please contact me in [issues](https://github.com/ssrlive/rust-tun/issues).
->
-> For me, a submitted PR has not been reviewed for a long time,
-> cannot be merged to the main branch, and cannot be published.
-> It is like a patient who has not been sutured on the operating table for a long time.
-> This is a bad experience.
-> I believe that many people feel the same.
 
 Usage
 -----
