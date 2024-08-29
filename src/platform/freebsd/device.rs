@@ -93,7 +93,7 @@ impl Device {
 
             let ctl = Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)?;
 
-            let (tun, tun_name) = {
+            let (tun, _tun_name) = {
                 if let Some(name_index) = dev_index.as_ref() {
                     let device_name = format!("{}{}", device_prefix, name_index);
                     let device_path = format!("/dev/{}\0", device_name);
