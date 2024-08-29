@@ -48,7 +48,6 @@ struct Route {
 
 /// A TUN device using the TUN macOS driver.
 pub struct Device {
-    tun_name: Option<String>,
     tun: posix::Tun,
     ctl: Option<posix::Fd>,
     alias_lock: Mutex<()>,
@@ -62,7 +61,6 @@ impl Device {
             let close_fd_on_drop = config.close_fd_on_drop.unwrap_or(true);
             let tun = Fd::new(fd, close_fd_on_drop).map_err(|_| io::Error::last_os_error())?;
             let device = Device {
-                tun_name: None,
                 tun: posix::Tun::new(tun, config.platform_config.packet_information),
                 ctl: None,
                 alias_lock: Mutex::new(()),
@@ -128,11 +126,6 @@ impl Device {
             let ctl = Some(posix::Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)?);
 
             Device {
-                tun_name: Some(
-                    CStr::from_ptr(tun_name.as_ptr() as *const c_char)
-                        .to_string_lossy()
-                        .into(),
-                ),
                 tun: posix::Tun::new(tun, config.platform_config.packet_information),
                 ctl,
                 alias_lock: Mutex::new(()),
@@ -145,7 +138,7 @@ impl Device {
     /// Prepare a new request.
     /// # Safety
     unsafe fn request(&self) -> Result<libc::ifreq> {
-        let tun_name = self.tun_name.as_ref().ok_or(Error::InvalidConfig)?;
+        let tun_name = self.name()?;
         let mut req: libc::ifreq = mem::zeroed();
         ptr::copy_nonoverlapping(
             tun_name.as_ptr() as *const c_char,
@@ -189,7 +182,7 @@ impl Device {
         };
         let _guard = self.alias_lock.lock().unwrap();
         let old_route = self.current_route();
-        let tun_name = self.tun_name.as_ref().ok_or(Error::InvalidConfig)?;
+        let tun_name = self.name()?;
         let ctl = self.ctl.as_ref().ok_or(Error::InvalidConfig)?;
         unsafe {
             let mut req: ifaliasreq = mem::zeroed();
@@ -338,7 +331,26 @@ impl Device {
 
 impl AbstractDevice for Device {
     fn name(&self) -> Result<String> {
-        self.tun_name.as_ref().cloned().ok_or(Error::InvalidConfig)
+        let mut tun_name = [0u8; 64];
+        let mut name_len: socklen_t = 64;
+
+        let optval = &mut tun_name as *mut _ as *mut c_void;
+        let optlen = &mut name_len as *mut socklen_t;
+        unsafe {
+            if libc::getsockopt(
+                self.tun.as_raw_fd(),
+                SYSPROTO_CONTROL,
+                UTUN_OPT_IFNAME,
+                optval,
+                optlen,
+            ) < 0
+            {
+                return Err(io::Error::last_os_error().into());
+            }
+            Ok(CStr::from_ptr(tun_name.as_ptr() as *const c_char)
+                .to_string_lossy()
+                .into())
+        }
     }
 
     fn enabled(&self, value: bool) -> Result<()> {
