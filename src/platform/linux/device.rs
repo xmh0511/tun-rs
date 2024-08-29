@@ -12,20 +12,6 @@
 //
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
 
-use std::{
-    ffi::CString,
-    io::{self},
-    mem,
-    net::IpAddr,
-    os::unix::io::{AsRawFd, IntoRawFd, RawFd},
-    ptr,
-};
-
-use libc::{
-    self, c_char, c_short, ifreq, AF_INET, IFF_MULTI_QUEUE, IFF_NO_PI, IFF_RUNNING, IFF_TAP,
-    IFF_TUN, IFF_UP, IFNAMSIZ, O_RDWR, SOCK_DGRAM,
-};
-
 use crate::configuration::configure;
 use crate::{
     configuration::{Configuration, Layer},
@@ -34,6 +20,18 @@ use crate::{
     platform::linux::sys::*,
     platform::posix::{ipaddr_to_sockaddr, sockaddr_union, Fd, Tun},
     IntoAddress,
+};
+use libc::{
+    self, c_char, c_short, ifreq, AF_INET, IFF_MULTI_QUEUE, IFF_NO_PI, IFF_RUNNING, IFF_TAP,
+    IFF_TUN, IFF_UP, IFNAMSIZ, O_RDWR, SOCK_DGRAM,
+};
+use std::{
+    ffi::CString,
+    io::{self},
+    mem,
+    net::IpAddr,
+    os::unix::io::{AsRawFd, IntoRawFd, RawFd},
+    ptr,
 };
 
 const OVERWRITE_SIZE: usize = std::mem::size_of::<libc::__c_anonymous_ifr_ifru>();
@@ -45,77 +43,69 @@ pub struct Device {
 }
 
 impl Device {
+    pub  fn from_raw_fd(fd: RawFd) -> Result<Self> {
+        let tun = Fd::new(fd, true)?;
+        let ctl = Fd::new(unsafe { libc::socket(AF_INET, SOCK_DGRAM, 0) }, true)?;
+        Ok(Device {
+            tun: Tun::new(tun, false),
+            ctl,
+        })
+    }
     /// Create a new `Device` for the given `Configuration`.
     pub fn new(config: &Configuration) -> Result<Self> {
-        let layer = config.layer.unwrap_or(Layer::L3);
-        let tun = if let Some(fd) = config.raw_fd {
-            let close_fd_on_drop = config.close_fd_on_drop.unwrap_or(true);
-            Fd::new(fd, close_fd_on_drop).map_err(|_| io::Error::last_os_error())?
-        } else {
-            let dev_name = match config.name.as_ref() {
-                Some(tun_name) => {
-                    let tun_name = CString::new(tun_name.clone())?;
+        let dev_name = match config.name.as_ref() {
+            Some(tun_name) => {
+                let tun_name = CString::new(tun_name.clone())?;
 
-                    if tun_name.as_bytes_with_nul().len() > IFNAMSIZ {
-                        return Err(Error::NameTooLong);
-                    }
-
-                    Some(tun_name)
+                if tun_name.as_bytes_with_nul().len() > IFNAMSIZ {
+                    return Err(Error::NameTooLong);
                 }
 
-                None => None,
-            };
-            unsafe {
-                let mut req: ifreq = mem::zeroed();
-
-                if let Some(dev_name) = dev_name.as_ref() {
-                    ptr::copy_nonoverlapping(
-                        dev_name.as_ptr() as *const c_char,
-                        req.ifr_name.as_mut_ptr(),
-                        dev_name.as_bytes_with_nul().len(),
-                    );
-                }
-
-                let device_type: c_short = layer.into();
-                let queues_num = 1;
-                let iff_no_pi = IFF_NO_PI as c_short;
-                let iff_multi_queue = IFF_MULTI_QUEUE as c_short;
-                let packet_information = config.platform_config.packet_information;
-                req.ifr_ifru.ifru_flags = device_type
-                    | if packet_information { 0 } else { iff_no_pi }
-                    | if queues_num > 1 { iff_multi_queue } else { 0 };
-
-                let fd = libc::open(b"/dev/net/tun\0".as_ptr() as *const _, O_RDWR);
-                let tun_fd = Fd::new(fd, true).map_err(|_| io::Error::last_os_error())?;
-                if let Err(err) = tunsetiff(tun_fd.inner, &mut req as *mut _ as *mut _) {
-                    return Err(io::Error::from(err).into());
-                }
-                tun_fd
+                Some(tun_name)
             }
-        };
 
-        let ctl = Fd::new(unsafe { libc::socket(AF_INET, SOCK_DGRAM, 0) }, true)?;
-
-        let device = Device {
-            tun: Tun::new(tun, config.platform_config.packet_information),
-            ctl,
+            None => None,
         };
-        configure(&device, config)?;
-        Ok(device)
+        unsafe {
+            let mut req: ifreq = mem::zeroed();
+
+            if let Some(dev_name) = dev_name.as_ref() {
+                ptr::copy_nonoverlapping(
+                    dev_name.as_ptr() as *const c_char,
+                    req.ifr_name.as_mut_ptr(),
+                    dev_name.as_bytes_with_nul().len(),
+                );
+            }
+
+            let device_type: c_short = config.layer.unwrap_or(Layer::L3).into();
+            let queues_num = 1;
+            let iff_no_pi = IFF_NO_PI as c_short;
+            let iff_multi_queue = IFF_MULTI_QUEUE as c_short;
+            let packet_information = config.platform_config.packet_information;
+            req.ifr_ifru.ifru_flags = device_type
+                | if packet_information { 0 } else { iff_no_pi }
+                | if queues_num > 1 { iff_multi_queue } else { 0 };
+
+            let fd = libc::open(b"/dev/net/tun\0".as_ptr() as *const _, O_RDWR);
+            let tun_fd = Fd::new(fd, true)?;
+            if let Err(err) = tunsetiff(tun_fd.inner, &mut req as *mut _ as *mut _) {
+                return Err(io::Error::from(err).into());
+            }
+
+            let ctl = Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)?;
+
+            let device = Device {
+                tun: Tun::new(tun_fd, config.platform_config.packet_information),
+                ctl,
+            };
+            configure(&device, config)?;
+            Ok(device)
+        }
     }
 
     /// Prepare a new request.
     unsafe fn request(&self) -> Result<ifreq> {
-        let mut req: ifreq = mem::zeroed();
-        let tun_name = self.name()?;
-        let tun_name = &*tun_name;
-        ptr::copy_nonoverlapping(
-            tun_name.as_ptr() as *const c_char,
-            req.ifr_name.as_mut_ptr(),
-            tun_name.len(),
-        );
-
-        Ok(req)
+        request(&self.name()?)
     }
 
     /// Make the device persistent.
@@ -202,16 +192,27 @@ impl Device {
         }
     }
 }
-
+unsafe fn name(fd: RawFd) -> io::Result<String> {
+    let mut req: ifreq = mem::zeroed();
+    if let Err(err) = tungetiff(fd, &mut req as *mut _ as *mut _) {
+        return Err(io::Error::from(err));
+    }
+    let c_str = std::ffi::CStr::from_ptr(req.ifr_name.as_ptr() as *const c_char);
+    let tun_name = c_str.to_string_lossy().into_owned();
+    Ok(tun_name)
+}
+unsafe fn request(name: &str) -> Result<ifreq> {
+    let mut req: ifreq = mem::zeroed();
+    ptr::copy_nonoverlapping(
+        name.as_ptr() as *const c_char,
+        req.ifr_name.as_mut_ptr(),
+        name.len(),
+    );
+    Ok(req)
+}
 impl AbstractDevice for Device {
     fn name(&self) -> Result<String> {
-        let mut req: ifreq = unsafe { mem::zeroed() };
-        if let Err(err) = unsafe { tungetiff(self.tun.as_raw_fd(), &mut req as *mut _ as *mut _) } {
-            return Err(io::Error::from(err).into());
-        }
-        let c_str = unsafe { std::ffi::CStr::from_ptr(req.ifr_name.as_ptr() as *const c_char) };
-        let tun_name = c_str.to_string_lossy().into_owned();
-        Ok(tun_name)
+        unsafe { name(self.as_raw_fd()).map_err(|e| e.into()) }
     }
 
     fn set_name(&self, value: &str) -> Result<()> {

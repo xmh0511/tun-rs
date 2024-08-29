@@ -223,6 +223,6 @@ impl AsRawFd for Tun {
 
 impl IntoRawFd for Tun {
     fn into_raw_fd(self) -> RawFd {
-        self.fd.as_raw_fd()
+        self.fd.into_raw_fd()
     }
 }
