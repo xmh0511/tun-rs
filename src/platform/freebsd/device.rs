@@ -444,7 +444,6 @@ impl AbstractDevice for Device {
     fn set_mac_address(&self, eth_addr: [u8; ETHER_ADDR_LEN as usize]) -> Result<()> {
         unsafe {
             let mut req = self.request()?;
-            let mut sa_data = [0i8; 14];
             req.ifr_ifru.ifru_addr.sa_len = ETHER_ADDR_LEN;
             req.ifr_ifru.ifru_addr.sa_family = AF_LINK as u8;
             req.ifr_ifru.ifru_addr.sa_data[0..ETHER_ADDR_LEN as usize]

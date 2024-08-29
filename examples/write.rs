@@ -74,6 +74,10 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
 
     let device_name = dev.name().unwrap();
     println!("device name  = {}", device_name);
+	#[cfg(target_os = "freebsd")]
+	{
+		dev.set_mac_address([0xf, 0xf, 0xf, 0xf, 0xe, 0x9]).unwrap();
+	}
     std::thread::spawn(move || {
         loop {
             let amount = dev.recv(&mut buf);
