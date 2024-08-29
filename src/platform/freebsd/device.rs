@@ -14,7 +14,6 @@
 
 use libc::{
     self, c_char, c_short, ifreq, AF_INET, IFF_RUNNING, IFF_UP, IFNAMSIZ, O_RDWR, SOCK_DGRAM,
-    SYSPROTO_CONTROL, UTUN_OPT_IFNAME,
 };
 use std::{
     // ffi::{CStr, CString},
@@ -276,30 +275,8 @@ impl Device {
 }
 
 impl AbstractDevice for Device {
-    // fn name(&self) -> Result<String> {
-    //     Ok(self.tun_name.read().unwrap().clone())
-    // }
     fn name(&self) -> Result<String> {
-        let mut tun_name = [0u8; 64];
-        let mut name_len: socklen_t = 64;
-
-        let optval = &mut tun_name as *mut _ as *mut c_void;
-        let optlen = &mut name_len as *mut socklen_t;
-        unsafe {
-            if libc::getsockopt(
-                self.tun.as_raw_fd(),
-                SYSPROTO_CONTROL,
-                UTUN_OPT_IFNAME,
-                optval,
-                optlen,
-            ) < 0
-            {
-                return Err(io::Error::last_os_error().into());
-            }
-            Ok(CStr::from_ptr(tun_name.as_ptr() as *const c_char)
-                .to_string_lossy()
-                .into())
-        }
+        Ok(self.tun_name.read().unwrap().clone())
     }
 
     fn set_name(&self, value: &str) -> Result<()> {
