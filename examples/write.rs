@@ -42,6 +42,8 @@ fn main_entry(_quit: Receiver<()>) -> Result<(), BoxError> {
     target_os = "freebsd",
 ))]
 fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
+    use tun2::AbstractDevice;
+
     let mut config = tun2::Configuration::default();
 
     config
@@ -69,7 +71,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
         std::thread::sleep(std::time::Duration::from_secs(5));
         dev2.shutdown().unwrap();
     });
-
+    dev.name().unwrap();
     std::thread::spawn(move || {
         loop {
             let amount = dev.recv(&mut buf);
