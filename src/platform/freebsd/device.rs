@@ -450,7 +450,7 @@ impl AbstractDevice for Device {
             req.ifr_ifru.ifru_addr.sa_family = AF_LINK as u8;
             req.ifr_ifru.ifru_addr.sa_data[0..ETHER_ADDR_LEN as usize]
                 .copy_from_slice(eth_addr.map(|c| c as i8).as_slice());
-            if let Err(err) = siocsiflladdr(self.ctl.as_raw_fd(), &mut req) {
+            if let Err(err) = siocsiflladdr(self.ctl.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
             Ok(())
