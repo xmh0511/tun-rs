@@ -283,7 +283,7 @@ impl AbstractDevice for Device {
     fn name(&self) -> Result<String> {
         unsafe {
             let mut req: sockaddr = mem::zeroed();
-            let mut len = std::mem::size_of::<sockaddr>() as u32;
+            let mut len = 0;
             if libc::getsockname(self.tun.as_raw_fd(), &mut req, &mut len) < 0 {
                 return Err(io::Error::last_os_error().into());
             }
