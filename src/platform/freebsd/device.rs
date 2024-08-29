@@ -13,8 +13,7 @@
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
 
 use libc::{
-    self, c_char, c_short, ifreq, sockaddr, AF_INET, IFF_RUNNING, IFF_UP, IFNAMSIZ, O_RDWR,
-    SOCK_DGRAM,
+    self, c_char, c_short, ifreq, AF_INET, IFF_RUNNING, IFF_UP, IFNAMSIZ, O_RDWR, SOCK_DGRAM,
 };
 use std::{
     // ffi::{CStr, CString},
@@ -276,20 +275,8 @@ impl Device {
 }
 
 impl AbstractDevice for Device {
-    // fn name(&self) -> Result<String> {
-    //     Ok(self.tun_name.read().unwrap().clone())
-    // }
-
     fn name(&self) -> Result<String> {
-        unsafe {
-            let mut req: sockaddr = mem::zeroed();
-            let mut len = 0;
-            if libc::getsockname(self.tun.as_raw_fd(), &mut req, &mut len) < 0 {
-                return Err(io::Error::last_os_error().into());
-            }
-            println!("{:?}", req);
-            Ok(String::from("abc"))
-        }
+        Ok(self.tun_name.read().unwrap().clone())
     }
 
     fn set_name(&self, value: &str) -> Result<()> {
