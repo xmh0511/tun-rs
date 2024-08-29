@@ -12,10 +12,19 @@
 //
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
 
+use crate::{
+    configuration::{Configuration, Layer},
+    device::AbstractDevice,
+    error::{Error, Result},
+    platform::freebsd::sys::*,
+    platform::posix::{self, sockaddr_union, Fd, Tun},
+    IntoAddress,
+};
 use libc::{
     self, c_char, c_short, fcntl, ifreq, kinfo_file, AF_INET, F_KINFO, IFF_RUNNING, IFF_UP,
     IFNAMSIZ, KINFO_FILE_SIZE, O_RDWR, SOCK_DGRAM,
 };
+use std::os::fd::FromRawFd;
 use std::{
     // ffi::{CStr, CString},
     io,
@@ -24,15 +33,6 @@ use std::{
     os::unix::io::{AsRawFd, IntoRawFd, RawFd},
     ptr,
     sync::{Mutex, RwLock},
-};
-
-use crate::{
-    configuration::{Configuration, Layer},
-    device::AbstractDevice,
-    error::{Error, Result},
-    platform::freebsd::sys::*,
-    platform::posix::{self, sockaddr_union, Fd, Tun},
-    IntoAddress,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -49,14 +49,28 @@ pub struct Device {
     alias_lock: Mutex<()>,
 }
 
+impl FromRawFd for Device {
+    unsafe fn from_raw_fd(fd: RawFd) -> Self {
+        let tun = Fd::new(fd, true).unwrap();
+        Device {
+            tun_name: Default::default(),
+            tun: Tun::new(tun, false),
+            ctl: unsafe { ctl().unwrap() },
+            alias_lock: Mutex::new(()),
+        }
+    }
+}
+unsafe fn ctl() -> io::Result<Fd> {
+    Ok(Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)?)
+}
 impl Device {
     /// Create a new `Device` for the given `Configuration`.
     pub fn new(config: &Configuration) -> Result<Self> {
         let layer = config.layer.unwrap_or(Layer::L3);
         let device_prefix = if layer == Layer::L3 {
-            format!("tun")
+            "tun".to_string()
         } else {
-            format!("tap")
+            "tap".to_string()
         };
         let device = unsafe {
             let dev_index = match config.name.as_ref() {

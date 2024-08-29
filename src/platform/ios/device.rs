@@ -13,49 +13,29 @@
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
 #![allow(unused_variables)]
 
+use std::os::fd::FromRawFd;
+use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
+
 use crate::{
-    configuration::Configuration,
     device::AbstractDevice,
-    error::{Error, Result},
     platform::posix::{Fd, Tun},
 };
-use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 
 /// A TUN device for iOS.
 pub struct Device {
     tun: Tun,
 }
 
-impl AsRef<dyn AbstractDevice + 'static> for Device {
-    fn as_ref(&self) -> &(dyn AbstractDevice + 'static) {
-        self
-    }
-}
-
-impl AsMut<dyn AbstractDevice + 'static> for Device {
-    fn as_mut(&mut self) -> &mut (dyn AbstractDevice + 'static) {
-        self
+impl FromRawFd for Device {
+    unsafe fn from_raw_fd(fd: RawFd) -> Self {
+        let tun = Fd::new(fd, true).unwrap();
+        Device {
+            tun: Tun::new(tun, true),
+        }
     }
 }
 
 impl Device {
-    /// Create a new `Device` for the given `Configuration`.
-    pub fn new(config: &Configuration) -> Result<Self> {
-        let close_fd_on_drop = config.close_fd_on_drop.unwrap_or(true);
-        let fd = match config.raw_fd {
-            Some(raw_fd) => raw_fd,
-            _ => return Err(Error::InvalidConfig),
-        };
-        let device = {
-            let fd = Fd::new(fd, close_fd_on_drop).map_err(|_| std::io::Error::last_os_error())?;
-            Device {
-                tun: Tun::new(fd, config.platform_config.packet_information),
-            }
-        };
-
-        Ok(device)
-    }
-
     /// Set non-blocking mode
     pub fn set_nonblock(&self) -> std::io::Result<()> {
         self.tun.set_nonblock()

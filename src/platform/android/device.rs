@@ -13,37 +13,25 @@
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
 #![allow(unused_variables)]
 
+use std::os::fd::FromRawFd;
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 
-use crate::configuration::Configuration;
-use crate::device::AbstractDevice;
-use crate::error::{Error, Result};
 use crate::platform::posix::{Fd, Tun};
 
 /// A TUN device for Android.
 pub struct Device {
     tun: Tun,
 }
+impl FromRawFd for Device {
+    unsafe fn from_raw_fd(fd: RawFd) -> Self {
+        let tun = Fd::new(fd, true).unwrap();
+        Device {
+            tun: Tun::new(tun, false),
+        }
+    }
+}
 
 impl Device {
-    /// Create a new `Device` for the given `Configuration`.
-    pub fn new(config: &Configuration) -> Result<Self> {
-        let close_fd_on_drop = config.close_fd_on_drop.unwrap_or(true);
-        let fd = match config.raw_fd {
-            Some(raw_fd) => raw_fd,
-            _ => return Err(Error::InvalidConfig),
-        };
-        let device = {
-            let tun = Fd::new(fd, close_fd_on_drop).map_err(|_| std::io::Error::last_os_error())?;
-
-            Device {
-                tun: Tun::new(tun, false),
-            }
-        };
-
-        Ok(device)
-    }
-
     /// Set non-blocking mode
     pub fn set_nonblock(&self) -> std::io::Result<()> {
         self.tun.set_nonblock()
@@ -63,12 +51,6 @@ impl Device {
     pub(crate) fn shutdown(&self) -> std::io::Result<()> {
         self.tun.shutdown()
     }
-}
-
-impl AbstractDevice for Device {
-    // fn packet_information(&self) -> bool {
-    //     self.tun.packet_information()
-    // }
 }
 
 impl AsRawFd for Device {
