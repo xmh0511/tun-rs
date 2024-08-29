@@ -18,8 +18,6 @@ use crate::platform::PlatformConfig;
 use crate::AbstractDevice;
 #[allow(unused_imports)]
 use std::net::IpAddr;
-#[cfg(unix)]
-use std::os::unix::io::RawFd;
 
 cfg_if::cfg_if! {
     if #[cfg(windows)] {
@@ -94,16 +92,12 @@ pub struct Configuration {
     pub(crate) enabled: Option<bool>,
     #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
     pub(crate) layer: Option<Layer>,
-    #[cfg(unix)]
-    pub(crate) raw_fd: Option<RawFd>,
     #[cfg(windows)]
     pub(crate) raw_handle: Option<WinHandle>,
     #[cfg(windows)]
     pub(crate) ring_capacity: Option<u32>,
     #[cfg(windows)]
     pub(crate) metric: Option<u16>,
-    #[cfg(unix)]
-    pub(crate) close_fd_on_drop: Option<bool>,
 }
 
 impl Configuration {
@@ -211,12 +205,6 @@ impl Configuration {
         self
     }
 
-    /// Set the raw fd.
-    #[cfg(unix)]
-    pub fn raw_fd(&mut self, fd: RawFd) -> &mut Self {
-        self.raw_fd = Some(fd);
-        self
-    }
     #[cfg(windows)]
     pub fn raw_handle(&mut self, handle: std::os::windows::raw::HANDLE) -> &mut Self {
         self.raw_handle = Some(WinHandle(handle));
@@ -230,15 +218,6 @@ impl Configuration {
     #[cfg(windows)]
     pub fn metric(&mut self, metric: u16) -> &mut Self {
         self.metric = Some(metric);
-        self
-    }
-    /// Set whether to close the received raw file descriptor on drop or not.
-    /// The default behaviour is to close the received or tun2 generated file descriptor.
-    /// Note: If this is set to false, it is up to the caller to ensure the
-    /// file descriptor that they pass via [Configuration::raw_fd] is properly closed.
-    #[cfg(unix)]
-    pub fn close_fd_on_drop(&mut self, value: bool) -> &mut Self {
-        self.close_fd_on_drop = Some(value);
         self
     }
 }

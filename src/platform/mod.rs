@@ -22,27 +22,27 @@ pub mod linux;
 use std::ops::Deref;
 
 #[cfg(target_os = "linux")]
-pub use self::linux::{create, Device as DeviceInner, PlatformConfig};
+pub use self::linux::{Device as DeviceInner, *};
 
 #[cfg(target_os = "freebsd")]
 pub mod freebsd;
 #[cfg(target_os = "freebsd")]
-pub use self::freebsd::{create, Device as DeviceInner, PlatformConfig};
+pub use self::freebsd::{Device as DeviceInner, *};
 
 #[cfg(target_os = "macos")]
 pub mod macos;
 #[cfg(target_os = "macos")]
-pub use self::macos::{create, Device as DeviceInner, PlatformConfig};
+pub use self::macos::{Device as DeviceInner, *};
 
 #[cfg(target_os = "ios")]
 pub mod ios;
 #[cfg(target_os = "ios")]
-pub use self::ios::{create, Device as DeviceInner, PlatformConfig};
+pub use self::ios::{Device as DeviceInner, *};
 
 #[cfg(target_os = "android")]
 pub mod android;
 #[cfg(target_os = "android")]
-pub use self::android::{create, Device as DeviceInner, PlatformConfig};
+pub use self::android::{Device as DeviceInner, *};
 
 #[cfg(unix)]
 pub use crate::platform::posix::Tun;
@@ -77,11 +77,11 @@ impl Device {
     pub fn shutdown(&self) -> std::io::Result<()> {
         self.0.shutdown()
     }
+}
 
-    #[cfg(target_family = "unix")]
-    pub fn into_raw_fd(self) -> RawFd {
-        use std::os::fd::IntoRawFd;
-
+#[cfg(target_family = "unix")]
+impl std::os::fd::IntoRawFd for Device {
+    fn into_raw_fd(self) -> RawFd {
         self.0.into_raw_fd()
     }
 }
