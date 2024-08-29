@@ -43,7 +43,7 @@ pub struct Device {
 }
 
 impl Device {
-    pub  fn from_raw_fd(fd: RawFd) -> Result<Self> {
+    pub fn from_raw_fd(fd: RawFd) -> Result<Self> {
         let tun = Fd::new(fd, true)?;
         let ctl = Fd::new(unsafe { libc::socket(AF_INET, SOCK_DGRAM, 0) }, true)?;
         Ok(Device {
