@@ -53,8 +53,8 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
 
     #[cfg(target_os = "freebsd")]
     {
-        //use tun2::Layer;
-        //config.layer(Layer::L2);
+        use tun2::Layer;
+        config.layer(Layer::L2);
     }
     #[cfg(target_os = "macos")]
     config.platform_config(|config| {

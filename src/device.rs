@@ -112,4 +112,8 @@ pub trait AbstractDevice {
     /// Return whether the underlying tun device on the platform has packet information
     #[cfg(any(target_os = "linux", target_os = "macos", target_os = "ios",))]
     fn packet_information(&self) -> bool;
+
+    /// Set mac address
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
+    fn set_mac_address(&self, eth_addr: [u8; 6]) -> Result<()>;
 }

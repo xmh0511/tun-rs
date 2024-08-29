@@ -14,15 +14,15 @@
 
 use crate::{
     configuration::{Configuration, Layer},
-    device::AbstractDevice,
+    device::{AbstractDevice, ETHER_ADDR_LEN},
     error::{Error, Result},
     platform::freebsd::sys::*,
     platform::posix::{self, sockaddr_union, Fd, Tun},
     IntoAddress,
 };
 use libc::{
-    self, c_char, c_short, fcntl, ifreq, kinfo_file, AF_INET, F_KINFO, IFF_RUNNING, IFF_UP,
-    IFNAMSIZ, KINFO_FILE_SIZE, O_RDWR, SOCK_DGRAM,
+    self, c_char, c_short, fcntl, ifreq, kinfo_file, sockaddr, AF_INET, AF_LINK, F_KINFO,
+    IFF_RUNNING, IFF_UP, IFNAMSIZ, KINFO_FILE_SIZE, O_RDWR, SOCK_DGRAM,
 };
 use std::os::fd::FromRawFd;
 use std::{
@@ -439,6 +439,21 @@ impl AbstractDevice for Device {
             .unwrap_or(default_dest);
         self.set_alias(addr, dest, netmask)?;
         Ok(())
+    }
+
+    fn set_mac_address(&self, eth_addr: [u8; ETHER_ADDR_LEN]) -> Result<()> {
+        unsafe {
+            let mut req = self.request()?;
+            let mut sa_data = [0i8; 14];
+            req.ifr_ifru.ifru_addr.sa_len = ETHER_ADDR_LEN;
+            req.ifr_ifru.ifru_addr.sa_family = AF_LINK;
+            req.ifr_ifru.ifru_addr.sa_data[0..ETHER_ADDR_LEN]
+                .copy_from_slice(eth_addr.map(|c| c as i8).as_slice());
+            if let Err(err) = siocsiflladdr(self.ctl.as_raw_fd(), &mut req) {
+                return Err(io::Error::from(err).into());
+            }
+            Ok(())
+        }
     }
 }
 
