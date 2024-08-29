@@ -52,6 +52,9 @@ pub mod windows;
 #[cfg(target_os = "windows")]
 pub use self::windows::{create, Device as DeviceInner, PlatformConfig, Tun};
 
+#[cfg(target_family = "unix")]
+use std::os::unix::io::RawFd;
+
 #[repr(transparent)]
 pub struct Device(pub(crate) DeviceInner);
 
@@ -73,6 +76,13 @@ impl Device {
     /// Do not use nonblocking fd when you want to use shutdown
     pub fn shutdown(&self) -> std::io::Result<()> {
         self.0.shutdown()
+    }
+
+    #[cfg(target_family = "unix")]
+    pub fn into_raw_fd(self) -> RawFd {
+        use std::os::fd::IntoRawFd;
+
+        self.0.into_raw_fd()
     }
 }
 
