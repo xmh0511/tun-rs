@@ -21,8 +21,8 @@ use crate::{
     IntoAddress,
 };
 use libc::{
-    self, c_char, c_short, fcntl, ifreq, kinfo_file, sockaddr, AF_INET, AF_LINK, F_KINFO,
-    IFF_RUNNING, IFF_UP, IFNAMSIZ, KINFO_FILE_SIZE, O_RDWR, SOCK_DGRAM,
+    self, c_char, c_short, fcntl, ifreq, kinfo_file, AF_INET, AF_LINK, F_KINFO, IFF_RUNNING,
+    IFF_UP, IFNAMSIZ, KINFO_FILE_SIZE, O_RDWR, SOCK_DGRAM,
 };
 use std::os::fd::FromRawFd;
 use std::{
