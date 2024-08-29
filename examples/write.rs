@@ -77,6 +77,8 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     #[cfg(target_os = "freebsd")]
     {
         dev.set_mac_address([0x0, 0x0, 0x0, 0x0, 0x1, 0x1]).unwrap();
+        let r = dev.get_mac_address().unwrap();
+        println!("mac addr = {:x?}", r);
     }
     std::thread::spawn(move || {
         loop {
