@@ -288,7 +288,7 @@ impl AbstractDevice for Device {
                 return Err(io::Error::last_os_error().into());
             }
             println!("{:?}", req);
-            Ok(String::from("abc"));
+            Ok(String::from("abc"))
         }
     }
 
