@@ -59,6 +59,9 @@ winapi = { version = "0.3", features = [
 [target.'cfg(any(target_os = "macos", target_os = "freebsd"))'.dependencies]
 ipnet = "2"
 
+[target.'cfg(any(target_os = "linux", target_os = "freebsd"))'.dependencies]
+mac_address = "1.1.7"
+
 [dev-dependencies]
 ctrlc2 = { version = "3", features = ["tokio", "termination"] }
 env_logger = "0.11"

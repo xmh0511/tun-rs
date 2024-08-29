@@ -76,7 +76,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     println!("device name  = {}", device_name);
     #[cfg(target_os = "freebsd")]
     {
-        dev.set_mac_address([0x0, 0x0, 0x0, 0x0, 0x0, 0x1]).unwrap();
+        dev.set_mac_address([0x0, 0x0, 0x0, 0x0, 0x1, 0x1]).unwrap();
     }
     std::thread::spawn(move || {
         loop {

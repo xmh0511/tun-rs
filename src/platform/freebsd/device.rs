@@ -34,6 +34,8 @@ use std::{
     sync::Mutex,
 };
 
+use mac_address::mac_address_by_name;
+
 #[derive(Clone, Copy, Debug)]
 struct Route {
     addr: IpAddr,
@@ -453,6 +455,13 @@ impl AbstractDevice for Device {
             }
             Ok(())
         }
+    }
+
+    fn get_mac_address(&self) -> Result<[u8; ETHER_ADDR_LEN as usize]> {
+        let mac = mac_address_by_name(&self.name()?)
+            .map_err(|e| io::Error::other(e.to_string()))?
+            .ok_or(Error::InvalidConfig)?;
+        Ok(mac.bytes())
     }
 }
 
