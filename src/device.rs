@@ -18,7 +18,6 @@ use crate::IntoAddress;
 #[allow(unused_imports)]
 use std::net::IpAddr;
 
-#[cfg(target_family = "unix")]
 #[allow(dead_code)]
 pub(crate) const ETHER_ADDR_LEN: u8 = 6;
 /// A TUN abstract device interface.
