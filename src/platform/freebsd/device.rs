@@ -32,7 +32,7 @@ use std::{
     net::IpAddr,
     os::unix::io::{AsRawFd, IntoRawFd, RawFd},
     ptr,
-    sync::{Mutex, RwLock},
+    sync::Mutex,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -53,7 +53,6 @@ impl FromRawFd for Device {
     unsafe fn from_raw_fd(fd: RawFd) -> Self {
         let tun = Fd::new(fd, true).unwrap();
         Device {
-            tun_name: Default::default(),
             tun: Tun::new(tun, false),
             ctl: unsafe { ctl().unwrap() },
             alias_lock: Mutex::new(()),
@@ -209,7 +208,7 @@ impl Device {
             tun_name.len(),
         );
 
-        req
+        Ok(req)
     }
 
     /// Set non-blocking mode
