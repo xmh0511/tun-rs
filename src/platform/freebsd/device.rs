@@ -26,9 +26,8 @@ use libc::{
 };
 use std::os::fd::FromRawFd;
 use std::{
-    // ffi::{CStr, CString},
-    io,
-    mem,
+    ffi::CStr,
+    io, mem,
     net::IpAddr,
     os::unix::io::{AsRawFd, IntoRawFd, RawFd},
     ptr,
