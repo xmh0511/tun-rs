@@ -446,7 +446,7 @@ impl AbstractDevice for Device {
             let mut req = self.request()?;
             let mut sa_data = [0i8; 14];
             req.ifr_ifru.ifru_addr.sa_len = ETHER_ADDR_LEN;
-            req.ifr_ifru.ifru_addr.sa_family = AF_LINK;
+            req.ifr_ifru.ifru_addr.sa_family = AF_LINK as u8;
             req.ifr_ifru.ifru_addr.sa_data[0..ETHER_ADDR_LEN]
                 .copy_from_slice(eth_addr.map(|c| c as i8).as_slice());
             if let Err(err) = siocsiflladdr(self.ctl.as_raw_fd(), &mut req) {
