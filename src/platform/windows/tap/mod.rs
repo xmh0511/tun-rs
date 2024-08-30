@@ -110,6 +110,9 @@ impl TapDevice {
         let mut mac = [0; 6];
         ffi::device_io_control(self.handle, TAP_IOCTL_GET_MAC, &(), &mut mac).map(|_| mac)
     }
+    pub fn set_mac(&self, _mac: &[u8; 6]) -> io::Result<()> {
+        Err(io::Error::from(io::ErrorKind::Unsupported))?
+    }
 
     /// Retrieve the version of the driver
     pub fn get_version(&self) -> io::Result<[u64; 3]> {

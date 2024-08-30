@@ -72,7 +72,7 @@ impl Device {
     }
 
     #[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
-    #[cfg(feature = "experimental")]
+    #[cfg(any(feature = "experimental", target_os = "windows"))]
     /// Do not use nonblocking fd when you want to use shutdown
     pub fn shutdown(&self) -> std::io::Result<()> {
         self.0.shutdown()

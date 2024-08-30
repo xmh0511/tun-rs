@@ -136,3 +136,10 @@ impl<'a> IntoAddress for &'a SocketAddr {
         (*self).into_address()
     }
 }
+#[allow(dead_code)]
+pub fn format_mac_address(mac: &[u8; 6]) -> String {
+    mac.iter()
+        .map(|b| format!("{:02X}", b))
+        .collect::<Vec<_>>()
+        .join("")
+}

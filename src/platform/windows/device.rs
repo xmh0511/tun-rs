@@ -352,8 +352,16 @@ impl AbstractDevice for Device {
         )
     }
 
-    fn set_mac_address(&self, _eth_addr: [u8; ETHER_ADDR_LEN as usize]) -> Result<()> {
-        Err(io::Error::from(io::ErrorKind::Unsupported))?
+    fn set_mac_address(&self, eth_addr: [u8; ETHER_ADDR_LEN as usize]) -> Result<()> {
+        driver_case!(
+            &self.driver;
+            _tun=>{
+                Err(io::Error::from(io::ErrorKind::Unsupported))?
+            };
+            tap=>{
+                tap.set_mac(&eth_addr).map_err(|e|e.into())
+            }
+        )
     }
 
     fn get_mac_address(&self) -> Result<[u8; ETHER_ADDR_LEN as usize]> {
