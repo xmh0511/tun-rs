@@ -2,7 +2,7 @@ Tun/Tap interfaces
 ==============
 [![Crates.io](https://img.shields.io/crates/v/tun-rs.svg)](https://crates.io/crates/tun-rs)
 ![tun-rs](https://docs.rs/tun-rs/badge.svg)
-![WTFPL](http://img.shields.io/badge/license-WTFPL-blue.svg)
+![Apache-2.0](https://img.shields.io/github/license/xmh0511/tun-rs?style=flat)
 
 This crate allows the creation and usage of Tun/Tap interfaces, the aim is to make this cross-platform.
 
