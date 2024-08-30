@@ -18,7 +18,6 @@ impl Drop for TapDevice {
     fn drop(&mut self) {
         let _ = iface::delete_interface(&self.component_id, &self.luid);
         let _ = ffi::close_handle(self.handle);
-        println!("dddd");
     }
 }
 fn get_version(handle: HANDLE) -> io::Result<[u64; 3]> {
@@ -88,7 +87,6 @@ impl TapDevice {
     /// Deletes the interface before closing it.
     /// By default interfaces are never deleted on Drop,
     /// with this you can choose if you want deletion or not
-    /// ```
     pub fn delete(self) -> io::Result<()> {
         iface::delete_interface(&self.component_id, &self.luid)?;
 
