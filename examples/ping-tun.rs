@@ -1,21 +1,8 @@
-//            DO WHAT THE FUCK YOU WANT TO PUBLIC LICENSE
-//                    Version 2, December 2004
-//
-// Copyleft (ↄ) meh. <meh@schizofreni.co> | http://meh.schizofreni.co
-//
-// Everyone is permitted to copy and distribute verbatim or modified
-// copies of this license document, and changing it is allowed as long
-// as the name is changed.
-//
-//            DO WHAT THE FUCK YOU WANT TO PUBLIC LICENSE
-//   TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
-//
-//  0. You just DO WHAT THE FUCK YOU WANT TO.
 #[allow(unused_imports)]
 use packet::{builder::Builder, icmp, ip, Packet};
 use tokio::sync::mpsc::Receiver;
 #[allow(unused_imports)]
-use tun2::{self, AbstractDevice, BoxError, Configuration};
+use tun_rs::{self, AbstractDevice, BoxError, Configuration};
 
 #[tokio::main]
 async fn main() -> Result<(), BoxError> {
@@ -58,8 +45,8 @@ async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
         config.packet_information(false);
     });
 
-    let dev = tun2::create_as_async(&config)?;
-    let size = dev.mtu()? as usize + tun2::PACKET_INFORMATION_LENGTH;
+    let dev = tun_rs::create_as_async(&config)?;
+    let size = dev.mtu()? as usize + tun_rs::PACKET_INFORMATION_LENGTH;
     let mut buf = vec![0; size];
     loop {
         tokio::select! {

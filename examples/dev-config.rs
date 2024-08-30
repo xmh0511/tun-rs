@@ -1,21 +1,8 @@
-//            DO WHAT THE FUCK YOU WANT TO PUBLIC LICENSE
-//                    Version 2, December 2004
-//
-// Copyleft (ↄ) meh. <meh@schizofreni.co> | http://meh.schizofreni.co
-//
-// Everyone is permitted to copy and distribute verbatim or modified
-// copies of this license document, and changing it is allowed as long
-// as the name is changed.
-//
-//            DO WHAT THE FUCK YOU WANT TO PUBLIC LICENSE
-//   TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
-//
-//  0. You just DO WHAT THE FUCK YOU WANT TO.
 #[allow(unused_imports)]
 use packet::{builder::Builder, icmp, ip, Packet};
 use std::sync::mpsc::Receiver;
 #[allow(unused_imports)]
-use tun2::{AbstractDevice, BoxError};
+use tun_rs::{AbstractDevice, BoxError};
 
 fn main() -> Result<(), BoxError> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("trace")).init();
@@ -42,14 +29,14 @@ fn main_entry(_quit: Receiver<()>) -> Result<(), BoxError> {
     target_os = "freebsd",
 ))]
 fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
-    let mut config = tun2::Configuration::default();
+    let mut config = tun_rs::Configuration::default();
 
     config
         .address_with_prefix((10, 0, 0, 9), 24)
         .destination((10, 0, 0, 1))
         .up();
 
-    let dev = tun2::create(&config)?;
+    let dev = tun_rs::create(&config)?;
     let r = dev.address()?;
     println!("{:?}", r);
 

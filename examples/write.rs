@@ -1,21 +1,8 @@
-//            DO WHAT THE FUCK YOU WANT TO PUBLIC LICENSE
-//                    Version 2, December 2004
-//
-// Copyleft (ↄ) meh. <meh@schizofreni.co> | http://meh.schizofreni.co
-//
-// Everyone is permitted to copy and distribute verbatim or modified
-// copies of this license document, and changing it is allowed as long
-// as the name is changed.
-//
-//            DO WHAT THE FUCK YOU WANT TO PUBLIC LICENSE
-//   TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
-//
-//  0. You just DO WHAT THE FUCK YOU WANT TO.
 #[allow(unused_imports)]
 use packet::{builder::Builder, icmp, ip, Packet};
 #[allow(unused_imports)]
 use std::sync::{mpsc::Receiver, Arc};
-use tun2::BoxError;
+use tun_rs::BoxError;
 
 fn main() -> Result<(), BoxError> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("trace")).init();
@@ -42,7 +29,7 @@ fn main_entry(_quit: Receiver<()>) -> Result<(), BoxError> {
     target_os = "freebsd",
 ))]
 fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
-    let mut config = tun2::Configuration::default();
+    let mut config = tun_rs::Configuration::default();
 
     config
         .address_with_prefix((10, 0, 0, 9), 24)
@@ -54,7 +41,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
         config.packet_information(false);
     });
 
-    let dev = Arc::new(tun2::create(&config)?);
+    let dev = Arc::new(tun_rs::create(&config)?);
     let mut buf = [0; 4096];
 
     #[cfg(feature = "experimental")]
