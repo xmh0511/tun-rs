@@ -14,7 +14,10 @@
 
 use std::sync::mpsc::Receiver;
 use std::sync::Arc;
-use tun2::{AbstractDevice, BoxError, Layer};
+use tun2::{AbstractDevice, BoxError};
+
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
+use tun2::Layer;
 
 fn main() -> Result<(), BoxError> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("trace")).init();
@@ -43,10 +46,12 @@ fn main_entry(_quit: Receiver<()>) -> Result<(), BoxError> {
 fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     let mut config = tun2::Configuration::default();
 
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
+    config.layer(Layer::L2);
+
     config
         .address_with_prefix((10, 0, 0, 39), 24)
         .destination((10, 0, 0, 1))
-        .layer(Layer::L2)
         .name("tun39")
         .up();
 
