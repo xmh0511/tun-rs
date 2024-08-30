@@ -25,6 +25,7 @@ use libc::{
     self, c_char, c_short, ifreq, AF_INET, ARPHRD_ETHER, IFF_MULTI_QUEUE, IFF_NO_PI, IFF_RUNNING,
     IFF_TAP, IFF_TUN, IFF_UP, IFNAMSIZ, O_RDWR, SOCK_DGRAM,
 };
+use mac_address::mac_address_by_name;
 use std::os::fd::FromRawFd;
 use std::{
     ffi::CString,
@@ -368,7 +369,7 @@ impl AbstractDevice for Device {
             req.ifr_ifru.ifru_hwaddr.sa_family = ARPHRD_ETHER;
             req.ifr_ifru.ifru_hwaddr.sa_data[0..ETHER_ADDR_LEN as usize]
                 .copy_from_slice(eth_addr.map(|c| c as i8).as_slice());
-            if let Err(err) = siocsifhwaddr(self.ctl.as_raw_fd(), &req) {
+            if let Err(err) = siocsifhwaddr(ctl()?.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
             Ok(())
