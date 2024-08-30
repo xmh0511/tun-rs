@@ -1,12 +1,13 @@
+use std::{fmt, io};
+
 #[allow(unused_imports)]
 use packet::{builder::Builder, icmp, ip, Packet};
 use packet::{ether, PacketMut};
-use std::{fmt, io};
 use tokio::sync::mpsc::Receiver;
 #[allow(unused_imports)]
-use tun_rs::Layer;
+use tun2::Layer;
 #[allow(unused_imports)]
-use tun_rs::{self, AbstractDevice, BoxError, Configuration};
+use tun2::{self, AbstractDevice, BoxError, Configuration};
 
 #[tokio::main]
 async fn main() -> Result<(), BoxError> {
@@ -34,7 +35,7 @@ async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
         .layer(Layer::L2)
         .up();
 
-    let dev = tun_rs::create_as_async(&config)?;
+    let dev = tun2::create_as_async(&config)?;
     let mut buf = vec![0; 65536];
     loop {
         tokio::select! {
@@ -43,8 +44,8 @@ async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
                 break;
             }
             len = dev.recv(&mut buf) => {
-                let pkt: Vec<u8> = buf[..len?].to_vec();
-                match ether::Packet::new(pkt){
+                let mut pkt: Vec<u8> = buf[..len?].to_vec();
+                match ether::Packet::new(&mut pkt){
                     Ok(mut packet) => {
                         match packet.protocol(){
                             ether::Protocol::Ipv4=>{
@@ -54,7 +55,10 @@ async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
                             }
                             ether::Protocol::Arp=>{
                                 if arp(&mut packet)?{
-                                    dev.send(packet.as_ref()).await?;
+                                    if pkt.len() < 60 {
+                                        pkt.resize(60,0);
+                                    }
+                                    dev.send(&pkt).await?;
                                 }
                             }
                             protocol=>{
@@ -71,7 +75,7 @@ async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
     }
     Ok(())
 }
-pub fn ping(packet: &mut ether::Packet<Vec<u8>>) -> Result<bool, BoxError> {
+pub fn ping(packet: &mut ether::Packet<&mut Vec<u8>>) -> Result<bool, BoxError> {
     let source = packet.source();
     let destination = packet.destination();
 
@@ -104,10 +108,9 @@ pub fn ping(packet: &mut ether::Packet<Vec<u8>>) -> Result<bool, BoxError> {
     }
     Ok(false)
 }
-pub fn arp(packet: &mut ether::Packet<Vec<u8>>) -> Result<bool, BoxError> {
+pub fn arp(packet: &mut ether::Packet<&mut Vec<u8>>) -> Result<bool, BoxError> {
     const MAC: [u8; 6] = [0xf, 0xf, 0xf, 0xf, 0xe, 0x9];
     let sender_h = packet.source();
-    let target_h = packet.source();
     let mut arp_packet = ArpPacket::new(packet.payload_mut())?;
     println!("arp_packet={:?}", arp_packet);
     if arp_packet.op_code() != 1 {
@@ -124,7 +127,7 @@ pub fn arp(packet: &mut ether::Packet<Vec<u8>>) -> Result<bool, BoxError> {
     arp_packet.set_sender_protocol_addr(&target_p);
     arp_packet.set_sender_hardware_addr(&MAC);
     packet.set_destination(sender_h)?;
-    packet.set_source(target_h)?;
+    packet.set_source(MAC.into())?;
     Ok(true)
 }
 
