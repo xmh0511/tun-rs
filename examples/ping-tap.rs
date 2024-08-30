@@ -16,7 +16,8 @@ use std::{fmt, io};
 use packet::{builder::Builder, icmp, ip, Packet};
 use packet::{ether, PacketMut};
 use tokio::sync::mpsc::Receiver;
-
+#[allow(unused_imports)]
+use tun2::Layer;
 #[allow(unused_imports)]
 use tun2::{self, AbstractDevice, BoxError, Configuration};
 
