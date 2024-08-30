@@ -12,8 +12,8 @@
 //
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
 
-use std::sync::Arc;
 use std::sync::mpsc::Receiver;
+use std::sync::Arc;
 use tun2::{AbstractDevice, BoxError, Layer};
 
 fn main() -> Result<(), BoxError> {
@@ -52,7 +52,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
 
     let dev = Arc::new(tun2::create(&config)?);
     let dev_t = dev.clone();
-    let join =  std::thread::spawn(move || {
+    let join = std::thread::spawn(move || {
         let mut buf = [0; 4096];
         loop {
             let amount = dev.recv(&mut buf)?;

@@ -1,6 +1,9 @@
 use std::io;
 
+use crate::platform::windows::ffi;
+use crate::platform::windows::ffi::decode_utf16;
 use scopeguard::{guard, ScopeGuard};
+use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OVERLAPPED;
 use windows_sys::{
     core::GUID,
     Win32::{
@@ -17,9 +20,6 @@ use windows_sys::{
         System::Registry::{KEY_NOTIFY, KEY_QUERY_VALUE, REG_NOTIFY_CHANGE_NAME},
     },
 };
-use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OVERLAPPED;
-use crate::platform::windows::ffi;
-use crate::platform::windows::ffi::decode_utf16;
 
 const GUID_NETWORK_ADAPTER: GUID = GUID {
     data1: 0x4d36e972,
@@ -294,7 +294,7 @@ pub fn open_interface(luid: &NET_LUID_LH) -> io::Result<HANDLE> {
 
     let path = format!(r"\\.\Global\{}.tap", guid);
 
-     ffi::create_file(
+    ffi::create_file(
         &path,
         GENERIC_READ | GENERIC_WRITE,
         FILE_SHARE_READ | FILE_SHARE_WRITE,

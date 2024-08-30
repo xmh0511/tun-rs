@@ -1,6 +1,6 @@
 use crate::platform::windows::{ffi, netsh};
-use std::{io, net, time};
 use libc::time;
+use std::{io, net, time};
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::NetworkManagement::Ndis::NET_LUID_LH;
 use windows_sys::Win32::System::Ioctl::{FILE_ANY_ACCESS, FILE_DEVICE_UNKNOWN, METHOD_BUFFERED};
@@ -25,12 +25,7 @@ impl Drop for TapDevice {
 fn get_version(handle: HANDLE) -> io::Result<[u64; 3]> {
     let in_version: [u64; 3] = [0; 3];
     let mut out_version: [u64; 3] = [0; 3];
-    ffi::device_io_control(
-        handle,
-        TAP_IOCTL_GET_VERSION,
-        &in_version,
-        &mut out_version,
-    )
+    ffi::device_io_control(handle, TAP_IOCTL_GET_VERSION, &in_version, &mut out_version)
         .map(|_| out_version)
 }
 impl TapDevice {
