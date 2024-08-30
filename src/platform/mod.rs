@@ -63,6 +63,14 @@ impl Device {
     }
 }
 
+/// Construct a Device from an existing file descriptor
+#[cfg(target_family = "unix")]
+impl std::os::fd::FromRawFd for Device {
+    unsafe fn from_raw_fd(fd: RawFd) -> Self {
+        Device(DeviceInner::from_raw_fd(fd))
+    }
+}
+
 #[cfg(target_family = "unix")]
 impl std::os::fd::IntoRawFd for Device {
     fn into_raw_fd(self) -> RawFd {

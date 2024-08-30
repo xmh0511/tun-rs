@@ -1,3 +1,5 @@
+use std::os::fd::{FromRawFd, RawFd};
+
 use crate::platform::DeviceInner;
 use tokio::io::unix::AsyncFd;
 use tokio::io::Interest;
@@ -30,6 +32,13 @@ impl AsyncDevice {
         Ok(AsyncDevice {
             inner: AsyncFd::new(device)?,
         })
+    }
+
+    /// # Safety
+    /// This method is safe if the provided fd is valid
+    /// Construct a AsyncDevice from an existing file descriptor
+    pub unsafe fn from_raw_fd(fd: RawFd) -> std::io::Result<AsyncDevice> {
+        AsyncDevice::new(DeviceInner::from_raw_fd(fd))
     }
 
     /// Recv a packet from tun device
