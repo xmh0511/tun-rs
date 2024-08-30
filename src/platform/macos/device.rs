@@ -44,7 +44,7 @@ impl FromRawFd for Device {
     unsafe fn from_raw_fd(fd: RawFd) -> Self {
         let tun = Fd::new(fd, true).unwrap();
         Device {
-            tun: Tun::new(tun, true),
+            tun: Tun::new(tun),
             alias_lock: Mutex::new(()),
         }
     }
@@ -115,7 +115,7 @@ impl Device {
             let ctl = Some(posix::Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)?);
 
             Device {
-                tun: posix::Tun::new(tun, config.platform_config.packet_information),
+                tun: posix::Tun::new(tun),
                 alias_lock: Mutex::new(()),
             }
         };
@@ -474,8 +474,12 @@ impl AbstractDevice for Device {
         Ok(())
     }
 
-    fn packet_information(&self) -> bool {
-        self.tun.packet_information()
+    fn ignore_packet_info(&self) -> bool {
+        self.tun.ignore_packet_info()
+    }
+
+    fn set_ignore_packet_info(&self, ign: bool) {
+        self.tun.set_ignore_packet_info(ign)
     }
 }
 

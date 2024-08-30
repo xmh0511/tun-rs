@@ -31,9 +31,7 @@ pub struct Device {
 impl FromRawFd for Device {
     unsafe fn from_raw_fd(fd: RawFd) -> Self {
         let tun = Fd::new(fd, true).unwrap();
-        Device {
-            tun: Tun::new(tun, false),
-        }
+        Device { tun: Tun::new(tun) }
     }
 }
 
@@ -80,7 +78,7 @@ impl Device {
             }
 
             let device = Device {
-                tun: Tun::new(tun_fd, config.platform_config.packet_information),
+                tun: Tun::new(tun_fd),
             };
             configure(&device, config)?;
             Ok(device)
@@ -343,10 +341,6 @@ impl AbstractDevice for Device {
             }
             Ok(())
         }
-    }
-
-    fn packet_information(&self) -> bool {
-        self.tun.packet_information()
     }
 
     fn set_mac_address(&self, eth_addr: [u8; ETHER_ADDR_LEN as usize]) -> Result<()> {

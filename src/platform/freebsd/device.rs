@@ -40,7 +40,7 @@ impl FromRawFd for Device {
     unsafe fn from_raw_fd(fd: RawFd) -> Self {
         let tun = Fd::new(fd, true).unwrap();
         Device {
-            tun: Tun::new(tun, false),
+            tun: Tun::new(tun),
             ctl: unsafe { ctl().unwrap() },
             alias_lock: Mutex::new(()),
         }
@@ -110,7 +110,7 @@ impl Device {
             };
 
             Device {
-                tun: Tun::new(tun, false),
+                tun: Tun::new(tun),
                 ctl,
                 alias_lock: Mutex::new(()),
             }

@@ -16,9 +16,7 @@ pub struct Device {
 impl FromRawFd for Device {
     unsafe fn from_raw_fd(fd: RawFd) -> Self {
         let tun = Fd::new(fd, true).unwrap();
-        Device {
-            tun: Tun::new(tun, true),
-        }
+        Device { tun: Tun::new(tun) }
     }
 }
 
@@ -45,8 +43,12 @@ impl Device {
 }
 
 impl AbstractDevice for Device {
-    fn packet_information(&self) -> bool {
-        self.tun.packet_information()
+    fn ignore_packet_info(&self) -> bool {
+        self.tun.ignore_packet_info()
+    }
+
+    fn set_ignore_packet_info(&self, ign: bool) {
+        self.tun.set_ignore_packet_info(ign)
     }
 }
 

@@ -12,9 +12,7 @@ pub struct Device {
 impl FromRawFd for Device {
     unsafe fn from_raw_fd(fd: RawFd) -> Self {
         let tun = Fd::new(fd, true).unwrap();
-        Device {
-            tun: Tun::new(tun, false),
-        }
+        Device { tun: Tun::new(tun) }
     }
 }
 

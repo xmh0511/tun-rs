@@ -2,7 +2,7 @@
 use packet::{builder::Builder, icmp, ip, Packet};
 #[allow(unused_imports)]
 use std::sync::{mpsc::Receiver, Arc};
-use tun_rs::BoxError;
+use tun_rs::{AbstractDevice, BoxError};
 
 fn main() -> Result<(), BoxError> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("trace")).init();
@@ -36,12 +36,9 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
         // .destination((10, 0, 0, 1))
         .up();
 
-    #[cfg(target_os = "macos")]
-    config.platform_config(|config| {
-        config.packet_information(false);
-    });
-
     let dev = Arc::new(tun_rs::create(&config)?);
+    #[cfg(target_os = "macos")]
+    dev.set_ignore_packet_info(true);
     let mut buf = [0; 4096];
 
     #[cfg(feature = "experimental")]

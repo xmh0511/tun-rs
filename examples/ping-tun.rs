@@ -40,12 +40,10 @@ async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
         config.device_guid(9099482345783245345345_u128);
     });
 
-    #[cfg(target_os = "macos")]
-    config.platform_config(|config| {
-        config.packet_information(false);
-    });
-
     let dev = tun_rs::create_as_async(&config)?;
+    #[cfg(target_os = "macos")]
+    dev.set_ignore_packet_info(true);
+
     let size = dev.mtu()? as usize + tun_rs::PACKET_INFORMATION_LENGTH;
     let mut buf = vec![0; size];
     loop {

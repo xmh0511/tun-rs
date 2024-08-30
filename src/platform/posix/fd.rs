@@ -50,6 +50,7 @@ impl Fd {
         Ok(amount as usize)
     }
 
+    #[inline]
     pub fn write(&self, buf: &[u8]) -> io::Result<usize> {
         let fd = self.as_raw_fd();
         let amount = unsafe { libc::write(fd, buf.as_ptr() as *const _, buf.len()) };

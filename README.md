@@ -99,11 +99,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
 pub extern "C" fn start_tun(fd: std::os::raw::c_int) {
     let mut rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async {
-        let mut cfg = tun_rs::Configuration::default();
-        #[cfg(target_os = "ios")]
-        cfg.platform_config(|p_cfg| {
-            p_cfg.packet_information(true);
-        });
 		// This is safe if the provided fd is valid
         let tun = unsafe{tun_rs::AsyncDevice::from_raw_fd(fd)};
         let mut buf = [0u8;1500];
