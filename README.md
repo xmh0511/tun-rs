@@ -100,12 +100,12 @@ pub extern "C" fn start_tun(fd: std::os::raw::c_int) {
     let mut rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async {
         let mut cfg = tun_rs::Configuration::default();
-        cfg.raw_fd(fd);
         #[cfg(target_os = "ios")]
         cfg.platform_config(|p_cfg| {
             p_cfg.packet_information(true);
         });
-        let tun = tun_rs::create_as_async(&cfg).unwrap();
+		// This is safe if the provided fd is valid
+        let tun = unsafe{tun_rs::AsyncDevice::from_raw_fd(fd)};
         let mut buf = [0u8;1500];
         while let Ok(packet) = tun.recv(& mut buf).await {
             ...
