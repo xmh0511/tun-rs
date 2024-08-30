@@ -378,7 +378,7 @@ impl AbstractDevice for Device {
 
     fn get_mac_address(&self) -> Result<[u8; ETHER_ADDR_LEN as usize]> {
         let mac = mac_address_by_name(&self.name()?)
-            .map_err(|e| io::Error::other(e.to_string()))?
+            .map_err(|e| Error::String(e.to_string()))?
             .ok_or(Error::InvalidConfig)?;
         Ok(mac.bytes())
     }
