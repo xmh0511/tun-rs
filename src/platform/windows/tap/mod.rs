@@ -1,5 +1,4 @@
 use crate::platform::windows::{ffi, netsh};
-use libc::time;
 use std::{io, net, time};
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::NetworkManagement::Ndis::NET_LUID_LH;
