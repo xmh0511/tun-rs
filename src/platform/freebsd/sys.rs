@@ -73,3 +73,5 @@ ioctl_write_ptr!(siocifcreate, b'i', 122, ifreq);
 ioctl_write_ptr!(siocsifphyaddr, b'i', 70, ifaliasreq);
 
 ioctl_write_ptr!(siocsifname, b'i', 40, ifreq);
+
+ioctl_write_ptr!(siocsiflladdr, b'i', 60, ifreq);

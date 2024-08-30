@@ -26,6 +26,8 @@ pub use crate::configuration::{Configuration, Layer};
 
 pub mod platform;
 pub use crate::platform::create;
+#[cfg(unix)]
+pub use crate::platform::create_with_fd;
 
 #[cfg(feature = "async")]
 pub mod r#async;

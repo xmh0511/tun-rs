@@ -11,12 +11,10 @@
 //   TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
 //
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
-
+#[allow(unused_imports)]
 use packet::{builder::Builder, icmp, ip, Packet};
-use std::io::{Read, Write};
-#[cfg(not(target_os = "windows"))]
-use std::net::Ipv4Addr;
 use std::sync::mpsc::Receiver;
+#[allow(unused_imports)]
 use tun2::{AbstractDevice, BoxError};
 
 fn main() -> Result<(), BoxError> {
@@ -33,22 +31,25 @@ fn main() -> Result<(), BoxError> {
     handle.join().unwrap();
     Ok(())
 }
-
+#[cfg(any(target_os = "ios", target_os = "android",))]
+fn main_entry(_quit: Receiver<()>) -> Result<(), BoxError> {
+    unimplemented!()
+}
+#[cfg(any(
+    target_os = "windows",
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "freebsd",
+))]
 fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     let mut config = tun2::Configuration::default();
 
     config
-        .address((10, 0, 0, 9))
-        .netmask((255, 255, 255, 0))
+        .address_with_prefix((10, 0, 0, 9), 24)
         .destination((10, 0, 0, 1))
         .up();
 
-    #[cfg(target_os = "linux")]
-    config.platform_config(|config| {
-        config.ensure_root_privileges(true);
-    });
-
-    let mut dev = tun2::create(&config)?;
+    let dev = tun2::create(&config)?;
     let r = dev.address()?;
     println!("{:?}", r);
 
@@ -57,13 +58,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
 
     let r = dev.netmask()?;
     println!("{:?}", r);
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        dev.set_address(std::net::IpAddr::V4(Ipv4Addr::new(10, 0, 0, 20)))?;
-        dev.set_destination(std::net::IpAddr::V4(Ipv4Addr::new(10, 0, 0, 66)))?;
-        dev.set_netmask(std::net::IpAddr::V4(Ipv4Addr::new(255, 255, 0, 0)))?;
-    }
+    dev.set_network_address((10, 0, 0, 2), (255, 255, 255, 0), None)?;
     dev.set_mtu(65535)?;
 
     //dev.set_tun_name("tun8")?;
@@ -77,7 +72,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
 
     std::thread::spawn(move || {
         loop {
-            let amount = dev.read(&mut buf)?;
+            let amount = dev.recv(&mut buf)?;
             let pkt = &buf[0..amount];
             match ip::Packet::new(pkt) {
                 Ok(ip::Packet::V4(pkt)) => {
@@ -96,7 +91,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
                                 .sequence(icmp.sequence())?
                                 .payload(icmp.payload())?
                                 .build()?;
-                            let size = dev.write(&reply[..])?;
+                            let size = dev.send(&reply[..])?;
                             println!("write {size} len {}", reply.len());
                         }
                     }

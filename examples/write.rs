@@ -11,10 +11,10 @@
 //   TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
 //
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
-
+#[allow(unused_imports)]
 use packet::{builder::Builder, icmp, ip, Packet};
-use std::io::{Read, Write};
-use std::sync::mpsc::Receiver;
+#[allow(unused_imports)]
+use std::sync::{mpsc::Receiver, Arc};
 use tun2::BoxError;
 
 fn main() -> Result<(), BoxError> {
@@ -31,28 +31,47 @@ fn main() -> Result<(), BoxError> {
     handle.join().unwrap();
     Ok(())
 }
-
+#[cfg(any(target_os = "ios", target_os = "android",))]
+fn main_entry(_quit: Receiver<()>) -> Result<(), BoxError> {
+    unimplemented!()
+}
+#[cfg(any(
+    target_os = "windows",
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "freebsd",
+))]
 fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     let mut config = tun2::Configuration::default();
 
     config
-        .address((10, 0, 0, 9))
-        .netmask((255, 255, 255, 0))
-        .destination((10, 0, 0, 1))
+        .address_with_prefix((10, 0, 0, 9), 24)
+        // .destination((10, 0, 0, 1))
         .up();
 
-    #[cfg(target_os = "linux")]
+    #[cfg(target_os = "macos")]
     config.platform_config(|config| {
-        config.ensure_root_privileges(true);
+        config.packet_information(false);
     });
 
-    let mut dev = tun2::create(&config)?;
+    let dev = Arc::new(tun2::create(&config)?);
     let mut buf = [0; 4096];
+
+    #[cfg(feature = "experimental")]
+    let dev2 = dev.clone();
+    #[cfg(feature = "experimental")]
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(5));
+        dev2.shutdown().unwrap();
+    });
 
     std::thread::spawn(move || {
         loop {
-            let amount = dev.read(&mut buf)?;
+            let amount = dev.recv(&mut buf);
+            println!("amount == {amount:?}");
+            let amount = amount?;
             let pkt = &buf[0..amount];
+            println!("pkt = {pkt:?}");
             match ip::Packet::new(pkt) {
                 Ok(ip::Packet::V4(pkt)) => {
                     if let Ok(icmp) = icmp::Packet::new(pkt.payload()) {
@@ -70,7 +89,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
                                 .sequence(icmp.sequence())?
                                 .payload(icmp.payload())?
                                 .build()?;
-                            let size = dev.write(&reply[..])?;
+                            let size = dev.send(&reply[..])?;
                             println!("write {size} len {}", reply.len());
                         }
                     }

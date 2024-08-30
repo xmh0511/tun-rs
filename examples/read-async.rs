@@ -11,9 +11,11 @@
 //   TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
 //
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
+#[allow(unused_imports)]
+use std::sync::Arc;
 
-use tokio::io::AsyncReadExt;
 use tokio::sync::mpsc::Receiver;
+#[allow(unused_imports)]
 use tun2::{AbstractDevice, BoxError};
 
 #[tokio::main]
@@ -29,23 +31,27 @@ async fn main() -> Result<(), BoxError> {
     main_entry(rx).await?;
     Ok(())
 }
+#[cfg(any(target_os = "ios", target_os = "android",))]
+async fn main_entry(_quit: Receiver<()>) -> Result<(), BoxError> {
+    unimplemented!()
+}
+#[cfg(any(
+    target_os = "windows",
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "freebsd",
+))]
 
 async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
     let mut config = tun2::Configuration::default();
 
     config
-        .address((10, 0, 0, 9))
-        .netmask((255, 255, 255, 0))
+        .address_with_prefix((10, 0, 0, 9), 24)
         .destination((10, 0, 0, 1))
         .mtu(tun2::DEFAULT_MTU)
         .up();
 
-    #[cfg(target_os = "linux")]
-    config.platform_config(|config| {
-        config.ensure_root_privileges(true);
-    });
-
-    let mut dev = tun2::create_as_async(&config)?;
+    let dev = Arc::new(tun2::create_as_async(&config)?);
     let size = dev.mtu()? as usize + tun2::PACKET_INFORMATION_LENGTH;
     let mut buf = vec![0; size];
     loop {
@@ -54,7 +60,8 @@ async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
                 println!("Quit...");
                 break;
             }
-            len = dev.read(&mut buf) => {
+            len = dev.recv(&mut buf) => {
+                println!("len = {len:?}");
                 println!("pkt: {:?}", &buf[..len?]);
             }
         };

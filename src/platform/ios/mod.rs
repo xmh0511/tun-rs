@@ -15,7 +15,9 @@
 //! iOS specific functionality.
 
 mod device;
+
 pub use device::Device;
+use std::os::fd::{FromRawFd, RawFd};
 
 use crate::configuration::Configuration;
 use crate::error::Result;
@@ -53,7 +55,14 @@ impl PlatformConfig {
     }
 }
 
+use super::Device as DeviceWrapper;
 /// Create a TUN device with the given name.
-pub fn create(configuration: &Configuration) -> Result<Device> {
-    Device::new(configuration)
+pub fn create(_configuration: &Configuration) -> Result<DeviceWrapper> {
+    unimplemented!()
+}
+
+/// # Safety
+/// The fd passed in must be an owned file descriptor; in particular, it must be open.
+pub unsafe fn create_with_fd(fd: RawFd) -> Result<DeviceWrapper> {
+    Ok(DeviceWrapper(Device::from_raw_fd(fd)))
 }

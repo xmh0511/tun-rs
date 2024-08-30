@@ -19,28 +19,30 @@ pub mod posix;
 
 #[cfg(target_os = "linux")]
 pub mod linux;
+use std::ops::Deref;
+
 #[cfg(target_os = "linux")]
-pub use self::linux::{create, Device, PlatformConfig};
+pub use self::linux::{Device as DeviceInner, *};
 
 #[cfg(target_os = "freebsd")]
 pub mod freebsd;
 #[cfg(target_os = "freebsd")]
-pub use self::freebsd::{create, Device, PlatformConfig};
+pub use self::freebsd::{Device as DeviceInner, *};
 
 #[cfg(target_os = "macos")]
 pub mod macos;
 #[cfg(target_os = "macos")]
-pub use self::macos::{create, Device, PlatformConfig};
+pub use self::macos::{Device as DeviceInner, *};
 
 #[cfg(target_os = "ios")]
 pub mod ios;
 #[cfg(target_os = "ios")]
-pub use self::ios::{create, Device, PlatformConfig};
+pub use self::ios::{Device as DeviceInner, *};
 
 #[cfg(target_os = "android")]
 pub mod android;
 #[cfg(target_os = "android")]
-pub use self::android::{create, Device, PlatformConfig};
+pub use self::android::{Device as DeviceInner, *};
 
 #[cfg(unix)]
 pub use crate::platform::posix::Tun;
@@ -48,8 +50,56 @@ pub use crate::platform::posix::Tun;
 #[cfg(target_os = "windows")]
 pub mod windows;
 #[cfg(target_os = "windows")]
-pub use self::windows::{create, Device, PlatformConfig, Tun};
+pub use self::windows::{create, Device as DeviceInner, PlatformConfig, Tun};
 
+#[cfg(target_family = "unix")]
+use std::os::unix::io::RawFd;
+
+#[repr(transparent)]
+pub struct Device(pub(crate) DeviceInner);
+
+impl Device {
+    /// Recv a packet from tun device
+    #[inline]
+    pub fn recv(&self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.0.recv(buf)
+    }
+
+    /// Send a packet to tun device
+    #[inline]
+    pub fn send(&self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.send(buf)
+    }
+
+    #[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
+    #[cfg(any(feature = "experimental", target_os = "windows"))]
+    /// Do not use nonblocking fd when you want to use shutdown
+    pub fn shutdown(&self) -> std::io::Result<()> {
+        self.0.shutdown()
+    }
+}
+
+#[cfg(target_family = "unix")]
+impl std::os::fd::IntoRawFd for Device {
+    fn into_raw_fd(self) -> RawFd {
+        self.0.into_raw_fd()
+    }
+}
+
+impl Deref for Device {
+    type Target = DeviceInner;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[cfg(any(
+    target_os = "windows",
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "freebsd",
+))]
 #[cfg(test)]
 mod test {
     use crate::configuration::Configuration;
@@ -60,9 +110,8 @@ mod test {
     fn create() {
         let dev = super::create(
             Configuration::default()
-                .tun_name("utun6")
-                .address("192.168.50.1")
-                .netmask("255.255.0.0")
+                .name("utun6")
+                .address_with_prefix("192.168.50.1", 24)
                 .mtu(crate::DEFAULT_MTU)
                 .up(),
         )

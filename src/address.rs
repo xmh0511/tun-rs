@@ -33,6 +33,17 @@ impl IntoAddress for u32 {
         )))
     }
 }
+impl IntoAddress for u8 {
+    fn into_address(&self) -> Result<IpAddr> {
+        let prefix = *self;
+        let mask = if prefix == 0 {
+            0
+        } else {
+            (!0u32) << (32 - prefix)
+        };
+        Ok(Ipv4Addr::from(mask).into())
+    }
+}
 
 impl IntoAddress for i32 {
     fn into_address(&self) -> Result<IpAddr> {
@@ -124,4 +135,11 @@ impl<'a> IntoAddress for &'a SocketAddr {
     fn into_address(&self) -> Result<IpAddr> {
         (*self).into_address()
     }
+}
+#[allow(dead_code)]
+pub fn format_mac_address(mac: &[u8; 6]) -> String {
+    mac.iter()
+        .map(|b| format!("{:02X}", b))
+        .collect::<Vec<_>>()
+        .join("")
 }

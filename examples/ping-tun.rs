@@ -11,11 +11,11 @@
 //   TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
 //
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
-
-use futures::{SinkExt, StreamExt};
+#[allow(unused_imports)]
 use packet::{builder::Builder, icmp, ip, Packet};
 use tokio::sync::mpsc::Receiver;
-use tun2::{self, BoxError, Configuration};
+#[allow(unused_imports)]
+use tun2::{self, AbstractDevice, BoxError, Configuration};
 
 #[tokio::main]
 async fn main() -> Result<(), BoxError> {
@@ -30,40 +30,45 @@ async fn main() -> Result<(), BoxError> {
     main_entry(rx).await?;
     Ok(())
 }
-
+#[cfg(any(target_os = "ios", target_os = "android",))]
+async fn main_entry(_quit: Receiver<()>) -> Result<(), BoxError> {
+    unimplemented!()
+}
+#[cfg(any(
+    target_os = "windows",
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "freebsd",
+))]
 async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
     let mut config = Configuration::default();
 
     config
-        .address((10, 0, 0, 9))
-        .netmask((255, 255, 255, 0))
+        .address_with_prefix((10, 0, 0, 9), 24)
         .destination((10, 0, 0, 1))
         .up();
-
-    #[cfg(target_os = "linux")]
-    config.platform_config(|config| {
-        #[allow(deprecated)]
-        config.packet_information(true);
-        config.ensure_root_privileges(true);
-    });
 
     #[cfg(target_os = "windows")]
     config.platform_config(|config| {
         config.device_guid(9099482345783245345345_u128);
     });
 
+    #[cfg(target_os = "macos")]
+    config.platform_config(|config| {
+        config.packet_information(false);
+    });
+
     let dev = tun2::create_as_async(&config)?;
-
-    let mut framed = dev.into_framed();
-
+    let size = dev.mtu()? as usize + tun2::PACKET_INFORMATION_LENGTH;
+    let mut buf = vec![0; size];
     loop {
         tokio::select! {
             _ = quit.recv() => {
                 println!("Quit...");
                 break;
             }
-            Some(packet) = framed.next() => {
-                let pkt: Vec<u8> = packet?;
+            len = dev.recv(&mut buf) => {
+                let pkt: Vec<u8> = buf[..len?].to_vec();
                 match ip::Packet::new(pkt) {
                     Ok(ip::Packet::V4(pkt)) => {
                         if let Ok(icmp) = icmp::Packet::new(pkt.payload()) {
@@ -81,7 +86,7 @@ async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
                                     .sequence(icmp.sequence())?
                                     .payload(icmp.payload())?
                                     .build()?;
-                                framed.send(reply).await?;
+                                dev.send(&reply).await?;
                             }
                         }
                     }

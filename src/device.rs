@@ -11,12 +11,15 @@
 //   TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
 //
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
-
+#[allow(unused_imports)]
+use crate::error::Result;
+#[allow(unused_imports)]
+use crate::IntoAddress;
 #[allow(unused_imports)]
 use std::net::IpAddr;
 
-use crate::error::Result;
-
+#[allow(dead_code)]
+pub(crate) const ETHER_ADDR_LEN: u8 = 6;
 /// A TUN abstract device interface.
 pub trait AbstractDevice {
     /// Get the device tun name.
@@ -26,14 +29,19 @@ pub trait AbstractDevice {
         target_os = "macos",
         target_os = "freebsd"
     ))]
-    fn tun_name(&self) -> Result<String>;
+    fn name(&self) -> Result<String>;
 
     /// Set the device tun name.
     #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
-    fn set_tun_name(&self, tun_name: &str) -> Result<()>;
+    fn set_name(&self, tun_name: &str) -> Result<()>;
 
     /// Turn on or off the interface.
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd",
+        target_os = "windows"
+    ))]
     fn enabled(&self, value: bool) -> Result<()>;
 
     /// Get the address.
@@ -45,10 +53,6 @@ pub trait AbstractDevice {
     ))]
     fn address(&self) -> Result<IpAddr>;
 
-    /// Set the address.
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
-    fn set_address(&self, value: IpAddr) -> Result<()>;
-
     /// Get the destination address.
     #[cfg(any(
         target_os = "windows",
@@ -58,22 +62,13 @@ pub trait AbstractDevice {
     ))]
     fn destination(&self) -> Result<IpAddr>;
 
-    /// Set the destination address.
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
-    fn set_destination(&self, value: IpAddr) -> Result<()>;
-
     /// Get the broadcast address.
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
     fn broadcast(&self) -> Result<IpAddr>;
 
     /// Set the broadcast address.
     #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
-    fn set_broadcast(&self, value: IpAddr) -> Result<()>;
+    fn set_broadcast<A: IntoAddress>(&self, value: A) -> Result<()>;
 
     /// Get the netmask.
     #[cfg(any(
@@ -84,10 +79,6 @@ pub trait AbstractDevice {
     ))]
     fn netmask(&self) -> Result<IpAddr>;
 
-    /// Set the netmask.
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
-    fn set_netmask(&self, value: IpAddr) -> Result<()>;
-
     /// Sets the network addresses of this adapter, including network address, subnet mask, and gateway
     #[cfg(any(
         target_os = "windows",
@@ -95,11 +86,11 @@ pub trait AbstractDevice {
         target_os = "macos",
         target_os = "freebsd"
     ))]
-    fn set_network_address(
+    fn set_network_address<A: IntoAddress>(
         &self,
-        address: IpAddr,
-        netmask: IpAddr,
-        destination: Option<IpAddr>,
+        address: A,
+        netmask: A,
+        destination: Option<A>,
     ) -> Result<()>;
 
     /// Get the MTU.
@@ -108,8 +99,6 @@ pub trait AbstractDevice {
         target_os = "linux",
         target_os = "macos",
         target_os = "freebsd",
-        target_os = "ios",
-        target_os = "android"
     ))]
     fn mtu(&self) -> Result<u16>;
 
@@ -119,11 +108,17 @@ pub trait AbstractDevice {
         target_os = "linux",
         target_os = "macos",
         target_os = "freebsd",
-        target_os = "ios",
-        target_os = "android"
     ))]
     fn set_mtu(&self, value: u16) -> Result<()>;
 
     /// Return whether the underlying tun device on the platform has packet information
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "ios",))]
     fn packet_information(&self) -> bool;
+
+    /// Set mac address
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
+    fn set_mac_address(&self, eth_addr: [u8; ETHER_ADDR_LEN as usize]) -> Result<()>;
+    /// Get mac address
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
+    fn get_mac_address(&self) -> Result<[u8; ETHER_ADDR_LEN as usize]>;
 }

@@ -12,149 +12,98 @@
 //
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
 
-use libc::{
-    self, c_char, c_short, ifreq, AF_INET, IFF_MULTI_QUEUE, IFF_NO_PI, IFF_RUNNING, IFF_TAP,
-    IFF_TUN, IFF_UP, IFNAMSIZ, O_RDWR, SOCK_DGRAM,
+use crate::configuration::configure;
+use crate::{
+    configuration::{Configuration, Layer},
+    device::{AbstractDevice, ETHER_ADDR_LEN},
+    error::{Error, Result},
+    platform::linux::sys::*,
+    platform::posix::{ipaddr_to_sockaddr, sockaddr_union, Fd, Tun},
+    IntoAddress,
 };
+use libc::{
+    self, c_char, c_short, ifreq, AF_INET, ARPHRD_ETHER, IFF_MULTI_QUEUE, IFF_NO_PI, IFF_RUNNING,
+    IFF_TAP, IFF_TUN, IFF_UP, IFNAMSIZ, O_RDWR, SOCK_DGRAM,
+};
+use mac_address::mac_address_by_name;
+use std::os::fd::FromRawFd;
 use std::{
-    ffi::{CStr, CString},
-    io::{self, Read, Write},
+    ffi::CString,
+    io::{self},
     mem,
     net::IpAddr,
     os::unix::io::{AsRawFd, IntoRawFd, RawFd},
     ptr,
-    sync::RwLock,
-};
-
-use crate::{
-    configuration::{Configuration, Layer},
-    device::AbstractDevice,
-    error::{Error, Result},
-    platform::linux::sys::*,
-    platform::posix::{self, ipaddr_to_sockaddr, sockaddr_union, Fd, Tun},
 };
 
 const OVERWRITE_SIZE: usize = std::mem::size_of::<libc::__c_anonymous_ifr_ifru>();
 
 /// A TUN device using the TUN/TAP Linux driver.
 pub struct Device {
-    tun_name: RwLock<String>,
     tun: Tun,
-    ctl: Fd,
 }
-
-impl AsRef<dyn AbstractDevice + 'static> for Device {
-    fn as_ref(&self) -> &(dyn AbstractDevice + 'static) {
-        self
-    }
-}
-
-impl AsMut<dyn AbstractDevice + 'static> for Device {
-    fn as_mut(&mut self) -> &mut (dyn AbstractDevice + 'static) {
-        self
+impl FromRawFd for Device {
+    unsafe fn from_raw_fd(fd: RawFd) -> Self {
+        let tun = Fd::new(fd, true).unwrap();
+        Device {
+            tun: Tun::new(tun, false),
+        }
     }
 }
 
 impl Device {
     /// Create a new `Device` for the given `Configuration`.
     pub fn new(config: &Configuration) -> Result<Self> {
-        let layer = config.layer.unwrap_or(Layer::L3);
-        let mtu = config.mtu.unwrap_or(crate::DEFAULT_MTU);
-        if layer == Layer::L3 {
-            if let Some(fd) = config.raw_fd {
-                let close_fd_on_drop = config.close_fd_on_drop.unwrap_or(true);
-                let tun = Fd::new(fd, close_fd_on_drop).map_err(|_| io::Error::last_os_error())?;
-                let device = Device {
-                    tun_name: RwLock::new(String::new()),
-                    tun: posix::Tun::new(tun, mtu, config.platform_config.packet_information),
-                    ctl: Fd::new(unsafe { libc::socket(AF_INET, SOCK_DGRAM, 0) }, true)?,
-                };
-                return Ok(device);
+        let dev_name = match config.name.as_ref() {
+            Some(tun_name) => {
+                let tun_name = CString::new(tun_name.clone())?;
+
+                if tun_name.as_bytes_with_nul().len() > IFNAMSIZ {
+                    return Err(Error::NameTooLong);
+                }
+
+                Some(tun_name)
             }
-            let mut device = unsafe {
-                let dev_name = match config.tun_name_.as_ref() {
-                    Some(tun_name) => {
-                        let tun_name = CString::new(tun_name.clone())?;
 
-                        if tun_name.as_bytes_with_nul().len() > IFNAMSIZ {
-                            return Err(Error::NameTooLong);
-                        }
+            None => None,
+        };
+        unsafe {
+            let mut req: ifreq = mem::zeroed();
 
-                        Some(tun_name)
-                    }
+            if let Some(dev_name) = dev_name.as_ref() {
+                ptr::copy_nonoverlapping(
+                    dev_name.as_ptr() as *const c_char,
+                    req.ifr_name.as_mut_ptr(),
+                    dev_name.as_bytes_with_nul().len(),
+                );
+            }
 
-                    None => None,
-                };
+            let device_type: c_short = config.layer.unwrap_or(Layer::L3).into();
+            let queues_num = 1;
+            let iff_no_pi = IFF_NO_PI as c_short;
+            let iff_multi_queue = IFF_MULTI_QUEUE as c_short;
+            let packet_information = config.platform_config.packet_information;
+            req.ifr_ifru.ifru_flags = device_type
+                | if packet_information { 0 } else { iff_no_pi }
+                | if queues_num > 1 { iff_multi_queue } else { 0 };
 
-                let mut req: ifreq = mem::zeroed();
+            let fd = libc::open(b"/dev/net/tun\0".as_ptr() as *const _, O_RDWR);
+            let tun_fd = Fd::new(fd, true)?;
+            if let Err(err) = tunsetiff(tun_fd.inner, &mut req as *mut _ as *mut _) {
+                return Err(io::Error::from(err).into());
+            }
 
-                if let Some(dev_name) = dev_name.as_ref() {
-                    ptr::copy_nonoverlapping(
-                        dev_name.as_ptr() as *const c_char,
-                        req.ifr_name.as_mut_ptr(),
-                        dev_name.as_bytes_with_nul().len(),
-                    );
-                }
-
-                let device_type: c_short = config.layer.unwrap_or(Layer::L3).into();
-
-                let queues_num = config.queues.unwrap_or(1);
-                if queues_num != 1 {
-                    return Err(Error::InvalidQueuesNumber);
-                }
-
-                let iff_no_pi = IFF_NO_PI as c_short;
-                let iff_multi_queue = IFF_MULTI_QUEUE as c_short;
-                let packet_information = config.platform_config.packet_information;
-                req.ifr_ifru.ifru_flags = device_type
-                    | if packet_information { 0 } else { iff_no_pi }
-                    | if queues_num > 1 { iff_multi_queue } else { 0 };
-
-                let tun_fd = {
-                    let fd = libc::open(b"/dev/net/tun\0".as_ptr() as *const _, O_RDWR);
-                    let tun_fd = Fd::new(fd, true).map_err(|_| io::Error::last_os_error())?;
-
-                    if let Err(err) = tunsetiff(tun_fd.inner, &mut req as *mut _ as *mut _) {
-                        return Err(io::Error::from(err).into());
-                    }
-
-                    tun_fd
-                };
-
-                let ctl = Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)?;
-
-                let tun_name = CStr::from_ptr(req.ifr_name.as_ptr())
-                    .to_string_lossy()
-                    .to_string();
-                Device {
-                    tun_name: RwLock::new(tun_name),
-                    tun: Tun::new(tun_fd, mtu, packet_information),
-                    ctl,
-                }
+            let device = Device {
+                tun: Tun::new(tun_fd, config.platform_config.packet_information),
             };
-
-            if config.platform_config.ensure_root_privileges {
-                crate::configuration::configure(&mut device, config)?;
-            }
-
+            configure(&device, config)?;
             Ok(device)
-        } else {
-            unimplemented!()
         }
     }
 
     /// Prepare a new request.
-    unsafe fn request(&self) -> ifreq {
-        let mut req: ifreq = mem::zeroed();
-        let tun_name = self.tun_name.read().unwrap();
-        let tun_name = &*tun_name;
-        ptr::copy_nonoverlapping(
-            tun_name.as_ptr() as *const c_char,
-            req.ifr_name.as_mut_ptr(),
-            tun_name.len(),
-        );
-
-        req
+    unsafe fn request(&self) -> Result<ifreq> {
+        request(&self.name()?)
     }
 
     /// Make the device persistent.
@@ -196,46 +145,78 @@ impl Device {
     }
 
     /// Recv a packet from tun device
-    pub fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
+    pub(crate) fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
         self.tun.recv(buf)
     }
 
     /// Send a packet to tun device
-    pub fn send(&self, buf: &[u8]) -> io::Result<usize> {
+    pub(crate) fn send(&self, buf: &[u8]) -> io::Result<usize> {
         self.tun.send(buf)
     }
+    #[cfg(feature = "experimental")]
+    pub(crate) fn shutdown(&self) -> io::Result<()> {
+        self.tun.shutdown()
+    }
+    fn set_address(&self, value: IpAddr) -> Result<()> {
+        unsafe {
+            let mut req = self.request()?;
+            ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_addr, OVERWRITE_SIZE);
+            if let Err(err) = siocsifaddr(ctl()?.as_raw_fd(), &req) {
+                return Err(io::Error::from(err).into());
+            }
+            Ok(())
+        }
+    }
+    fn set_netmask(&self, value: IpAddr) -> Result<()> {
+        unsafe {
+            let mut req = self.request()?;
+            ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_netmask, OVERWRITE_SIZE);
+            if let Err(err) = siocsifnetmask(ctl()?.as_raw_fd(), &req) {
+                return Err(io::Error::from(err).into());
+            }
+            Ok(())
+        }
+    }
+
+    fn set_destination<A: IntoAddress>(&self, value: A) -> Result<()> {
+        let value = value.into_address()?;
+        unsafe {
+            let mut req = self.request()?;
+            ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_dstaddr, OVERWRITE_SIZE);
+            if let Err(err) = siocsifdstaddr(ctl()?.as_raw_fd(), &req) {
+                return Err(io::Error::from(err).into());
+            }
+            Ok(())
+        }
+    }
 }
-
-impl Read for Device {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.tun.read(buf)
-    }
-
-    fn read_vectored(&mut self, bufs: &mut [io::IoSliceMut<'_>]) -> io::Result<usize> {
-        self.tun.read_vectored(bufs)
-    }
+unsafe fn ctl() -> io::Result<Fd> {
+    Ok(Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)?)
 }
-
-impl Write for Device {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.tun.write(buf)
+unsafe fn name(fd: RawFd) -> io::Result<String> {
+    let mut req: ifreq = mem::zeroed();
+    if let Err(err) = tungetiff(fd, &mut req as *mut _ as *mut _) {
+        return Err(io::Error::from(err));
     }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.tun.flush()
-    }
-
-    fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
-        self.tun.write_vectored(bufs)
-    }
+    let c_str = std::ffi::CStr::from_ptr(req.ifr_name.as_ptr() as *const c_char);
+    let tun_name = c_str.to_string_lossy().into_owned();
+    Ok(tun_name)
 }
-
+unsafe fn request(name: &str) -> Result<ifreq> {
+    let mut req: ifreq = mem::zeroed();
+    ptr::copy_nonoverlapping(
+        name.as_ptr() as *const c_char,
+        req.ifr_name.as_mut_ptr(),
+        name.len(),
+    );
+    Ok(req)
+}
 impl AbstractDevice for Device {
-    fn tun_name(&self) -> Result<String> {
-        Ok(self.tun_name.read().unwrap().clone())
+    fn name(&self) -> Result<String> {
+        unsafe { name(self.as_raw_fd()).map_err(|e| e.into()) }
     }
 
-    fn set_tun_name(&self, value: &str) -> Result<()> {
+    fn set_name(&self, value: &str) -> Result<()> {
         unsafe {
             let tun_name = CString::new(value)?;
 
@@ -243,18 +224,16 @@ impl AbstractDevice for Device {
                 return Err(Error::NameTooLong);
             }
 
-            let mut req = self.request();
+            let mut req = self.request()?;
             ptr::copy_nonoverlapping(
                 tun_name.as_ptr() as *const c_char,
                 req.ifr_ifru.ifru_newname.as_mut_ptr(),
                 value.len(),
             );
 
-            if let Err(err) = siocsifname(self.ctl.as_raw_fd(), &req) {
+            if let Err(err) = siocsifname(ctl()?.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
-
-            *self.tun_name.write().unwrap() = value.into();
 
             Ok(())
         }
@@ -262,9 +241,10 @@ impl AbstractDevice for Device {
 
     fn enabled(&self, value: bool) -> Result<()> {
         unsafe {
-            let mut req = self.request();
+            let ctl = ctl()?;
+            let mut req = self.request()?;
 
-            if let Err(err) = siocgifflags(self.ctl.as_raw_fd(), &mut req) {
+            if let Err(err) = siocgifflags(ctl.as_raw_fd(), &mut req) {
                 return Err(io::Error::from(err).into());
             }
 
@@ -274,7 +254,7 @@ impl AbstractDevice for Device {
                 req.ifr_ifru.ifru_flags &= !(IFF_UP as c_short);
             }
 
-            if let Err(err) = siocsifflags(self.ctl.as_raw_fd(), &req) {
+            if let Err(err) = siocsifflags(ctl.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
 
@@ -284,8 +264,8 @@ impl AbstractDevice for Device {
 
     fn address(&self) -> Result<IpAddr> {
         unsafe {
-            let mut req = self.request();
-            if let Err(err) = siocgifaddr(self.ctl.as_raw_fd(), &mut req) {
+            let mut req = self.request()?;
+            if let Err(err) = siocgifaddr(ctl()?.as_raw_fd(), &mut req) {
                 return Err(io::Error::from(err).into());
             }
             let sa = sockaddr_union::from(req.ifr_ifru.ifru_addr);
@@ -293,21 +273,10 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_address(&self, value: IpAddr) -> Result<()> {
-        unsafe {
-            let mut req = self.request();
-            ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_addr, OVERWRITE_SIZE);
-            if let Err(err) = siocsifaddr(self.ctl.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
-            }
-            Ok(())
-        }
-    }
-
     fn destination(&self) -> Result<IpAddr> {
         unsafe {
-            let mut req = self.request();
-            if let Err(err) = siocgifdstaddr(self.ctl.as_raw_fd(), &mut req) {
+            let mut req = self.request()?;
+            if let Err(err) = siocgifdstaddr(ctl()?.as_raw_fd(), &mut req) {
                 return Err(io::Error::from(err).into());
             }
             let sa = sockaddr_union::from(req.ifr_ifru.ifru_dstaddr);
@@ -315,21 +284,10 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_destination(&self, value: IpAddr) -> Result<()> {
-        unsafe {
-            let mut req = self.request();
-            ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_dstaddr, OVERWRITE_SIZE);
-            if let Err(err) = siocsifdstaddr(self.ctl.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
-            }
-            Ok(())
-        }
-    }
-
     fn broadcast(&self) -> Result<IpAddr> {
         unsafe {
-            let mut req = self.request();
-            if let Err(err) = siocgifbrdaddr(self.ctl.as_raw_fd(), &mut req) {
+            let mut req = self.request()?;
+            if let Err(err) = siocgifbrdaddr(ctl()?.as_raw_fd(), &mut req) {
                 return Err(io::Error::from(err).into());
             }
             let sa = sockaddr_union::from(req.ifr_ifru.ifru_broadaddr);
@@ -337,11 +295,12 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_broadcast(&self, value: IpAddr) -> Result<()> {
+    fn set_broadcast<A: IntoAddress>(&self, value: A) -> Result<()> {
+        let value = value.into_address()?;
         unsafe {
-            let mut req = self.request();
+            let mut req = self.request()?;
             ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_broadaddr, OVERWRITE_SIZE);
-            if let Err(err) = siocsifbrdaddr(self.ctl.as_raw_fd(), &req) {
+            if let Err(err) = siocsifbrdaddr(ctl()?.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
             Ok(())
@@ -350,8 +309,8 @@ impl AbstractDevice for Device {
 
     fn netmask(&self) -> Result<IpAddr> {
         unsafe {
-            let mut req = self.request();
-            if let Err(err) = siocgifnetmask(self.ctl.as_raw_fd(), &mut req) {
+            let mut req = self.request()?;
+            if let Err(err) = siocgifnetmask(ctl()?.as_raw_fd(), &mut req) {
                 return Err(io::Error::from(err).into());
             }
             let sa = sockaddr_union::from(req.ifr_ifru.ifru_netmask);
@@ -359,22 +318,25 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_netmask(&self, value: IpAddr) -> Result<()> {
-        unsafe {
-            let mut req = self.request();
-            ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_netmask, OVERWRITE_SIZE);
-            if let Err(err) = siocsifnetmask(self.ctl.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
-            }
-            Ok(())
+    fn set_network_address<A: IntoAddress>(
+        &self,
+        address: A,
+        netmask: A,
+        destination: Option<A>,
+    ) -> Result<()> {
+        self.set_address(address.into_address()?)?;
+        self.set_netmask(netmask.into_address()?)?;
+        if let Some(destination) = destination {
+            self.set_destination(destination.into_address()?)?;
         }
+        Ok(())
     }
 
     fn mtu(&self) -> Result<u16> {
         unsafe {
-            let mut req = self.request();
+            let mut req = self.request()?;
 
-            if let Err(err) = siocgifmtu(self.ctl.as_raw_fd(), &mut req) {
+            if let Err(err) = siocgifmtu(ctl()?.as_raw_fd(), &mut req) {
                 return Err(io::Error::from(err).into());
             }
 
@@ -387,33 +349,38 @@ impl AbstractDevice for Device {
 
     fn set_mtu(&self, value: u16) -> Result<()> {
         unsafe {
-            let mut req = self.request();
+            let mut req = self.request()?;
             req.ifr_ifru.ifru_mtu = value as i32;
 
-            if let Err(err) = siocsifmtu(self.ctl.as_raw_fd(), &req) {
+            if let Err(err) = siocsifmtu(ctl()?.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
-            self.tun.set_mtu(value);
             Ok(())
         }
     }
 
-    fn set_network_address(
-        &self,
-        address: IpAddr,
-        netmask: IpAddr,
-        destination: Option<IpAddr>,
-    ) -> Result<()> {
-        self.set_address(address)?;
-        self.set_netmask(netmask)?;
-        if let Some(dest) = destination {
-            self.set_destination(dest)?;
-        }
-        Ok(())
-    }
-
     fn packet_information(&self) -> bool {
         self.tun.packet_information()
+    }
+
+    fn set_mac_address(&self, eth_addr: [u8; ETHER_ADDR_LEN as usize]) -> Result<()> {
+        unsafe {
+            let mut req = self.request()?;
+            req.ifr_ifru.ifru_hwaddr.sa_family = ARPHRD_ETHER;
+            req.ifr_ifru.ifru_hwaddr.sa_data[0..ETHER_ADDR_LEN as usize]
+                .copy_from_slice(eth_addr.map(|c| c as i8).as_slice());
+            if let Err(err) = siocsifhwaddr(ctl()?.as_raw_fd(), &req) {
+                return Err(io::Error::from(err).into());
+            }
+            Ok(())
+        }
+    }
+
+    fn get_mac_address(&self) -> Result<[u8; ETHER_ADDR_LEN as usize]> {
+        let mac = mac_address_by_name(&self.name()?)
+            .map_err(|e| Error::String(e.to_string()))?
+            .ok_or(Error::InvalidConfig)?;
+        Ok(mac.bytes())
     }
 }
 

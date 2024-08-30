@@ -17,7 +17,6 @@ use crate::PACKET_INFORMATION_LENGTH as PIL;
 use bytes::BufMut;
 use std::io::{self, Read, Write};
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
-use std::sync::RwLock;
 
 /// Infer the protocol based on the first nibble in the packet buffer.
 pub(crate) fn is_ipv6(buf: &[u8]) -> std::io::Result<bool> {
@@ -123,17 +122,18 @@ macro_rules! need_mut {
 pub struct Tun {
     pub(crate) fd: Fd,
     pub(crate) offset: usize,
-    pub(crate) mtu: RwLock<u16>,
     pub(crate) packet_information: bool,
 }
 
 impl Tun {
-    pub(crate) fn new(fd: Fd, mtu: u16, packet_information: bool) -> Self {
-        let offset = if packet_information { PIL } else { 0 };
+    pub(crate) fn new(fd: Fd, packet_information: bool) -> Self {
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        let offset = if !packet_information { PIL } else { 0 };
+        #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+        let offset = 0;
         Self {
             fd,
             offset,
-            mtu: RwLock::new(mtu),
             packet_information,
         }
     }
@@ -142,71 +142,60 @@ impl Tun {
         self.fd.set_nonblock()
     }
 
-    pub fn set_mtu(&self, value: u16) {
-        *self.mtu.write().unwrap() = value;
-    }
-
-    pub fn mtu(&self) -> u16 {
-        *self.mtu.read().unwrap()
-    }
-
     pub fn packet_information(&self) -> bool {
         self.packet_information
     }
 
     pub(crate) fn send(&self, in_buf: &[u8]) -> io::Result<usize> {
-        const STACK_BUF_LEN: usize = crate::DEFAULT_MTU as usize + PIL;
-        let in_buf_len = in_buf.len() + self.offset;
-
-        // The following logic is to prevent dynamically allocating Vec on every send
-        // As long as the MTU is set to value lesser than 1500, this api uses `stack_buf`
-        // and avoids `Vec` allocation
-        let local_buf_v0 =
-            local_buf_util!(in_buf_len > STACK_BUF_LEN && self.offset != 0, in_buf_len);
-        need_mut! {local_buf_v1,local_buf_v0};
-        #[allow(clippy::useless_asref)]
-        let local_buf = local_buf_v1.as_mut();
-
-        let either_buf = if self.offset != 0 {
+        if self.offset != 0 {
             let ipv6 = is_ipv6(in_buf)?;
             if let Some(header) = generate_packet_information(true, ipv6) {
+                const STACK_BUF_LEN: usize = crate::DEFAULT_MTU as usize + PIL;
+                let in_buf_len = in_buf.len() + self.offset;
+
+                // The following logic is to prevent dynamically allocating Vec on every send
+                // As long as the MTU is set to value lesser than 1500, this api uses `stack_buf`
+                // and avoids `Vec` allocation
+                let local_buf_v0 =
+                    local_buf_util!(in_buf_len > STACK_BUF_LEN && self.offset != 0, in_buf_len);
+                need_mut! {local_buf_v1,local_buf_v0};
+                #[allow(clippy::useless_asref)]
+                let local_buf = local_buf_v1.as_mut();
+
                 (&mut local_buf[..self.offset]).put_slice(header.as_ref());
                 (&mut local_buf[self.offset..in_buf_len]).put_slice(in_buf);
-                &local_buf[..in_buf_len]
-            } else {
-                in_buf
+                let amount = self.fd.write(&local_buf[..in_buf_len])?;
+                return Ok(amount - self.offset);
             }
-        } else {
-            in_buf
-        };
-        let amount = self.fd.write(either_buf)?;
+        }
+        let amount = self.fd.write(in_buf)?;
         Ok(amount - self.offset)
     }
 
     pub(crate) fn recv(&self, mut in_buf: &mut [u8]) -> io::Result<usize> {
-        const STACK_BUF_LEN: usize = crate::DEFAULT_MTU as usize + PIL;
-        let in_buf_len = in_buf.len() + self.offset;
-
-        // The following logic is to prevent dynamically allocating Vec on every recv
-        // As long as the MTU is set to value lesser than 1500, this api uses `stack_buf`
-        // and avoids `Vec` allocation
-
-        let local_buf_v0 =
-            local_buf_util!(in_buf_len > STACK_BUF_LEN && self.offset != 0, in_buf_len);
-        need_mut! {local_buf_v1,local_buf_v0};
-        #[allow(clippy::useless_asref)]
-        let local_buf = local_buf_v1.as_mut();
-
-        let either_buf = if self.offset != 0 {
-            &mut *local_buf
-        } else {
-            &mut *in_buf
-        };
-        let amount = self.fd.read(either_buf)?;
         if self.offset != 0 {
+            const STACK_BUF_LEN: usize = crate::DEFAULT_MTU as usize + PIL;
+            let in_buf_len = in_buf.len() + self.offset;
+
+            // The following logic is to prevent dynamically allocating Vec on every recv
+            // As long as the MTU is set to value lesser than 1500, this api uses `stack_buf`
+            // and avoids `Vec` allocation
+
+            let local_buf_v0 =
+                local_buf_util!(in_buf_len > STACK_BUF_LEN && self.offset != 0, in_buf_len);
+            need_mut! {local_buf_v1,local_buf_v0};
+            #[allow(clippy::useless_asref)]
+            let local_buf = local_buf_v1.as_mut();
+            let amount = self.fd.read(local_buf)?;
             in_buf.put_slice(&local_buf[self.offset..amount]);
+            Ok(amount - self.offset)
+        } else {
+            self.fd.read(in_buf)
         }
-        Ok(amount - self.offset)
+    }
+    #[cfg(feature = "experimental")]
+    pub(crate) fn shutdown(&self) -> io::Result<()> {
+        self.fd.shutdown()
     }
 }
 
@@ -234,6 +223,6 @@ impl AsRawFd for Tun {
 
 impl IntoRawFd for Tun {
     fn into_raw_fd(self) -> RawFd {
-        self.fd.as_raw_fd()
+        self.fd.into_raw_fd()
     }
 }
