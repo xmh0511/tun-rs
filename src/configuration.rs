@@ -54,6 +54,8 @@ pub struct Configuration {
         target_os = "macos",
         target_os = "freebsd"
     ))]
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+    pub(crate) mac_addr: Option<[u8; 6]>,
     pub(crate) address: Option<IpAddr>,
     #[cfg(any(
         target_os = "windows",
@@ -240,6 +242,12 @@ pub(crate) fn configure<D: AbstractDevice>(
         }
         if let (Some(address), Some(netmask)) = (config.address, config.netmask) {
             device.set_network_address(address, netmask, config.destination)?;
+        }
+    }
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
+    if config.layer == Some(Layer::L2) {
+        if let Some(mac_addr) = config.mac_addr {
+            device.set_mac_address(mac_addr)?;
         }
     }
     #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
