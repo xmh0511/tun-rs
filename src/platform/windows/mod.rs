@@ -17,6 +17,7 @@
 mod device;
 mod ffi;
 mod netsh;
+mod tap;
 mod verify_dll_file;
 
 use crate::configuration::Configuration;

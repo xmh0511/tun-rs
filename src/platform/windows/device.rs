@@ -13,65 +13,25 @@
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
 
 use std::io;
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::IpAddr;
 use std::sync::Arc;
 
-use winapi::shared::ifdef::NET_LUID;
-use winapi::shared::minwindef::DWORD;
-use winapi::um::fileapi::OPEN_EXISTING;
-use winapi::um::winbase::FILE_FLAG_OVERLAPPED;
-use winapi::um::winioctl::{FILE_ANY_ACCESS, FILE_DEVICE_UNKNOWN, METHOD_BUFFERED};
-use winapi::um::winnt::{
-    FILE_ATTRIBUTE_SYSTEM, FILE_SHARE_READ, FILE_SHARE_WRITE, GENERIC_READ, GENERIC_WRITE, HANDLE,
-};
 use wintun::{Packet, Session};
 
 use crate::configuration::{configure, Configuration};
-use crate::device::AbstractDevice;
+use crate::device::{AbstractDevice, ETHER_ADDR_LEN};
 use crate::error::{Error, Result};
 use crate::platform::windows::netsh;
+use crate::platform::windows::tap::TapDevice;
 use crate::platform::windows::verify_dll_file::{
     get_dll_absolute_path, get_signer_name, verify_embedded_signature,
 };
 use crate::{IntoAddress, Layer};
 
-use super::ffi;
-
-/* Present in 8.1 */
-const TAP_WIN_IOCTL_GET_MAC: DWORD =
-    ctl_code(FILE_DEVICE_UNKNOWN, 1, METHOD_BUFFERED, FILE_ANY_ACCESS);
-#[allow(dead_code)]
-const TAP_WIN_IOCTL_GET_VERSION: DWORD =
-    ctl_code(FILE_DEVICE_UNKNOWN, 2, METHOD_BUFFERED, FILE_ANY_ACCESS);
-const TAP_WIN_IOCTL_GET_MTU: DWORD =
-    ctl_code(FILE_DEVICE_UNKNOWN, 3, METHOD_BUFFERED, FILE_ANY_ACCESS);
-#[allow(dead_code)]
-const TAP_WIN_IOCTL_GET_INFO: DWORD =
-    ctl_code(FILE_DEVICE_UNKNOWN, 4, METHOD_BUFFERED, FILE_ANY_ACCESS);
-#[allow(dead_code)]
-const TAP_WIN_IOCTL_CONFIG_POINT_TO_POINT: DWORD =
-    ctl_code(FILE_DEVICE_UNKNOWN, 5, METHOD_BUFFERED, FILE_ANY_ACCESS);
-const TAP_WIN_IOCTL_SET_MEDIA_STATUS: DWORD =
-    ctl_code(FILE_DEVICE_UNKNOWN, 6, METHOD_BUFFERED, FILE_ANY_ACCESS);
-#[allow(dead_code)]
-const TAP_WIN_IOCTL_CONFIG_DHCP_MASQ: DWORD =
-    ctl_code(FILE_DEVICE_UNKNOWN, 7, METHOD_BUFFERED, FILE_ANY_ACCESS);
-#[allow(dead_code)]
-const TAP_WIN_IOCTL_GET_LOG_LINE: DWORD =
-    ctl_code(FILE_DEVICE_UNKNOWN, 8, METHOD_BUFFERED, FILE_ANY_ACCESS);
-#[allow(dead_code)]
-const TAP_WIN_IOCTL_CONFIG_DHCP_SET_OPT: DWORD =
-    ctl_code(FILE_DEVICE_UNKNOWN, 9, METHOD_BUFFERED, FILE_ANY_ACCESS);
-/* Added in 8.2 */
-/* obsoletes TAP_WIN_IOCTL_CONFIG_POINT_TO_POINT */
-#[allow(dead_code)]
-const TAP_WIN_IOCTL_CONFIG_TUN: DWORD =
-    ctl_code(FILE_DEVICE_UNKNOWN, 10, METHOD_BUFFERED, FILE_ANY_ACCESS);
-
 pub enum Driver {
     Tun(Tun),
     #[allow(dead_code)]
-    Tap(Tap),
+    Tap(TapDevice),
 }
 pub enum PacketVariant {
     Tun(Packet),
@@ -84,7 +44,7 @@ impl Driver {
                 let index = tun.session.get_adapter().get_adapter_index()?;
                 Ok(index)
             }
-            Driver::Tap(tap) => Ok(tap.index),
+            Driver::Tap(tap) => Ok(tap.index()),
         }
     }
     pub fn name(&self) -> Result<String> {
@@ -94,20 +54,20 @@ impl Driver {
                 Ok(name)
             }
             Driver::Tap(tap) => {
-                let name = tap.name()?;
+                let name = tap.get_name()?;
                 Ok(name)
             }
         }
     }
     pub fn read_by_ref(&self, buf: &mut [u8]) -> std::io::Result<usize> {
         match self {
-            Driver::Tap(tap) => tap.read_by_ref(buf),
+            Driver::Tap(tap) => tap.read(buf),
             Driver::Tun(tun) => tun.read_by_ref(buf),
         }
     }
     pub fn write_by_ref(&self, buf: &[u8]) -> std::io::Result<usize> {
         match self {
-            Driver::Tap(tap) => tap.write_by_ref(buf),
+            Driver::Tap(tap) => tap.write(buf),
             Driver::Tun(tun) => tun.write_by_ref(buf),
         }
     }
@@ -119,7 +79,7 @@ impl Driver {
             }
             Driver::Tap(tap) => {
                 let mut buf = [0u8; u16::MAX as usize];
-                let len = tap.read_by_ref(&mut buf)?;
+                let len = tap.read(&mut buf)?;
                 let mut vec = vec![];
                 vec.extend_from_slice(&buf[..len]);
                 Ok(PacketVariant::Tap(vec.into_boxed_slice()))
@@ -146,7 +106,7 @@ impl Device {
     /// Create a new `Device` for the given `Configuration`.
     pub fn new(config: &Configuration) -> Result<Self> {
         let layer = config.layer.unwrap_or(Layer::L3);
-        let tun_name = config.name.as_deref().unwrap_or("wintun");
+        let name = config.name.as_deref().unwrap_or("tun3");
 
         let device = if layer == Layer::L3 {
             let wintun_file = &config.platform_config.wintun_file;
@@ -164,9 +124,9 @@ impl Device {
                 wintun::load_from_library(wintun)?
             };
             let guid = config.platform_config.device_guid;
-            let adapter = match wintun::Adapter::open(&wintun, tun_name) {
+            let adapter = match wintun::Adapter::open(&wintun, name) {
                 Ok(a) => a,
-                Err(_) => wintun::Adapter::create(&wintun, tun_name, tun_name, guid)?,
+                Err(_) => wintun::Adapter::create(&wintun, name, name, guid)?,
             };
 
             #[cfg(feature = "wintun-dns")]
@@ -182,7 +142,14 @@ impl Device {
                 }),
             }
         } else if layer == Layer::L2 {
-            let tap = Tap::new(tun_name.to_owned())?;
+            const HARDWARE_ID: &str = "tap0901";
+            let tap = if let Ok(tap) = TapDevice::open(HARDWARE_ID, name) {
+                tap
+            } else {
+                let tap = TapDevice::create(HARDWARE_ID)?;
+                tap.set_name(name)?;
+                tap
+            };
             Device {
                 driver: Driver::Tap(tap),
             }
@@ -204,7 +171,7 @@ impl Device {
                 tun.recv(buf)
             };
             tap=>{
-               tap.recv(buf)
+               tap.read(buf)
             }
         )
     }
@@ -217,7 +184,7 @@ impl Device {
                 tun.send(buf)
             };
             tap=>{
-               tap.send(buf)
+               tap.write(buf)
             }
         )
     }
@@ -228,7 +195,7 @@ impl Device {
                 tun.get_session().shutdown().map_err(|e|io::Error::new(io::ErrorKind::Other,format!("{:?}",e)))
             };
             tap=>{
-               tap.shutdown()
+               tap.down()
             }
         )
     }
@@ -242,7 +209,7 @@ impl AbstractDevice for Device {
                 Ok(tun.session.get_adapter().get_name()?)
             };
             tap=>{
-               Ok(tap.name()?)
+               Ok(tap.get_name()?)
             }
         )
     }
@@ -269,7 +236,11 @@ impl AbstractDevice for Device {
                 }
             };
             tap=>{
-               tap.enabled(value)?;
+                 if value{
+                    tap.up()?
+                 }else{
+                     tap.down()?
+                }
             }
         );
         Ok(())
@@ -289,7 +260,7 @@ impl AbstractDevice for Device {
                     .ok_or(Error::InvalidConfig)
             };
             tap=>{
-                tap.address()
+                tap.get_address().map_err(|e|e.into())
             }
         )
     }
@@ -311,7 +282,7 @@ impl AbstractDevice for Device {
                 .ok_or(Error::InvalidConfig)
             };
             tap=>{
-                tap.destination()
+                tap.get_destination().map_err(|e|e.into())
             }
         )
     }
@@ -327,7 +298,7 @@ impl AbstractDevice for Device {
                 .map_err(Error::WintunError)
             };
             tap=>{
-               tap.netmask()
+               tap.get_netmask().map_err(|e|e.into())
             }
         )
     }
@@ -361,7 +332,7 @@ impl AbstractDevice for Device {
                 Ok(mtu as _)
             };
             tap=>{
-                let mtu = tap.mtu()?;
+                let mtu = tap.get_mtu()?;
                  Ok(mtu as _)
             }
         )
@@ -376,7 +347,23 @@ impl AbstractDevice for Device {
                 Ok(())
             };
             tap=>{
-                tap.set_mtu(mtu as u32).map_err(|e|e.into())
+                tap.set_mtu(mtu).map_err(|e|e.into())
+            }
+        )
+    }
+
+    fn set_mac_address(&self, _eth_addr: [u8; ETHER_ADDR_LEN as usize]) -> Result<()> {
+        Err(io::Error::from(io::ErrorKind::Unsupported))?
+    }
+
+    fn get_mac_address(&self) -> Result<[u8; ETHER_ADDR_LEN as usize]> {
+        driver_case!(
+            &self.driver;
+            _tun=>{
+                Err(io::Error::from(io::ErrorKind::Unsupported))?
+            };
+            tap=>{
+                tap.get_mac().map_err(|e|e.into())
             }
         )
     }
@@ -423,137 +410,137 @@ impl Tun {
         self.write_by_ref(buf)
     }
 }
-
-pub struct Tap {
-    handle: HANDLE,
-    index: u32,
-    luid: NET_LUID,
-    #[allow(dead_code)]
-    mac: [u8; 6],
-}
-unsafe impl Send for Tap {}
-unsafe impl Sync for Tap {}
-impl Drop for Tap {
-    fn drop(&mut self) {
-        if let Err(e) = self.shutdown() {
-            log::warn!("shutdown={:?}", e)
-        }
-        if let Err(e) = ffi::close_handle(self.handle) {
-            log::warn!("close_handle={:?}", e)
-        }
-    }
-}
-impl Tap {
-    pub(crate) fn new(name: String) -> std::io::Result<Self> {
-        let luid = ffi::alias_to_luid(&encode_utf16(&name)).map_err(|e| {
-            io::Error::new(e.kind(), format!("alias_to_luid name={},err={:?}", name, e))
-        })?;
-        let guid = ffi::luid_to_guid(&luid)
-            .and_then(|guid| ffi::string_from_guid(&guid))
-            .map_err(|e| {
-                io::Error::new(e.kind(), format!("luid_to_guid name={},err={:?}", name, e))
-            })?;
-        let path = format!(r"\\.\Global\{}.tap", decode_utf16(&guid));
-        let handle = ffi::create_file(
-            &encode_utf16(&path),
-            GENERIC_READ | GENERIC_WRITE,
-            FILE_SHARE_READ | FILE_SHARE_WRITE,
-            OPEN_EXISTING,
-            FILE_ATTRIBUTE_SYSTEM | FILE_FLAG_OVERLAPPED,
-        )
-        .map_err(|e| io::Error::new(e.kind(), format!("tap name={},err={:?}", name, e)))?;
-
-        let mut mac = [0u8; 6];
-        ffi::device_io_control(handle, TAP_WIN_IOCTL_GET_MAC, &(), &mut mac)
-            .map_err(|e| {
-                io::Error::new(
-                    e.kind(),
-                    format!("TAP_WIN_IOCTL_CONFIG_TUN name={},err={:?}", name, e),
-                )
-            })
-            .map_err(|e| io::Error::new(e.kind(), format!("TAP_WIN_IOCTL_GET_MAC,err={:?}", e)))?;
-        let index = ffi::luid_to_index(&luid)?;
-        let tap = Self {
-            handle,
-            index,
-            luid,
-            mac,
-        };
-        Ok(tap)
-    }
-
-    pub fn write_by_ref(&self, buf: &[u8]) -> io::Result<usize> {
-        ffi::write_file(self.handle, buf).map(|res| res as _)
-    }
-    pub fn read_by_ref(&self, buf: &mut [u8]) -> io::Result<usize> {
-        ffi::read_file(self.handle, buf).map(|res| res as usize)
-    }
-    pub fn enabled(&self, value: bool) -> io::Result<()> {
-        let status: u32 = if value { 1 } else { 0 };
-        ffi::device_io_control(
-            self.handle,
-            TAP_WIN_IOCTL_SET_MEDIA_STATUS,
-            &status,
-            &mut (),
-        )
-    }
-    /// Recv a packet from tun device
-    pub fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
-        self.read_by_ref(buf)
-    }
-
-    /// Send a packet to tun device
-    pub fn send(&self, buf: &[u8]) -> io::Result<usize> {
-        self.write_by_ref(buf)
-    }
-    pub fn name(&self) -> std::io::Result<String> {
-        ffi::luid_to_alias(&self.luid).map(|name| decode_utf16(&name))
-    }
-    pub fn set_name(&self, _name: &str) -> std::io::Result<()> {
-        unimplemented!()
-    }
-    pub fn shutdown(&self) -> io::Result<()> {
-        self.enabled(false)
-    }
-
-    pub fn set_ip(&self, address: IpAddr, mask: IpAddr) -> io::Result<()> {
-        netsh::set_interface_ip(self.index, address, mask, None)
-    }
-
-    pub fn address(&self) -> Result<IpAddr> {
-        unimplemented!()
-    }
-    pub fn netmask(&self) -> Result<IpAddr> {
-        unimplemented!()
-    }
-    pub fn set_address(&self, _address: Ipv4Addr) -> io::Result<()> {
-        unimplemented!()
-    }
-    pub fn mtu(&self) -> io::Result<u32> {
-        let mut mtu = 0;
-        ffi::device_io_control(self.handle, TAP_WIN_IOCTL_GET_MTU, &(), &mut mtu).map(|_| mtu)
-    }
-
-    pub fn set_mtu(&self, value: u32) -> io::Result<()> {
-        netsh::set_interface_mtu(self.index, value)
-    }
-    pub fn destination(&self) -> Result<IpAddr> {
-        unimplemented!()
-    }
-    pub fn set_destination(&self, _address: Ipv4Addr) -> Result<()> {
-        unimplemented!()
-    }
-}
-
-fn encode_utf16(string: &str) -> Vec<u16> {
-    use std::iter::once;
-    string.encode_utf16().chain(once(0)).collect()
-}
-
-fn decode_utf16(string: &[u16]) -> String {
-    let end = string.iter().position(|b| *b == 0).unwrap_or(string.len());
-    String::from_utf16_lossy(&string[..end])
-}
-const fn ctl_code(device_type: DWORD, function: DWORD, method: DWORD, access: DWORD) -> DWORD {
-    (device_type << 16) | (access << 14) | (function << 2) | method
-}
+//
+// pub struct Tap {
+//     handle: HANDLE,
+//     index: u32,
+//     luid: NET_LUID,
+//     #[allow(dead_code)]
+//     mac: [u8; 6],
+// }
+// unsafe impl Send for Tap {}
+// unsafe impl Sync for Tap {}
+// impl Drop for Tap {
+//     fn drop(&mut self) {
+//         if let Err(e) = self.shutdown() {
+//             log::warn!("shutdown={:?}", e)
+//         }
+//         if let Err(e) = ffi::close_handle(self.handle) {
+//             log::warn!("close_handle={:?}", e)
+//         }
+//     }
+// }
+// impl Tap {
+//     pub(crate) fn new(name: String) -> std::io::Result<Self> {
+//         let luid = ffi::alias_to_luid(&encode_utf16(&name)).map_err(|e| {
+//             io::Error::new(e.kind(), format!("alias_to_luid name={},err={:?}", name, e))
+//         })?;
+//         let guid = ffi::luid_to_guid(&luid)
+//             .and_then(|guid| ffi::string_from_guid(&guid))
+//             .map_err(|e| {
+//                 io::Error::new(e.kind(), format!("luid_to_guid name={},err={:?}", name, e))
+//             })?;
+//         let path = format!(r"\\.\Global\{}.tap", decode_utf16(&guid));
+//         let handle = ffi::create_file(
+//             &encode_utf16(&path),
+//             GENERIC_READ | GENERIC_WRITE,
+//             FILE_SHARE_READ | FILE_SHARE_WRITE,
+//             OPEN_EXISTING,
+//             FILE_ATTRIBUTE_SYSTEM | FILE_FLAG_OVERLAPPED,
+//         )
+//         .map_err(|e| io::Error::new(e.kind(), format!("tap name={},err={:?}", name, e)))?;
+//
+//         let mut mac = [0u8; 6];
+//         ffi::device_io_control(handle, TAP_WIN_IOCTL_GET_MAC, &(), &mut mac)
+//             .map_err(|e| {
+//                 io::Error::new(
+//                     e.kind(),
+//                     format!("TAP_WIN_IOCTL_CONFIG_TUN name={},err={:?}", name, e),
+//                 )
+//             })
+//             .map_err(|e| io::Error::new(e.kind(), format!("TAP_WIN_IOCTL_GET_MAC,err={:?}", e)))?;
+//         let index = ffi::luid_to_index(&luid)?;
+//         let tap = Self {
+//             handle,
+//             index,
+//             luid,
+//             mac,
+//         };
+//         Ok(tap)
+//     }
+//
+//     pub fn write_by_ref(&self, buf: &[u8]) -> io::Result<usize> {
+//         ffi::write_file(self.handle, buf).map(|res| res as _)
+//     }
+//     pub fn read_by_ref(&self, buf: &mut [u8]) -> io::Result<usize> {
+//         ffi::read_file(self.handle, buf).map(|res| res as usize)
+//     }
+//     pub fn enabled(&self, value: bool) -> io::Result<()> {
+//         let status: u32 = if value { 1 } else { 0 };
+//         ffi::device_io_control(
+//             self.handle,
+//             TAP_WIN_IOCTL_SET_MEDIA_STATUS,
+//             &status,
+//             &mut (),
+//         )
+//     }
+//     /// Recv a packet from tun device
+//     pub fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
+//         self.read_by_ref(buf)
+//     }
+//
+//     /// Send a packet to tun device
+//     pub fn send(&self, buf: &[u8]) -> io::Result<usize> {
+//         self.write_by_ref(buf)
+//     }
+//     pub fn name(&self) -> std::io::Result<String> {
+//         ffi::luid_to_alias(&self.luid).map(|name| decode_utf16(&name))
+//     }
+//     pub fn set_name(&self, _name: &str) -> std::io::Result<()> {
+//         unimplemented!()
+//     }
+//     pub fn shutdown(&self) -> io::Result<()> {
+//         self.enabled(false)
+//     }
+//
+//     pub fn set_ip(&self, address: IpAddr, mask: IpAddr) -> io::Result<()> {
+//         netsh::set_interface_ip(self.index, address, mask, None)
+//     }
+//
+//     pub fn address(&self) -> Result<IpAddr> {
+//         unimplemented!()
+//     }
+//     pub fn netmask(&self) -> Result<IpAddr> {
+//         unimplemented!()
+//     }
+//     pub fn set_address(&self, _address: Ipv4Addr) -> io::Result<()> {
+//         unimplemented!()
+//     }
+//     pub fn mtu(&self) -> io::Result<u32> {
+//         let mut mtu = 0;
+//         ffi::device_io_control(self.handle, TAP_WIN_IOCTL_GET_MTU, &(), &mut mtu).map(|_| mtu)
+//     }
+//
+//     pub fn set_mtu(&self, value: u32) -> io::Result<()> {
+//         netsh::set_interface_mtu(self.index, value)
+//     }
+//     pub fn destination(&self) -> Result<IpAddr> {
+//         unimplemented!()
+//     }
+//     pub fn set_destination(&self, _address: Ipv4Addr) -> Result<()> {
+//         unimplemented!()
+//     }
+// }
+//
+// fn encode_utf16(string: &str) -> Vec<u16> {
+//     use std::iter::once;
+//     string.encode_utf16().chain(once(0)).collect()
+// }
+//
+// fn decode_utf16(string: &[u16]) -> String {
+//     let end = string.iter().position(|b| *b == 0).unwrap_or(string.len());
+//     String::from_utf16_lossy(&string[..end])
+// }
+// const fn ctl_code(device_type: DWORD, function: DWORD, method: DWORD, access: DWORD) -> DWORD {
+//     (device_type << 16) | (access << 14) | (function << 2) | method
+// }

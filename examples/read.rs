@@ -12,8 +12,9 @@
 //
 //  0. You just DO WHAT THE FUCK YOU WANT TO.
 
+use std::sync::Arc;
 use std::sync::mpsc::Receiver;
-use tun2::BoxError;
+use tun2::{AbstractDevice, BoxError, Layer};
 
 fn main() -> Result<(), BoxError> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("trace")).init();
@@ -43,12 +44,15 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     let mut config = tun2::Configuration::default();
 
     config
-        .address_with_prefix((10, 0, 0, 9), 24)
+        .address_with_prefix((10, 0, 0, 39), 24)
         .destination((10, 0, 0, 1))
+        .layer(Layer::L2)
+        .name("tun39")
         .up();
 
-    let dev = tun2::create(&config)?;
-    std::thread::spawn(move || {
+    let dev = Arc::new(tun2::create(&config)?);
+    let dev_t = dev.clone();
+    let join =  std::thread::spawn(move || {
         let mut buf = [0; 4096];
         loop {
             let amount = dev.recv(&mut buf)?;
@@ -58,5 +62,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
         Ok::<(), BoxError>(())
     });
     quit.recv().expect("Quit error.");
+    dev_t.enabled(false)?;
+    join.join().unwrap().unwrap();
     Ok(())
 }

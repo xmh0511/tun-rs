@@ -3,7 +3,13 @@ use std::net::IpAddr;
 use std::os::windows::process::CommandExt;
 
 use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
-
+pub fn set_interface_name(old_name: &str, new_name: &str) -> io::Result<()> {
+    let cmd = format!(
+        " netsh interface set interface name={:?} newname={:?}",
+        old_name, new_name
+    );
+    exe_cmd(&cmd)
+}
 pub fn set_interface_metric(index: u32, metric: u16) -> io::Result<()> {
     let cmd = format!(
         "netsh interface ip set interface {} metric={}",
