@@ -5,9 +5,9 @@ use packet::{builder::Builder, icmp, ip, Packet};
 use packet::{ether, PacketMut};
 use tokio::sync::mpsc::Receiver;
 #[allow(unused_imports)]
-use tun2::Layer;
+use tun_rs::Layer;
 #[allow(unused_imports)]
-use tun2::{self, AbstractDevice, BoxError, Configuration};
+use tun_rs::{self, AbstractDevice, BoxError, Configuration};
 
 #[tokio::main]
 async fn main() -> Result<(), BoxError> {
@@ -35,7 +35,7 @@ async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
         .layer(Layer::L2)
         .up();
 
-    let dev = tun2::create_as_async(&config)?;
+    let dev = tun_rs::create_as_async(&config)?;
     let mut buf = vec![0; 65536];
     loop {
         tokio::select! {
