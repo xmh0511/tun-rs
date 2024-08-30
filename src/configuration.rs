@@ -56,6 +56,7 @@ pub struct Configuration {
     ))]
     #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
     pub(crate) mac_addr: Option<[u8; 6]>,
+    #[allow(dead_code)]
     pub(crate) address: Option<IpAddr>,
     #[cfg(any(
         target_os = "windows",
