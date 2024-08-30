@@ -2,6 +2,7 @@
 use packet::{builder::Builder, icmp, ip, Packet};
 #[allow(unused_imports)]
 use std::sync::{mpsc::Receiver, Arc};
+#[allow(unused_imports)]
 use tun_rs::{AbstractDevice, BoxError};
 
 fn main() -> Result<(), BoxError> {
