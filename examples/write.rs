@@ -42,21 +42,13 @@ fn main_entry(_quit: Receiver<()>) -> Result<(), BoxError> {
     target_os = "freebsd",
 ))]
 fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
-    use tun2::AbstractDevice;
-
     let mut config = tun2::Configuration::default();
 
     config
         .address_with_prefix((10, 0, 0, 9), 24)
         // .destination((10, 0, 0, 1))
-        .name("tap3")
         .up();
 
-    #[cfg(any(target_os = "freebsd", target_os = "linux"))]
-    {
-        use tun2::Layer;
-        config.layer(Layer::L2);
-    }
     #[cfg(target_os = "macos")]
     config.platform_config(|config| {
         config.packet_information(false);
@@ -73,16 +65,6 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
         dev2.shutdown().unwrap();
     });
 
-    let device_name = dev.name().unwrap();
-    println!("device name  = {}", device_name);
-    #[cfg(any(target_os = "freebsd", target_os = "linux"))]
-    {
-        dev.enabled(false).unwrap();
-        dev.set_mac_address([0x0, 0x0, 0x0, 0x0, 0x1, 0x1]).unwrap();
-        let r = dev.get_mac_address().unwrap();
-        println!("mac addr = {:x?}", r);
-        dev.enabled(true).unwrap();
-    }
     std::thread::spawn(move || {
         loop {
             let amount = dev.recv(&mut buf);
