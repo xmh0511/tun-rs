@@ -49,6 +49,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     config
         .address_with_prefix((10, 0, 0, 9), 24)
         // .destination((10, 0, 0, 1))
+        .name("tap3")
         .up();
 
     #[cfg(any(target_os = "freebsd", target_os = "linux"))]
@@ -76,9 +77,11 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     println!("device name  = {}", device_name);
     #[cfg(any(target_os = "freebsd", target_os = "linux"))]
     {
+        dev.enabled(false).unwrap();
         dev.set_mac_address([0x0, 0x0, 0x0, 0x0, 0x1, 0x1]).unwrap();
         let r = dev.get_mac_address().unwrap();
         println!("mac addr = {:x?}", r);
+        dev.enabled(true).unwrap();
     }
     std::thread::spawn(move || {
         loop {

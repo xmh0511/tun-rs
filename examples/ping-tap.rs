@@ -16,9 +16,9 @@ use std::{fmt, io};
 use packet::{builder::Builder, icmp, ip, Packet};
 use packet::{ether, PacketMut};
 use tokio::sync::mpsc::Receiver;
+use tun2::Layer;
 #[allow(unused_imports)]
 use tun2::{self, AbstractDevice, BoxError, Configuration};
-use tun2::Layer;
 
 #[tokio::main]
 async fn main() -> Result<(), BoxError> {
@@ -28,7 +28,7 @@ async fn main() -> Result<(), BoxError> {
     ctrlc2::set_async_handler(async move {
         tx.send(()).await.expect("Signal error");
     })
-        .await;
+    .await;
 
     main_entry(rx).await?;
     Ok(())
@@ -37,11 +37,7 @@ async fn main() -> Result<(), BoxError> {
 async fn main_entry(_quit: Receiver<()>) -> Result<(), BoxError> {
     unimplemented!()
 }
-#[cfg(any(
-    target_os = "windows",
-    target_os = "linux",
-    target_os = "freebsd",
-))]
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
 async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
     let mut config = Configuration::default();
 
@@ -87,7 +83,7 @@ async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
     }
     Ok(())
 }
-pub fn ping(packet: &mut ether::Packet<Vec<u8>>)->Result<bool, BoxError>{
+pub fn ping(packet: &mut ether::Packet<Vec<u8>>) -> Result<bool, BoxError> {
     let source = packet.source();
     let destination = packet.destination();
 
@@ -111,7 +107,7 @@ pub fn ping(packet: &mut ether::Packet<Vec<u8>>)->Result<bool, BoxError>{
                     packet.payload_mut().copy_from_slice(&reply);
                     packet.set_destination(source)?;
                     packet.set_source(destination)?;
-                    return Ok(true)
+                    return Ok(true);
                 }
             }
         }
@@ -120,19 +116,19 @@ pub fn ping(packet: &mut ether::Packet<Vec<u8>>)->Result<bool, BoxError>{
     }
     Ok(false)
 }
-pub fn arp(packet: &mut ether::Packet<Vec<u8>>)-> Result<bool, BoxError>{
+pub fn arp(packet: &mut ether::Packet<Vec<u8>>) -> Result<bool, BoxError> {
     const MAC: [u8; 6] = [0xf, 0xf, 0xf, 0xf, 0xe, 0x9];
     let sender_h = packet.source();
     let target_h = packet.source();
     let mut arp_packet = ArpPacket::new(packet.payload_mut())?;
-    println!("arp_packet={:?}",arp_packet);
-    if arp_packet.op_code() !=1 {
-        return Ok(false)
+    println!("arp_packet={:?}", arp_packet);
+    if arp_packet.op_code() != 1 {
+        return Ok(false);
     }
     let sender_p: [u8; 4] = arp_packet.sender_protocol_addr().try_into().unwrap();
     let target_p: [u8; 4] = arp_packet.target_protocol_addr().try_into().unwrap();
     if target_p == [0, 0, 0, 0] || sender_p == [0, 0, 0, 0] || target_p == sender_p {
-        return Ok(false)
+        return Ok(false);
     }
     arp_packet.set_op_code(2);
     arp_packet.set_target_hardware_addr(&sender_h.octets());
@@ -143,8 +139,6 @@ pub fn arp(packet: &mut ether::Packet<Vec<u8>>)-> Result<bool, BoxError>{
     packet.set_source(target_h)?;
     Ok(true)
 }
-
-
 
 /// 地址解析协议，由IP地址找到MAC地址
 /// https://www.ietf.org/rfc/rfc6747.txt
