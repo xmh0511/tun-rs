@@ -51,7 +51,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
         // .destination((10, 0, 0, 1))
         .up();
 
-    #[cfg(target_os = "freebsd")]
+    #[cfg(any(target_os = "freebsd", target_os = "linux"))]
     {
         use tun2::Layer;
         config.layer(Layer::L2);
@@ -74,7 +74,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
 
     let device_name = dev.name().unwrap();
     println!("device name  = {}", device_name);
-    #[cfg(target_os = "freebsd")]
+    #[cfg(any(target_os = "freebsd", target_os = "linux"))]
     {
         dev.set_mac_address([0x0, 0x0, 0x0, 0x0, 0x1, 0x1]).unwrap();
         let r = dev.get_mac_address().unwrap();

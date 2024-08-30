@@ -15,15 +15,15 @@
 use crate::configuration::configure;
 use crate::{
     configuration::{Configuration, Layer},
-    device::AbstractDevice,
+    device::{AbstractDevice, ETHER_ADDR_LEN},
     error::{Error, Result},
     platform::linux::sys::*,
     platform::posix::{ipaddr_to_sockaddr, sockaddr_union, Fd, Tun},
     IntoAddress,
 };
 use libc::{
-    self, c_char, c_short, ifreq, AF_INET, IFF_MULTI_QUEUE, IFF_NO_PI, IFF_RUNNING, IFF_TAP,
-    IFF_TUN, IFF_UP, IFNAMSIZ, O_RDWR, SOCK_DGRAM,
+    self, c_char, c_short, ifreq, AF_INET, ARPHRD_ETHER, IFF_MULTI_QUEUE, IFF_NO_PI, IFF_RUNNING,
+    IFF_TAP, IFF_TUN, IFF_UP, IFNAMSIZ, O_RDWR, SOCK_DGRAM,
 };
 use std::os::fd::FromRawFd;
 use std::{
@@ -360,6 +360,26 @@ impl AbstractDevice for Device {
 
     fn packet_information(&self) -> bool {
         self.tun.packet_information()
+    }
+
+    fn set_mac_address(&self, eth_addr: [u8; ETHER_ADDR_LEN as usize]) -> Result<()> {
+        unsafe {
+            let mut req = self.request()?;
+            req.ifr_ifru.ifru_hwaddr.sa_family = ARPHRD_ETHER;
+            req.ifr_ifru.ifru_hwaddr.sa_data[0..ETHER_ADDR_LEN as usize]
+                .copy_from_slice(eth_addr.map(|c| c as i8).as_slice());
+            if let Err(err) = siocsifhwaddr(self.ctl.as_raw_fd(), &req) {
+                return Err(io::Error::from(err).into());
+            }
+            Ok(())
+        }
+    }
+
+    fn get_mac_address(&self) -> Result<[u8; ETHER_ADDR_LEN as usize]> {
+        let mac = mac_address_by_name(&self.name()?)
+            .map_err(|e| io::Error::other(e.to_string()))?
+            .ok_or(Error::InvalidConfig)?;
+        Ok(mac.bytes())
     }
 }
 
