@@ -1,47 +1,16 @@
 #![allow(unused_variables)]
 
-use std::os::fd::FromRawFd;
-use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
-
-use crate::{
-    device::AbstractDevice,
-    platform::posix::{Fd, Tun},
-};
+use crate::{device::AbstractDevice, platform::posix::Tun};
 
 /// A TUN device for iOS.
 pub struct Device {
-    tun: Tun,
+    pub(crate) tun: Tun,
 }
-
-impl FromRawFd for Device {
-    unsafe fn from_raw_fd(fd: RawFd) -> Self {
-        let tun = Fd::new(fd, true).unwrap();
-        Device { tun: Tun::new(tun) }
-    }
-}
-
 impl Device {
-    /// Set non-blocking mode
-    pub fn set_nonblock(&self) -> std::io::Result<()> {
-        self.tun.set_nonblock()
-    }
-
-    /// Recv a packet from tun device
-    pub(crate) fn recv(&self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.tun.recv(buf)
-    }
-
-    /// Send a packet to tun device
-    pub(crate) fn send(&self, buf: &[u8]) -> std::io::Result<usize> {
-        self.tun.send(buf)
-    }
-
-    #[cfg(feature = "experimental")]
-    pub(crate) fn shutdown(&self) -> std::io::Result<()> {
-        self.tun.shutdown()
+    pub(crate) fn from_tun(tun: Tun) -> Self {
+        Self { tun }
     }
 }
-
 impl AbstractDevice for Device {
     fn ignore_packet_info(&self) -> bool {
         self.tun.ignore_packet_info()
@@ -49,17 +18,5 @@ impl AbstractDevice for Device {
 
     fn set_ignore_packet_info(&self, ign: bool) {
         self.tun.set_ignore_packet_info(ign)
-    }
-}
-
-impl AsRawFd for Device {
-    fn as_raw_fd(&self) -> RawFd {
-        self.tun.as_raw_fd()
-    }
-}
-
-impl IntoRawFd for Device {
-    fn into_raw_fd(self) -> RawFd {
-        self.tun.into_raw_fd()
     }
 }

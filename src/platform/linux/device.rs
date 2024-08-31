@@ -1,3 +1,18 @@
+use std::{
+    ffi::CString,
+    io::{self},
+    mem,
+    net::IpAddr,
+    os::unix::io::{AsRawFd, RawFd},
+    ptr,
+};
+
+use libc::{
+    self, c_char, c_short, ifreq, AF_INET, ARPHRD_ETHER, IFF_MULTI_QUEUE, IFF_NO_PI, IFF_RUNNING,
+    IFF_TAP, IFF_TUN, IFF_UP, IFNAMSIZ, O_RDWR, SOCK_DGRAM,
+};
+use mac_address::mac_address_by_name;
+
 use crate::configuration::configure;
 use crate::{
     configuration::{Configuration, Layer},
@@ -7,32 +22,12 @@ use crate::{
     platform::posix::{ipaddr_to_sockaddr, sockaddr_union, Fd, Tun},
     IntoAddress,
 };
-use libc::{
-    self, c_char, c_short, ifreq, AF_INET, ARPHRD_ETHER, IFF_MULTI_QUEUE, IFF_NO_PI, IFF_RUNNING,
-    IFF_TAP, IFF_TUN, IFF_UP, IFNAMSIZ, O_RDWR, SOCK_DGRAM,
-};
-use mac_address::mac_address_by_name;
-use std::os::fd::FromRawFd;
-use std::{
-    ffi::CString,
-    io::{self},
-    mem,
-    net::IpAddr,
-    os::unix::io::{AsRawFd, IntoRawFd, RawFd},
-    ptr,
-};
 
 const OVERWRITE_SIZE: usize = std::mem::size_of::<libc::__c_anonymous_ifr_ifru>();
 
 /// A TUN device using the TUN/TAP Linux driver.
 pub struct Device {
-    tun: Tun,
-}
-impl FromRawFd for Device {
-    unsafe fn from_raw_fd(fd: RawFd) -> Self {
-        let tun = Fd::new(fd, true).unwrap();
-        Device { tun: Tun::new(tun) }
-    }
+    pub(crate) tun: Tun,
 }
 
 impl Device {
@@ -84,12 +79,9 @@ impl Device {
             Ok(device)
         }
     }
-
-    /// Prepare a new request.
-    unsafe fn request(&self) -> Result<ifreq> {
-        request(&self.name()?)
+    pub(crate) fn from_tun(tun: Tun) -> Self {
+        Self { tun }
     }
-
     /// Make the device persistent.
     pub fn persist(&self) -> Result<()> {
         unsafe {
@@ -122,24 +114,11 @@ impl Device {
             }
         }
     }
-
-    /// Set non-blocking mode
-    pub fn set_nonblock(&self) -> io::Result<()> {
-        self.tun.set_nonblock()
-    }
-
-    /// Recv a packet from tun device
-    pub(crate) fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
-        self.tun.recv(buf)
-    }
-
-    /// Send a packet to tun device
-    pub(crate) fn send(&self, buf: &[u8]) -> io::Result<usize> {
-        self.tun.send(buf)
-    }
-    #[cfg(feature = "experimental")]
-    pub(crate) fn shutdown(&self) -> io::Result<()> {
-        self.tun.shutdown()
+}
+impl Device {
+    /// Prepare a new request.
+    unsafe fn request(&self) -> Result<ifreq> {
+        request(&self.name()?)
     }
     fn set_address(&self, value: IpAddr) -> Result<()> {
         unsafe {
@@ -175,7 +154,7 @@ impl Device {
     }
 }
 unsafe fn ctl() -> io::Result<Fd> {
-    Ok(Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)?)
+    Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)
 }
 unsafe fn name(fd: RawFd) -> io::Result<String> {
     let mut req: ifreq = mem::zeroed();
@@ -361,18 +340,6 @@ impl AbstractDevice for Device {
             .map_err(|e| Error::String(e.to_string()))?
             .ok_or(Error::InvalidConfig)?;
         Ok(mac.bytes())
-    }
-}
-
-impl AsRawFd for Device {
-    fn as_raw_fd(&self) -> RawFd {
-        self.tun.as_raw_fd()
-    }
-}
-
-impl IntoRawFd for Device {
-    fn into_raw_fd(self) -> RawFd {
-        self.tun.into_raw_fd()
     }
 }
 

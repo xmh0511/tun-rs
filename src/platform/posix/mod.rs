@@ -10,3 +10,5 @@ pub(crate) use self::fd::Fd;
 
 mod tun;
 pub use self::tun::Tun;
+
+pub mod device;

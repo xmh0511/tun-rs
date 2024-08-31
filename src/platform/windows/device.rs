@@ -150,7 +150,7 @@ impl Device {
     }
 
     /// Recv a packet from tun device
-    pub(crate) fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
+    pub fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
         driver_case!(
             &self.driver;
             tun =>{
@@ -163,7 +163,7 @@ impl Device {
     }
 
     /// Send a packet to tun device
-    pub(crate) fn send(&self, buf: &[u8]) -> io::Result<usize> {
+    pub fn send(&self, buf: &[u8]) -> io::Result<usize> {
         driver_case!(
             &self.driver;
             tun=>{
@@ -174,7 +174,7 @@ impl Device {
             }
         )
     }
-    pub(crate) fn shutdown(&self) -> io::Result<()> {
+    pub fn shutdown(&self) -> io::Result<()> {
         driver_case!(
             &self.driver;
             tun=>{

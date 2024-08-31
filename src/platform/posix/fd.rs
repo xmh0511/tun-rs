@@ -5,8 +5,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use libc::{self, fcntl, F_GETFL, F_SETFL, O_NONBLOCK};
 
-use crate::error::{Error, Result};
-
 /// POSIX file descriptor support for `io` traits.
 pub(crate) struct Fd {
     pub(crate) inner: RawFd,
@@ -18,9 +16,9 @@ pub(crate) struct Fd {
 }
 
 impl Fd {
-    pub fn new(value: RawFd, close_fd_on_drop: bool) -> Result<Self> {
+    pub fn new(value: RawFd, close_fd_on_drop: bool) -> io::Result<Self> {
         if value < 0 {
-            return Err(Error::InvalidDescriptor);
+            return Err(io::Error::from(io::ErrorKind::InvalidInput));
         }
         Ok(Fd {
             inner: value,

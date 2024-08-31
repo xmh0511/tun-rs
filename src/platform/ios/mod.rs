@@ -1,7 +1,7 @@
 mod device;
 
 pub use device::Device;
-use std::os::fd::{FromRawFd, RawFd};
+use std::os::fd::RawFd;
 
 use crate::configuration::Configuration;
 use crate::error::Result;
@@ -10,14 +10,13 @@ use crate::error::Result;
 #[derive(Copy, Clone, Debug, Default)]
 pub struct PlatformConfig;
 
-use super::Device as DeviceWrapper;
 /// Create a TUN device with the given name.
-pub fn create(_configuration: &Configuration) -> Result<DeviceWrapper> {
+pub fn create(_configuration: &Configuration) -> Result<Device> {
     unimplemented!()
 }
 
 /// # Safety
 /// The fd passed in must be an owned file descriptor; in particular, it must be open.
-pub unsafe fn create_with_fd(fd: RawFd) -> Result<DeviceWrapper> {
-    Ok(DeviceWrapper(Device::from_raw_fd(fd)))
+pub unsafe fn create_with_fd(fd: RawFd) -> Result<Device> {
+    Ok(Device::from_fd(fd)?)
 }

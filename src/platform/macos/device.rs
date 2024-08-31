@@ -18,15 +18,7 @@ use libc::{
     self, c_char, c_short, c_uint, c_void, sockaddr, socklen_t, AF_INET, AF_SYSTEM, AF_SYS_CONTROL,
     IFF_RUNNING, IFF_UP, IFNAMSIZ, PF_SYSTEM, SOCK_DGRAM, SYSPROTO_CONTROL, UTUN_OPT_IFNAME,
 };
-use std::os::fd::FromRawFd;
-use std::{
-    ffi::CStr,
-    io, mem,
-    net::IpAddr,
-    os::unix::io::{AsRawFd, IntoRawFd, RawFd},
-    ptr,
-    sync::Mutex,
-};
+use std::{ffi::CStr, io, mem, net::IpAddr, os::unix::io::AsRawFd, ptr, sync::Mutex};
 
 #[derive(Clone, Copy, Debug)]
 struct Route {
@@ -37,20 +29,12 @@ struct Route {
 
 /// A TUN device using the TUN macOS driver.
 pub struct Device {
-    tun: posix::Tun,
+    pub(crate) tun: Tun,
     alias_lock: Mutex<()>,
 }
-impl FromRawFd for Device {
-    unsafe fn from_raw_fd(fd: RawFd) -> Self {
-        let tun = Fd::new(fd, true).unwrap();
-        Device {
-            tun: Tun::new(tun),
-            alias_lock: Mutex::new(()),
-        }
-    }
-}
+
 unsafe fn ctl() -> io::Result<Fd> {
-    Ok(Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)?)
+    Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)
 }
 impl Device {
     /// Create a new `Device` for the given `Configuration`.
@@ -122,7 +106,12 @@ impl Device {
         crate::configuration::configure(&device, config)?;
         Ok(device)
     }
-
+    pub(crate) fn from_tun(tun: Tun) -> Self {
+        Self {
+            tun,
+            alias_lock: Mutex::new(()),
+        }
+    }
     /// Prepare a new request.
     /// # Safety
     unsafe fn request(&self) -> Result<libc::ifreq> {
@@ -198,11 +187,6 @@ impl Device {
         }
     }
 
-    /// Set non-blocking mode
-    pub fn set_nonblock(&self) -> io::Result<()> {
-        self.tun.set_nonblock()
-    }
-
     fn set_route(&self, old_route: Option<Route>, new_route: Route) -> Result<()> {
         if let Some(v) = old_route {
             let prefix_len =
@@ -240,20 +224,6 @@ impl Device {
         Ok(())
     }
 
-    /// Recv a packet from tun device
-    pub(crate) fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
-        self.tun.recv(buf)
-    }
-
-    /// Send a packet to tun device
-    pub(crate) fn send(&self, buf: &[u8]) -> io::Result<usize> {
-        self.tun.send(buf)
-    }
-
-    #[cfg(feature = "experimental")]
-    pub(crate) fn shutdown(&self) -> io::Result<()> {
-        self.tun.shutdown()
-    }
     // fn set_address(&self, value: IpAddr) -> Result<()> {
     //     let IpAddr::V4(value) = value else {
     //         unimplemented!("do not support IPv6 yet")
@@ -480,18 +450,6 @@ impl AbstractDevice for Device {
 
     fn set_ignore_packet_info(&self, ign: bool) {
         self.tun.set_ignore_packet_info(ign)
-    }
-}
-
-impl AsRawFd for Device {
-    fn as_raw_fd(&self) -> RawFd {
-        self.tun.as_raw_fd()
-    }
-}
-
-impl IntoRawFd for Device {
-    fn into_raw_fd(self) -> RawFd {
-        self.tun.into_raw_fd()
     }
 }
 

@@ -122,6 +122,7 @@ impl Tun {
         self.fd.set_nonblock()
     }
     #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+    #[inline]
     pub(crate) fn send(&self, in_buf: &[u8]) -> io::Result<usize> {
         self.fd.write(in_buf)
     }
@@ -150,6 +151,7 @@ impl Tun {
         self.fd.write(in_buf)
     }
     #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+    #[inline]
     pub(crate) fn recv(&self, in_buf: &mut [u8]) -> io::Result<usize> {
         self.fd.read(in_buf)
     }

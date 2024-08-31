@@ -1,5 +1,7 @@
 use std::sync::mpsc::Receiver;
+#[allow(unused_imports)]
 use std::sync::Arc;
+#[allow(unused_imports)]
 use tun_rs::{AbstractDevice, BoxError};
 
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
