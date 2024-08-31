@@ -5,16 +5,6 @@ use crate::AbstractDevice;
 #[allow(unused_imports)]
 use std::net::IpAddr;
 
-cfg_if::cfg_if! {
-    if #[cfg(windows)] {
-        #[allow(dead_code)]
-        #[derive(Clone, Debug)]
-        pub(crate) struct WinHandle(std::os::windows::raw::HANDLE);
-        unsafe impl Send for WinHandle {}
-        unsafe impl Sync for WinHandle {}
-    }
-}
-
 /// TUN interface OSI layer of operation.
 #[derive(Clone, Copy, Default, Debug, Eq, PartialEq)]
 pub enum Layer {
@@ -81,10 +71,6 @@ pub struct Configuration {
     pub(crate) enabled: Option<bool>,
     #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
     pub(crate) layer: Option<Layer>,
-    #[cfg(windows)]
-    pub(crate) raw_handle: Option<WinHandle>,
-    #[cfg(windows)]
-    pub(crate) ring_capacity: Option<u32>,
     #[cfg(windows)]
     pub(crate) metric: Option<u16>,
 }
@@ -194,16 +180,6 @@ impl Configuration {
         self
     }
 
-    #[cfg(windows)]
-    pub fn raw_handle(&mut self, handle: std::os::windows::raw::HANDLE) -> &mut Self {
-        self.raw_handle = Some(WinHandle(handle));
-        self
-    }
-    #[cfg(windows)]
-    pub fn ring_capacity(&mut self, ring_capacity: u32) -> &mut Self {
-        self.ring_capacity = Some(ring_capacity);
-        self
-    }
     #[cfg(windows)]
     pub fn metric(&mut self, metric: u16) -> &mut Self {
         self.metric = Some(metric);

@@ -120,8 +120,12 @@ impl Device {
                 adapter.set_dns_servers(dns_servers)?;
             }
 
-            let session =
-                adapter.start_session(config.ring_capacity.unwrap_or(wintun::MAX_RING_CAPACITY))?;
+            let session = adapter.start_session(
+                config
+                    .platform_config
+                    .ring_capacity
+                    .unwrap_or(wintun::MAX_RING_CAPACITY),
+            )?;
             Device {
                 driver: Driver::Tun(Tun {
                     session: Arc::new(session),
