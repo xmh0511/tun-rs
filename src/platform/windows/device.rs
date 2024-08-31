@@ -127,9 +127,7 @@ impl Device {
                     .unwrap_or(wintun::MAX_RING_CAPACITY),
             )?;
             Device {
-                driver: Driver::Tun(Tun {
-                    session: Arc::new(session),
-                }),
+                driver: Driver::Tun(Tun { session }),
             }
         } else if layer == Layer::L2 {
             const HARDWARE_ID: &str = "tap0901";
