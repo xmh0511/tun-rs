@@ -51,10 +51,22 @@ impl Driver {
             Driver::Tun(tun) => tun.read_by_ref(buf),
         }
     }
+    pub fn try_read_by_ref(&self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            Driver::Tap(tap) => tap.try_read(buf),
+            Driver::Tun(tun) => tun.try_read_by_ref(buf),
+        }
+    }
     pub fn write_by_ref(&self, buf: &[u8]) -> std::io::Result<usize> {
         match self {
             Driver::Tap(tap) => tap.write(buf),
             Driver::Tun(tun) => tun.write_by_ref(buf),
+        }
+    }
+    pub fn try_write_by_ref(&self, buf: &[u8]) -> std::io::Result<usize> {
+        match self {
+            Driver::Tap(tap) => tap.try_write(buf),
+            Driver::Tun(tun) => tun.try_write_by_ref(buf),
         }
     }
     pub fn receive_blocking(&self) -> std::io::Result<PacketVariant> {
@@ -69,6 +81,30 @@ impl Driver {
                 let mut vec = vec![];
                 vec.extend_from_slice(&buf[..len]);
                 Ok(PacketVariant::Tap(vec.into_boxed_slice()))
+            }
+        }
+    }
+    pub fn try_receive(&self) -> std::io::Result<Option<PacketVariant>> {
+        match self {
+            Driver::Tun(tun) => match tun.session.try_receive()? {
+                None => Ok(None),
+                Some(packet) => Ok(Some(PacketVariant::Tun(packet))),
+            },
+            Driver::Tap(tap) => {
+                let mut buf = [0u8; u16::MAX as usize];
+                match tap.try_read(&mut buf) {
+                    Ok(len) => {
+                        let mut vec = vec![];
+                        vec.extend_from_slice(&buf[..len]);
+                        Ok(Some(PacketVariant::Tap(vec.into_boxed_slice())))
+                    }
+                    Err(e) => {
+                        if e.kind() == io::ErrorKind::WouldBlock {
+                            return Ok(None);
+                        }
+                        Err(e)
+                    }
+                }
             }
         }
     }
@@ -153,28 +189,18 @@ impl Device {
 
     /// Recv a packet from tun device
     pub fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
-        driver_case!(
-            &self.driver;
-            tun =>{
-                tun.recv(buf)
-            };
-            tap=>{
-               tap.read(buf)
-            }
-        )
+        self.driver.read_by_ref(buf)
+    }
+    pub fn try_recv(&self, buf: &mut [u8]) -> io::Result<usize> {
+        self.driver.try_read_by_ref(buf)
     }
 
     /// Send a packet to tun device
     pub fn send(&self, buf: &[u8]) -> io::Result<usize> {
-        driver_case!(
-            &self.driver;
-            tun=>{
-                tun.send(buf)
-            };
-            tap=>{
-               tap.write(buf)
-            }
-        )
+        self.driver.write_by_ref(buf)
+    }
+    pub fn try_send(&self, buf: &[u8]) -> io::Result<usize> {
+        self.driver.try_write_by_ref(buf)
     }
     pub fn shutdown(&self) -> io::Result<()> {
         driver_case!(
@@ -382,10 +408,24 @@ impl Tun {
             Err(e) => Err(io::Error::new(io::ErrorKind::ConnectionAborted, e)),
         }
     }
+    fn try_read_by_ref(&self, mut buf: &mut [u8]) -> io::Result<usize> {
+        match self.session.try_receive() {
+            Ok(Some(pkt)) => match io::copy(&mut pkt.bytes(), &mut buf) {
+                Ok(n) => Ok(n as usize),
+                Err(e) => Err(e),
+            },
+            Ok(None) => Err(io::Error::from(io::ErrorKind::WouldBlock)),
+            Err(e) => Err(io::Error::new(io::ErrorKind::ConnectionAborted, e)),
+        }
+    }
     fn write_by_ref(&self, mut buf: &[u8]) -> io::Result<usize> {
         let size = buf.len();
         match self.session.allocate_send_packet(size as u16) {
-            Err(e) => Err(io::Error::new(io::ErrorKind::OutOfMemory, e)),
+            Err(e) => match e {
+                // if (GetLastError() != ERROR_BUFFER_OVERFLOW) // Silently drop packets if the ring is full
+                wintun::Error::Io(io_err) => Err(io_err),
+                e => Err(io::Error::new(io::ErrorKind::Other, format!("{}", e))),
+            },
             Ok(mut packet) => match io::copy(&mut buf, &mut packet.bytes_mut()) {
                 Ok(s) => {
                     self.session.send_packet(packet);
@@ -395,148 +435,28 @@ impl Tun {
             },
         }
     }
-
-    /// Recv a packet from tun device
-    pub fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
-        self.read_by_ref(buf)
-    }
-
-    /// Send a packet to tun device
-    pub fn send(&self, buf: &[u8]) -> io::Result<usize> {
-        self.write_by_ref(buf)
+    fn try_write_by_ref(&self, mut buf: &[u8]) -> io::Result<usize> {
+        let size = buf.len();
+        match self.session.allocate_send_packet(size as u16) {
+            Err(e) => match e {
+                wintun::Error::Io(io_err) => {
+                    if io_err.raw_os_error().unwrap_or(0)
+                        == windows_sys::Win32::Foundation::ERROR_BUFFER_OVERFLOW as i32
+                    {
+                        Err(io::Error::from(io::ErrorKind::WouldBlock))
+                    } else {
+                        Err(io_err)
+                    }
+                }
+                e => Err(io::Error::new(io::ErrorKind::Other, format!("{}", e))),
+            },
+            Ok(mut packet) => match io::copy(&mut buf, &mut packet.bytes_mut()) {
+                Ok(s) => {
+                    self.session.send_packet(packet);
+                    Ok(s as usize)
+                }
+                Err(e) => Err(e),
+            },
+        }
     }
 }
-//
-// pub struct Tap {
-//     handle: HANDLE,
-//     index: u32,
-//     luid: NET_LUID,
-//     #[allow(dead_code)]
-//     mac: [u8; 6],
-// }
-// unsafe impl Send for Tap {}
-// unsafe impl Sync for Tap {}
-// impl Drop for Tap {
-//     fn drop(&mut self) {
-//         if let Err(e) = self.shutdown() {
-//             log::warn!("shutdown={:?}", e)
-//         }
-//         if let Err(e) = ffi::close_handle(self.handle) {
-//             log::warn!("close_handle={:?}", e)
-//         }
-//     }
-// }
-// impl Tap {
-//     pub(crate) fn new(name: String) -> std::io::Result<Self> {
-//         let luid = ffi::alias_to_luid(&encode_utf16(&name)).map_err(|e| {
-//             io::Error::new(e.kind(), format!("alias_to_luid name={},err={:?}", name, e))
-//         })?;
-//         let guid = ffi::luid_to_guid(&luid)
-//             .and_then(|guid| ffi::string_from_guid(&guid))
-//             .map_err(|e| {
-//                 io::Error::new(e.kind(), format!("luid_to_guid name={},err={:?}", name, e))
-//             })?;
-//         let path = format!(r"\\.\Global\{}.tap", decode_utf16(&guid));
-//         let handle = ffi::create_file(
-//             &encode_utf16(&path),
-//             GENERIC_READ | GENERIC_WRITE,
-//             FILE_SHARE_READ | FILE_SHARE_WRITE,
-//             OPEN_EXISTING,
-//             FILE_ATTRIBUTE_SYSTEM | FILE_FLAG_OVERLAPPED,
-//         )
-//         .map_err(|e| io::Error::new(e.kind(), format!("tap name={},err={:?}", name, e)))?;
-//
-//         let mut mac = [0u8; 6];
-//         ffi::device_io_control(handle, TAP_WIN_IOCTL_GET_MAC, &(), &mut mac)
-//             .map_err(|e| {
-//                 io::Error::new(
-//                     e.kind(),
-//                     format!("TAP_WIN_IOCTL_CONFIG_TUN name={},err={:?}", name, e),
-//                 )
-//             })
-//             .map_err(|e| io::Error::new(e.kind(), format!("TAP_WIN_IOCTL_GET_MAC,err={:?}", e)))?;
-//         let index = ffi::luid_to_index(&luid)?;
-//         let tap = Self {
-//             handle,
-//             index,
-//             luid,
-//             mac,
-//         };
-//         Ok(tap)
-//     }
-//
-//     pub fn write_by_ref(&self, buf: &[u8]) -> io::Result<usize> {
-//         ffi::write_file(self.handle, buf).map(|res| res as _)
-//     }
-//     pub fn read_by_ref(&self, buf: &mut [u8]) -> io::Result<usize> {
-//         ffi::read_file(self.handle, buf).map(|res| res as usize)
-//     }
-//     pub fn enabled(&self, value: bool) -> io::Result<()> {
-//         let status: u32 = if value { 1 } else { 0 };
-//         ffi::device_io_control(
-//             self.handle,
-//             TAP_WIN_IOCTL_SET_MEDIA_STATUS,
-//             &status,
-//             &mut (),
-//         )
-//     }
-//     /// Recv a packet from tun device
-//     pub fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
-//         self.read_by_ref(buf)
-//     }
-//
-//     /// Send a packet to tun device
-//     pub fn send(&self, buf: &[u8]) -> io::Result<usize> {
-//         self.write_by_ref(buf)
-//     }
-//     pub fn name(&self) -> std::io::Result<String> {
-//         ffi::luid_to_alias(&self.luid).map(|name| decode_utf16(&name))
-//     }
-//     pub fn set_name(&self, _name: &str) -> std::io::Result<()> {
-//         unimplemented!()
-//     }
-//     pub fn shutdown(&self) -> io::Result<()> {
-//         self.enabled(false)
-//     }
-//
-//     pub fn set_ip(&self, address: IpAddr, mask: IpAddr) -> io::Result<()> {
-//         netsh::set_interface_ip(self.index, address, mask, None)
-//     }
-//
-//     pub fn address(&self) -> Result<IpAddr> {
-//         unimplemented!()
-//     }
-//     pub fn netmask(&self) -> Result<IpAddr> {
-//         unimplemented!()
-//     }
-//     pub fn set_address(&self, _address: Ipv4Addr) -> io::Result<()> {
-//         unimplemented!()
-//     }
-//     pub fn mtu(&self) -> io::Result<u32> {
-//         let mut mtu = 0;
-//         ffi::device_io_control(self.handle, TAP_WIN_IOCTL_GET_MTU, &(), &mut mtu).map(|_| mtu)
-//     }
-//
-//     pub fn set_mtu(&self, value: u32) -> io::Result<()> {
-//         netsh::set_interface_mtu(self.index, value)
-//     }
-//     pub fn destination(&self) -> Result<IpAddr> {
-//         unimplemented!()
-//     }
-//     pub fn set_destination(&self, _address: Ipv4Addr) -> Result<()> {
-//         unimplemented!()
-//     }
-// }
-//
-// fn encode_utf16(string: &str) -> Vec<u16> {
-//     use std::iter::once;
-//     string.encode_utf16().chain(once(0)).collect()
-// }
-//
-// fn decode_utf16(string: &[u16]) -> String {
-//     let end = string.iter().position(|b| *b == 0).unwrap_or(string.len());
-//     String::from_utf16_lossy(&string[..end])
-// }
-// const fn ctl_code(device_type: DWORD, function: DWORD, method: DWORD, access: DWORD) -> DWORD {
-//     (device_type << 16) | (access << 14) | (function << 2) | method
-// }

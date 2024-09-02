@@ -28,10 +28,15 @@ impl AsyncDevice {
 
     /// Recv a packet from tun device - Not implemented for windows
     pub async fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
-        let device = self.inner.clone();
-        let packet = tokio::task::spawn_blocking(move || device.driver.receive_blocking())
-            .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("{}", e)))??;
+        let packet = match self.inner.driver.try_receive()? {
+            None => {
+                let device = self.inner.clone();
+                tokio::task::spawn_blocking(move || device.driver.receive_blocking())
+                    .await
+                    .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("{}", e)))??
+            }
+            Some(packet) => packet,
+        };
         let packet = match &packet {
             PacketVariant::Tun(packet) => packet.bytes(),
             PacketVariant::Tap(packet) => packet.as_ref(),
@@ -46,10 +51,16 @@ impl AsyncDevice {
         buf[0..len].copy_from_slice(packet);
         Ok(len)
     }
+    pub fn try_recv(&self, buf: &mut [u8]) -> io::Result<usize> {
+        self.inner.try_recv(buf)
+    }
 
     /// Send a packet to tun device - Not implemented for windows
     pub async fn send(&self, buf: &[u8]) -> io::Result<usize> {
         self.inner.send(buf)
+    }
+    pub fn try_send(&self, buf: &[u8]) -> io::Result<usize> {
+        self.inner.try_send(buf)
     }
 }
 

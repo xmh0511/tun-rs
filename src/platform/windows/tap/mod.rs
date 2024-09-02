@@ -173,11 +173,17 @@ impl TapDevice {
             &mut out_status,
         )
     }
+    pub fn try_read(&self, buf: &mut [u8]) -> io::Result<usize> {
+        ffi::try_read_file(self.handle, buf).map(|res| res as _)
+    }
     pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
         ffi::read_file(self.handle, buf).map(|res| res as _)
     }
     pub fn write(&self, buf: &[u8]) -> io::Result<usize> {
         ffi::write_file(self.handle, buf).map(|res| res as _)
+    }
+    pub fn try_write(&self, buf: &[u8]) -> io::Result<usize> {
+        ffi::try_write_file(self.handle, buf).map(|res| res as _)
     }
 }
 

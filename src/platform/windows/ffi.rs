@@ -150,45 +150,8 @@ pub fn create_file(
         Ok(handle)
     }
 }
-
-pub fn read_file(handle: HANDLE, buffer: &mut [u8]) -> io::Result<u32> {
-    let mut ret = 0;
-    //https://www.cnblogs.com/linyilong3/archive/2012/05/03/2480451.html
-    unsafe {
-        let mut ip_overlapped = windows_sys::Win32::System::IO::OVERLAPPED {
-            Internal: 0,
-            InternalHigh: 0,
-            Anonymous: windows_sys::Win32::System::IO::OVERLAPPED_0 {
-                Anonymous: windows_sys::Win32::System::IO::OVERLAPPED_0_0 {
-                    Offset: 0,
-                    OffsetHigh: 0,
-                },
-            },
-            hEvent: ptr::null_mut(),
-        };
-        if 0 == ReadFile(
-            handle,
-            buffer.as_mut_ptr() as _,
-            buffer.len() as _,
-            &mut ret,
-            &mut ip_overlapped,
-        ) {
-            let e = io::Error::last_os_error();
-            if e.raw_os_error().unwrap_or(0) == ERROR_IO_PENDING as i32 {
-                if 0 == GetOverlappedResult(handle, &ip_overlapped, &mut ret, 1) {
-                    return Err(e);
-                }
-            } else {
-                return Err(e);
-            }
-        }
-        Ok(ret)
-    }
-}
-
-pub fn write_file(handle: HANDLE, buffer: &[u8]) -> io::Result<u32> {
-    let mut ret = 0;
-    let mut ip_overlapped = windows_sys::Win32::System::IO::OVERLAPPED {
+fn ip_overlapped() -> windows_sys::Win32::System::IO::OVERLAPPED {
+    windows_sys::Win32::System::IO::OVERLAPPED {
         Internal: 0,
         InternalHigh: 0,
         Anonymous: windows_sys::Win32::System::IO::OVERLAPPED_0 {
@@ -198,7 +161,39 @@ pub fn write_file(handle: HANDLE, buffer: &[u8]) -> io::Result<u32> {
             },
         },
         hEvent: ptr::null_mut(),
-    };
+    }
+}
+pub fn try_read_file(handle: HANDLE, buffer: &mut [u8]) -> io::Result<u32> {
+    let mut ret = 0;
+    //https://www.cnblogs.com/linyilong3/archive/2012/05/03/2480451.html
+    unsafe {
+        let mut ip_overlapped = ip_overlapped();
+        if 0 == ReadFile(
+            handle,
+            buffer.as_mut_ptr() as _,
+            buffer.len() as _,
+            &mut ret,
+            &mut ip_overlapped,
+        ) {
+            let e = io::Error::last_os_error();
+            if e.raw_os_error().unwrap_or(0) == ERROR_IO_PENDING as i32 {
+                windows_sys::Win32::System::IO::CancelIoEx(handle, &ip_overlapped);
+                if 0 == GetOverlappedResult(handle, &ip_overlapped, &mut ret, 1) {
+                    Err(io::Error::from(io::ErrorKind::WouldBlock))
+                } else {
+                    Ok(ret)
+                }
+            } else {
+                Err(e)
+            }
+        } else {
+            Ok(ret)
+        }
+    }
+}
+pub fn try_write_file(handle: HANDLE, buffer: &[u8]) -> io::Result<u32> {
+    let mut ret = 0;
+    let mut ip_overlapped = ip_overlapped();
     unsafe {
         if 0 == WriteFile(
             handle,
@@ -209,14 +204,70 @@ pub fn write_file(handle: HANDLE, buffer: &[u8]) -> io::Result<u32> {
         ) {
             let e = io::Error::last_os_error();
             if e.raw_os_error().unwrap_or(0) == ERROR_IO_PENDING as i32 {
+                windows_sys::Win32::System::IO::CancelIoEx(handle, &ip_overlapped);
                 if 0 == GetOverlappedResult(handle, &ip_overlapped, &mut ret, 1) {
-                    return Err(e);
+                    Err(io::Error::from(io::ErrorKind::WouldBlock))
+                } else {
+                    Ok(ret)
                 }
             } else {
-                return Err(e);
+                Err(e)
             }
+        } else {
+            Ok(ret)
         }
-        Ok(ret)
+    }
+}
+pub fn read_file(handle: HANDLE, buffer: &mut [u8]) -> io::Result<u32> {
+    let mut ret = 0;
+    //https://www.cnblogs.com/linyilong3/archive/2012/05/03/2480451.html
+    unsafe {
+        let mut ip_overlapped = ip_overlapped();
+        if 0 == ReadFile(
+            handle,
+            buffer.as_mut_ptr() as _,
+            buffer.len() as _,
+            &mut ret,
+            &mut ip_overlapped,
+        ) {
+            wait_ip_overlapped(handle, &ip_overlapped)
+        } else {
+            Ok(ret)
+        }
+    }
+}
+
+pub fn write_file(handle: HANDLE, buffer: &[u8]) -> io::Result<u32> {
+    let mut ret = 0;
+    let mut ip_overlapped = ip_overlapped();
+    unsafe {
+        if 0 == WriteFile(
+            handle,
+            buffer.as_ptr() as _,
+            buffer.len() as _,
+            &mut ret,
+            &mut ip_overlapped,
+        ) {
+            wait_ip_overlapped(handle, &ip_overlapped)
+        } else {
+            Ok(ret)
+        }
+    }
+}
+unsafe fn wait_ip_overlapped(
+    handle: HANDLE,
+    ip_overlapped: &windows_sys::Win32::System::IO::OVERLAPPED,
+) -> io::Result<u32> {
+    let e = io::Error::last_os_error();
+    if e.raw_os_error().unwrap_or(0) == ERROR_IO_PENDING as i32 {
+        let mut ret = 0;
+        if 0 == GetOverlappedResult(handle, ip_overlapped, &mut ret, 1) {
+            Err(e)
+        } else {
+            Ok(ret)
+        }
+    } else {
+        Err(e)
     }
 }
 
