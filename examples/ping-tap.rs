@@ -33,6 +33,7 @@ async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
     config
         .address_with_prefix((10, 0, 0, 101), 24)
         .layer(Layer::L2)
+        .name("tun-tap")
         .up();
 
     let dev = tun_rs::create_as_async(&config)?;

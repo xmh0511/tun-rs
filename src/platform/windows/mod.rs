@@ -11,6 +11,7 @@ pub use device::{Device, PacketVariant, Tun};
 use std::ffi::OsString;
 use std::net::IpAddr;
 
+#[allow(dead_code)]
 pub(crate) const WINTUN_PROVIDER: &str = "WireGuard LLC";
 
 /// Windows-only interface configuration.

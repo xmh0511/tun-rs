@@ -2,16 +2,13 @@ use std::io;
 use std::net::IpAddr;
 use std::sync::Arc;
 
-use wintun::{Packet, Session};
+use wintun::{load_from_path, Packet, Session};
 
 use crate::configuration::{configure, Configuration};
 use crate::device::{AbstractDevice, ETHER_ADDR_LEN};
 use crate::error::{Error, Result};
 use crate::platform::windows::netsh;
 use crate::platform::windows::tap::TapDevice;
-use crate::platform::windows::verify_dll_file::{
-    get_dll_absolute_path, get_signer_name, verify_embedded_signature,
-};
 use crate::{IntoAddress, Layer};
 
 pub enum Driver {
@@ -132,19 +129,7 @@ impl Device {
 
         let device = if layer == Layer::L3 {
             let wintun_file = &config.platform_config.wintun_file;
-            let wintun = unsafe {
-                // Ensure the dll file has not been tampered with.
-                let abs_path = get_dll_absolute_path(wintun_file)?;
-                verify_embedded_signature(&abs_path)?;
-                let signer_name = get_signer_name(&abs_path)?;
-                let wp = super::WINTUN_PROVIDER;
-                if signer_name != wp {
-                    return Err(format!("Signer \"{}\" not match \"{}\"", signer_name, wp).into());
-                }
-
-                let wintun = libloading::Library::new(wintun_file)?;
-                wintun::load_from_library(wintun)?
-            };
+            let wintun = unsafe { load_from_path(wintun_file)? };
             let guid = config.platform_config.device_guid;
             let adapter = match wintun::Adapter::open(&wintun, name) {
                 Ok(a) => a,
