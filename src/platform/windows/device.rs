@@ -120,6 +120,19 @@ macro_rules! driver_case {
         }
     };
 }
+fn hash_name(input_str: &str) -> u128 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::hash::DefaultHasher::new();
+    8765028472139845610u64.hash(&mut hasher);
+    input_str.hash(&mut hasher);
+    let front = hasher.finish();
+
+    let mut hasher = std::hash::DefaultHasher::new();
+    12874056902134875693u64.hash(&mut hasher);
+    input_str.hash(&mut hasher);
+    let back = hasher.finish();
+    (u128::from(front) << 64) | u128::from(back)
+}
 
 impl Device {
     /// Create a new `Device` for the given `Configuration`.
@@ -130,7 +143,10 @@ impl Device {
         let device = if layer == Layer::L3 {
             let wintun_file = &config.platform_config.wintun_file;
             let wintun = unsafe { load_from_path(wintun_file)? };
-            let guid = config.platform_config.device_guid;
+            let mut guid = config.platform_config.device_guid;
+            if guid.is_none() {
+                guid.replace(hash_name(name));
+            }
             let adapter = match wintun::Adapter::open(&wintun, name) {
                 Ok(a) => a,
                 Err(_) => wintun::Adapter::create(&wintun, name, name, guid)?,
