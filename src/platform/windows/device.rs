@@ -156,7 +156,11 @@ impl Device {
                 tap
             } else {
                 let tap = TapDevice::create(HARDWARE_ID)?;
-                tap.set_name(name)?;
+                if let Err(e) = tap.set_name(name) {
+                    if config.name.is_some() {
+                        Err(e)?
+                    }
+                }
                 tap
             };
             Device {

@@ -1,7 +1,9 @@
 use std::io;
 use std::net::IpAddr;
 use std::os::windows::process::CommandExt;
-use std::process::Command;
+use std::process::{Command, Output};
+
+use encoding_rs::GBK;
 use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
 
 pub fn set_interface_name(old_name: &str, new_name: &str) -> io::Result<()> {
@@ -24,23 +26,37 @@ pub fn exe_cmd(cmd: &str) -> io::Result<()> {
         .arg("/C")
         .arg(cmd)
         .output()?;
+    output(cmd, out)
+}
+fn gbk_to_utf8(bytes: &[u8]) -> String {
+    let (msg, _, _) = GBK.decode(bytes);
+    msg.to_string()
+}
+fn output(cmd: &str, out: Output) -> io::Result<()> {
     if !out.status.success() {
+        let msg = if !out.stderr.is_empty() {
+            match std::str::from_utf8(&out.stderr) {
+                Ok(msg) => msg.to_string(),
+                Err(_) => gbk_to_utf8(&out.stderr),
+            }
+        } else if !out.stdout.is_empty() {
+            match std::str::from_utf8(&out.stdout) {
+                Ok(msg) => msg.to_string(),
+                Err(_) => gbk_to_utf8(&out.stdout),
+            }
+        } else {
+            String::new()
+        };
         return Err(io::Error::new(
             io::ErrorKind::Other,
-            format!("cmd={:?},out={:?}", cmd, String::from_utf8(out.stderr)),
+            format!("cmd={:?},out={:?}", cmd, msg),
         ));
     }
     Ok(())
 }
 pub fn exe_command(cmd: &mut Command) -> io::Result<()> {
-    let out = cmd.output()?;
-    if !out.status.success() {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("cmd={:?},out={:?} ", cmd, String::from_utf8(out.stdout)),
-        ));
-    }
-    Ok(())
+    let out = cmd.creation_flags(CREATE_NO_WINDOW).output()?;
+    output(&format!("{:?}", cmd), out)
 }
 
 /// 设置网卡ip

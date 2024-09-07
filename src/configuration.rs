@@ -94,8 +94,8 @@ impl Configuration {
         target_os = "macos",
         target_os = "freebsd"
     ))]
-    pub fn name<S: AsRef<str>>(&mut self, tun_name: S) -> &mut Self {
-        self.name = Some(tun_name.as_ref().into());
+    pub fn name<S: AsRef<str>>(&mut self, name: S) -> &mut Self {
+        self.name = Some(name.as_ref().into());
         self
     }
 
