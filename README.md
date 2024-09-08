@@ -111,5 +111,9 @@ pub extern "C" fn start_tun(fd: std::os::raw::c_int) {
 
 Windows
 -----
+Tun:
 You need to copy the [wintun.dll](https://wintun.net/) file which matches your architecture to 
 the same directory as your executable and run your program as administrator.
+
+Tap:
+You need to manually install [tap-windows](https://build.openvpn.net/downloads/releases/) that matches your architecture when using tap network interface.
