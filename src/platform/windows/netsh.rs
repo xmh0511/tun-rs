@@ -49,14 +49,18 @@ fn output(cmd: &str, out: Output) -> io::Result<()> {
         };
         return Err(io::Error::new(
             io::ErrorKind::Other,
-            format!("cmd={:?},out={:?}", cmd, msg),
+            format!("cmd=\"{}\",out=\"{}\"", cmd, msg.trim()),
         ));
     }
     Ok(())
 }
 pub fn exe_command(cmd: &mut Command) -> io::Result<()> {
     let out = cmd.creation_flags(CREATE_NO_WINDOW).output()?;
-    output(&format!("{:?}", cmd), out)
+    let command = cmd
+        .get_args()
+        .map(|s| s.to_string_lossy().to_string())
+        .collect::<Vec<String>>();
+    output(&command.join(" ").to_string(), out)
 }
 
 /// 设置网卡ip
