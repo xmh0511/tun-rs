@@ -14,6 +14,7 @@ use crate::{
 const OVERWRITE_SIZE: usize = std::mem::size_of::<libc::__c_anonymous_ifr_ifru>();
 
 use crate::platform::Tun;
+use getifaddrs::Interface;
 use libc::{
     self, c_char, c_short, c_uint, c_void, sockaddr, socklen_t, AF_INET, AF_INET6, AF_SYSTEM,
     AF_SYS_CONTROL, IFF_RUNNING, IFF_UP, IFNAMSIZ, PF_SYSTEM, SOCK_DGRAM, SYSPROTO_CONTROL,
@@ -379,22 +380,28 @@ impl AbstractDevice for Device {
 
     fn address(&self) -> Result<IpAddr> {
         let if_name = self.name()?;
-        let mut addrs = getifaddrs::getifaddrs()?;
-        if let Some(v) = addrs.find(|v| v.name == if_name) {
+        let addrs = getifaddrs::getifaddrs()?;
+        let ifs = addrs
+            .filter(|v| v.name == if_name)
+            .collect::<Vec<Interface>>();
+        if let Some(v) = ifs.last() {
             return Ok(v.address);
         }
-        return Err(Error::String("AddrNotAvailable".to_string()));
+        Err(Error::String("AddrNotAvailable".to_string()))
     }
 
     fn destination(&self) -> Result<IpAddr> {
         let if_name = self.name()?;
-        let mut addrs = getifaddrs::getifaddrs()?;
-        if let Some(v) = addrs.find(|v| v.name == if_name) {
+        let addrs = getifaddrs::getifaddrs()?;
+        let ifs = addrs
+            .filter(|v| v.name == if_name)
+            .collect::<Vec<Interface>>();
+        if let Some(v) = ifs.last() {
             return v
                 .dest_addr
                 .ok_or(Error::String("DestAddrNotAvailable".to_string()));
         }
-        return Err(Error::String("DestAddrNotAvailable".to_string()));
+        Err(Error::String("DestAddrNotAvailable".to_string()))
     }
 
     /// Question on macOS
@@ -429,13 +436,16 @@ impl AbstractDevice for Device {
 
     fn netmask(&self) -> Result<IpAddr> {
         let if_name = self.name()?;
-        let mut addrs = getifaddrs::getifaddrs()?;
-        if let Some(v) = addrs.find(|v| v.name == if_name) {
+        let addrs = getifaddrs::getifaddrs()?;
+        let ifs = addrs
+            .filter(|v| v.name == if_name)
+            .collect::<Vec<Interface>>();
+        if let Some(v) = ifs.last() {
             return v
                 .netmask
                 .ok_or(Error::String("NetMaskNotAvailable".to_string()));
         }
-        return Err(Error::String("NetMaskNotAvailable".to_string()));
+        Err(Error::String("NetMaskNotAvailable".to_string()))
     }
 
     fn mtu(&self) -> Result<u16> {

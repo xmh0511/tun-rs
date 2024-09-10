@@ -41,7 +41,9 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
 
     config
         .address_with_prefix(
-            "fd6e:14aa:34e3::2".parse::<IpAddr>().unwrap(),
+            "CDCD:910A:2222:5498:8475:1111:3900:2020"
+                .parse::<IpAddr>()
+                .unwrap(),
             "ffff:ffff:ffff:ffff::".parse::<IpAddr>().unwrap(),
         )
         //.address_with_prefix((10,0,0,9), 24u8)
@@ -64,8 +66,8 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     quit.recv().expect("Quit error.");
     println!("recv quit!!!!!");
     println!("{:?}", dev_t.address()?);
-    println!("{:?}", dev_t.destination()?);
     println!("{:?}", dev_t.netmask()?);
+    println!("{:?}", dev_t.destination()?);
     dev_t.enabled(false)?;
     Ok(())
 }
