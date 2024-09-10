@@ -2,6 +2,8 @@ use libc::{c_char, c_int, c_uint, ifreq, sockaddr, IFNAMSIZ,sockaddr_in6,time_t}
 use nix::{ioctl_readwrite, ioctl_write_ptr};
 use std::ffi::c_void;
 
+pub const IN6_IFF_NODAD: i32 = 0x0020;
+
 #[allow(non_camel_case_types)]
 #[repr(C)]
 #[derive(Copy, Clone)]
