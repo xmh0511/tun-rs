@@ -33,6 +33,7 @@ pub struct in6_ifaliasreq {
     pub ifra_prefixmask: sockaddr_in6,
     pub ifra_flags: libc::c_int,
     pub in6_addrlifetime: in6_addrlifetime,
+	pub ifra_vhid:libc::c_int,
 }
 
 // #[allow(non_camel_case_types)]
