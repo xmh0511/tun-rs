@@ -7,13 +7,13 @@ use crate::{
     IntoAddress,
 };
 use libc::{
-    self, c_char, c_short, fcntl, ifreq, kinfo_file, AF_INET, AF_LINK, F_KINFO, IFF_RUNNING,
-    IFF_UP, IFNAMSIZ, KINFO_FILE_SIZE, O_RDWR, SOCK_DGRAM,AF_INET6
+    self, c_char, c_short, fcntl, ifreq, kinfo_file, AF_INET, AF_INET6, AF_LINK, F_KINFO,
+    IFF_RUNNING, IFF_UP, IFNAMSIZ, KINFO_FILE_SIZE, O_RDWR, SOCK_DGRAM,
 };
 use std::{ffi::CStr, io, mem, net::IpAddr, os::unix::io::AsRawFd, ptr, sync::Mutex};
 
-use mac_address::mac_address_by_name;
 use getifaddrs::Interface;
+use mac_address::mac_address_by_name;
 
 #[derive(Clone, Copy, Debug)]
 struct Route {
@@ -142,50 +142,54 @@ impl Device {
         let _guard = self.alias_lock.lock().unwrap();
         // let old_route = self.current_route();
         unsafe {
-			match self.address(){
-				Ok(IpAddr::V4(addr))=>{
-					let mut req_v4 = self.request()?;
-					req_v4.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr;
-					if let Err(err) = siocdifaddr(ctl()?.as_raw_fd(), &req_v4) {
-						log::error!("{err:?}");
-					}
-				}
-				Ok(IpAddr::V6(addr))=>{
-					println!("old ipv6 {addr}");
-					let mut req_v6 = self.request_v6()?;
-					req_v6.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr6;
-					let r = siocdifaddr_in6(ctl_v6()?.as_raw_fd(), &req_v6);
-					println!("delete old ipv6 ok {:?}",r);
-					// if let Err(err) = siocdifaddr_in6(ctl_v6()?.as_raw_fd(), &req_v6) {
-					// 	log::error!("{err:?}");
-					// }
-				}
-				_=>{}
-			}
-			match addr {
+            match self.addresses() {
+                Ok(addrs) => {
+                    for addr in addrs {
+                        match addr {
+                            IpAddr::V4(addr) => {
+                                let mut req_v4 = self.request()?;
+                                req_v4.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr;
+                                if let Err(err) = siocdifaddr(ctl()?.as_raw_fd(), &req_v4) {
+                                    log::error!("{err:?}");
+                                }
+                            }
+                            IpAddr::V6(addr) => {
+                                println!("old ipv6 {addr}");
+                                let mut req_v6 = self.request_v6()?;
+                                req_v6.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr6;
+                                if let Err(err) = siocdifaddr_in6(ctl_v6()?.as_raw_fd(), &req_v6) {
+                                    log::error!("{err:?}");
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(_) => {}
+            }
+            match addr {
                 IpAddr::V4(_) => {
-					let ctl = ctl()?;
-					let mut req: ifaliasreq = mem::zeroed();
-					let tun_name = self.name()?;
-					ptr::copy_nonoverlapping(
-						tun_name.as_ptr() as *const c_char,
-						req.ifran.as_mut_ptr(),
-						tun_name.len(),
-					);
-		
-					req.addr = posix::sockaddr_union::from((addr, 0)).addr;
-					req.dstaddr = posix::sockaddr_union::from((dest, 0)).addr;
-					req.mask = posix::sockaddr_union::from((mask, 0)).addr;
-		
-					if let Err(err) = siocaifaddr(ctl.as_raw_fd(), &req) {
-						return Err(io::Error::from(err).into());
-					}
+                    let ctl = ctl()?;
+                    let mut req: ifaliasreq = mem::zeroed();
+                    let tun_name = self.name()?;
+                    ptr::copy_nonoverlapping(
+                        tun_name.as_ptr() as *const c_char,
+                        req.ifran.as_mut_ptr(),
+                        tun_name.len(),
+                    );
+
+                    req.addr = posix::sockaddr_union::from((addr, 0)).addr;
+                    req.dstaddr = posix::sockaddr_union::from((dest, 0)).addr;
+                    req.mask = posix::sockaddr_union::from((mask, 0)).addr;
+
+                    if let Err(err) = siocaifaddr(ctl.as_raw_fd(), &req) {
+                        return Err(io::Error::from(err).into());
+                    }
                 }
                 IpAddr::V6(_) => {
                     let IpAddr::V6(_) = mask else {
                         return Err(Error::InvalidAddress);
                     };
-					let tun_name = self.name()?;
+                    let tun_name = self.name()?;
                     let mut req: in6_ifaliasreq = mem::zeroed();
                     ptr::copy_nonoverlapping(
                         tun_name.as_ptr() as *const c_char,
@@ -229,18 +233,28 @@ impl Device {
         Ok(req)
     }
 
-	/// # Safety
-	unsafe fn request_v6(&self) -> Result<in6_ifreq> {
-		let tun_name = self.name()?;
-		let mut req: in6_ifreq = mem::zeroed();
-		ptr::copy_nonoverlapping(
-			tun_name.as_ptr() as *const c_char,
-			req.ifra_name.as_mut_ptr(),
-			tun_name.len(),
-		);
-		req.ifr_ifru.ifru_flags = IN6_IFF_NODAD as _;
-		Ok(req)
-	}
+    /// # Safety
+    unsafe fn request_v6(&self) -> Result<in6_ifreq> {
+        let tun_name = self.name()?;
+        let mut req: in6_ifreq = mem::zeroed();
+        ptr::copy_nonoverlapping(
+            tun_name.as_ptr() as *const c_char,
+            req.ifra_name.as_mut_ptr(),
+            tun_name.len(),
+        );
+        req.ifr_ifru.ifru_flags = IN6_IFF_NODAD as _;
+        Ok(req)
+    }
+
+    fn addresses(&self) -> Result<Vec<IpAddr>> {
+        let if_name = self.name()?;
+        let addrs = getifaddrs::getifaddrs()?;
+        let ifs = addrs
+            .filter(|v| v.name == if_name)
+            .map(|v| v.address)
+            .collect::<Vec<IpAddr>>();
+        Ok(ifs)
+    }
 
     fn set_route(&self, _old_route: Option<Route>, new_route: Route) -> Result<()> {
         let prefix_len =
@@ -362,19 +376,19 @@ impl AbstractDevice for Device {
     }
 
     fn address(&self) -> Result<IpAddr> {
-		let if_name = self.name()?;
+        let if_name = self.name()?;
         let addrs = getifaddrs::getifaddrs()?;
         let ifs = addrs
             .filter(|v| v.name == if_name)
             .collect::<Vec<Interface>>();
-        if let Some(v) = ifs.first() {
+        if let Some(v) = ifs.last() {
             return Ok(v.address);
         }
         Err(Error::String("AddrNotAvailable".to_string()))
     }
 
     fn destination(&self) -> Result<IpAddr> {
-		let if_name = self.name()?;
+        let if_name = self.name()?;
         let addrs = getifaddrs::getifaddrs()?;
         let ifs = addrs
             .filter(|v| v.name == if_name)
@@ -403,7 +417,7 @@ impl AbstractDevice for Device {
     }
 
     fn netmask(&self) -> Result<IpAddr> {
-		let if_name = self.name()?;
+        let if_name = self.name()?;
         let addrs = getifaddrs::getifaddrs()?;
         let ifs = addrs
             .filter(|v| v.name == if_name)

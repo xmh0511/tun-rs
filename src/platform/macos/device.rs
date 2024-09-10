@@ -144,6 +144,16 @@ impl Device {
         Ok(req)
     }
 
+    fn addresses(&self) -> Result<Vec<IpAddr>> {
+        let if_name = self.name()?;
+        let addrs = getifaddrs::getifaddrs()?;
+        let ifs = addrs
+            .filter(|v| v.name == if_name)
+            .map(|v| v.address)
+            .collect::<Vec<IpAddr>>();
+        Ok(ifs)
+    }
+
     fn current_route(&self) -> Option<Route> {
         let addr = self.address().ok()?;
         let netmask = self.netmask().ok()?;
@@ -179,23 +189,29 @@ impl Device {
         let old_route = self.current_route();
         let tun_name = self.name()?;
         unsafe {
-			match self.address(){
-				Ok(IpAddr::V4(addr))=>{
-					let mut req_v4 = self.request()?;
-					req_v4.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr;
-					if let Err(err) = siocdifaddr(ctl()?.as_raw_fd(), &req_v4) {
-						log::error!("{err:?}");
-					}
-				}
-				Ok(IpAddr::V6(addr))=>{
-					let mut req_v6 = self.request_v6()?;
-					req_v6.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr6;
-					if let Err(err) = siocdifaddr_in6(ctl_v6()?.as_raw_fd(), &req_v6) {
-						log::error!("{err:?}");
-					}
-				}
-				_=>{}
-			}
+            match self.addresses() {
+                Ok(addrs) => {
+                    for addr in addrs {
+                        match addr {
+                            IpAddr::V4(addr) => {
+                                let mut req_v4 = self.request()?;
+                                req_v4.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr;
+                                if let Err(err) = siocdifaddr(ctl()?.as_raw_fd(), &req_v4) {
+                                    log::error!("{err:?}");
+                                }
+                            }
+                            IpAddr::V6(addr) => {
+                                let mut req_v6 = self.request_v6()?;
+                                req_v6.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr6;
+                                if let Err(err) = siocdifaddr_in6(ctl_v6()?.as_raw_fd(), &req_v6) {
+                                    log::error!("{err:?}");
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(_) => {}
+            }
             match addr {
                 IpAddr::V4(_) => {
                     let mut req: ifaliasreq = mem::zeroed();

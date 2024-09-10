@@ -1,4 +1,4 @@
-use libc::{c_char, c_int, c_uint, ifreq, sockaddr, IFNAMSIZ,sockaddr_in6,time_t};
+use libc::{c_char, c_int, c_uint, ifreq, sockaddr, sockaddr_in6, time_t, IFNAMSIZ};
 use nix::{ioctl_readwrite, ioctl_write_ptr};
 use std::ffi::c_void;
 
@@ -33,7 +33,7 @@ pub struct in6_ifaliasreq {
     pub ifra_prefixmask: sockaddr_in6,
     pub ifra_flags: libc::c_int,
     pub in6_addrlifetime: in6_addrlifetime,
-	pub ifra_vhid:libc::c_int,
+    pub ifra_vhid: libc::c_int,
 }
 
 // #[allow(non_camel_case_types)]
@@ -46,7 +46,6 @@ pub struct in6_ifaliasreq {
 //     pub ifra_mask: sockaddr_in,
 // 	pub ifra_vhid:c_int
 // }
-
 
 #[allow(non_camel_case_types)]
 #[repr(C)]
@@ -69,7 +68,7 @@ pub union ifr_ifru_in6 {
     pub ifru_lifetime: in6_addrlifetime,
     pub ifru_stat: in6_ifstat,
     pub ifru_icmp6stat: icmp6_ifstat,
-	pub ifru_scope_id:[u32;16],
+    pub ifru_scope_id: [u32; 16],
 }
 
 #[allow(non_camel_case_types)]
@@ -201,7 +200,6 @@ pub struct icmp6_ifstat {
     /* ipv6IfIcmpOutGroupMembReductions, # of output MLD done */
     pub ifs6_out_mlddone: u_quad_t,
 }
-
 
 ioctl_write_ptr!(siocsifflags, b'i', 16, ifreq);
 ioctl_readwrite!(siocgifflags, b'i', 17, ifreq);
