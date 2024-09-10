@@ -182,27 +182,21 @@ impl Device {
                     let IpAddr::V6(_) = mask else {
                         return Err(Error::InvalidAddress);
                     };
-                    // let mut req: in6_ifaliasreq = mem::zeroed();
-                    // if let Ok(addr) = self.address() {
-                    //     let mut req_v6 = self.request_v6()?;
-                    //     req_v6.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr6;
-                    //     if let Err(err) = siocdifaddr_in6(ctl_v6()?.as_raw_fd(), &req_v6) {
-                    //         log::error!("{err:?}");
-                    //     }
-                    // }
-                    // ptr::copy_nonoverlapping(
-                    //     tun_name.as_ptr() as *const c_char,
-                    //     req.ifra_name.as_mut_ptr(),
-                    //     tun_name.len(),
-                    // );
-                    // req.ifra_addr = sockaddr_union::from((addr, 0)).addr6;
-                    // req.ifra_prefixmask = sockaddr_union::from((mask, 0)).addr6;
-                    // req.in6_addrlifetime.ia6t_vltime = 0xffffffff_u32;
-                    // req.in6_addrlifetime.ia6t_pltime = 0xffffffff_u32;
-                    // req.ifra_flags = IN6_IFF_NODAD;
-                    // if let Err(err) = siocaifaddr_in6(ctl_v6()?.as_raw_fd(), &req) {
-                    //     return Err(io::Error::from(err).into());
-                    // }
+					let tun_name = self.name()?;
+                    let mut req: in6_ifaliasreq = mem::zeroed();
+                    ptr::copy_nonoverlapping(
+                        tun_name.as_ptr() as *const c_char,
+                        req.ifra_name.as_mut_ptr(),
+                        tun_name.len(),
+                    );
+                    req.ifra_addr = sockaddr_union::from((addr, 0)).addr6;
+                    req.ifra_prefixmask = sockaddr_union::from((mask, 0)).addr6;
+                    req.in6_addrlifetime.ia6t_vltime = 0xffffffff_u32;
+                    req.in6_addrlifetime.ia6t_pltime = 0xffffffff_u32;
+                    req.ifra_flags = IN6_IFF_NODAD;
+                    if let Err(err) = siocaifaddr_in6(ctl_v6()?.as_raw_fd(), &req) {
+                        return Err(io::Error::from(err).into());
+                    }
                 }
             }
 

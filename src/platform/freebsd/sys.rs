@@ -23,6 +23,18 @@ pub struct ifaliasreq {
     pub ifra_vhid: c_int,
 }
 
+#[allow(non_camel_case_types)]
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct in6_ifaliasreq {
+    pub ifra_name: [c_char; IFNAMSIZ],
+    pub ifra_addr: sockaddr_in6,
+    pub ifra_dstaddr: sockaddr_in6,
+    pub ifra_prefixmask: sockaddr_in6,
+    pub ifra_flags: libc::c_int,
+    pub in6_addrlifetime: in6_addrlifetime,
+}
+
 // #[allow(non_camel_case_types)]
 // #[repr(C)]
 // #[derive(Copy, Clone)]
@@ -220,3 +232,5 @@ ioctl_write_ptr!(siocsifname, b'i', 40, ifreq);
 ioctl_write_ptr!(siocsiflladdr, b'i', 60, ifreq);
 
 ioctl_write_ptr!(siocdifaddr_in6, b'i', 25, in6_ifreq);
+
+ioctl_write_ptr!(siocaifaddr_in6, b'i', 27, in6_ifaliasreq);
