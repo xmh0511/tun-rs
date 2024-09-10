@@ -48,7 +48,6 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
         // )
         .address_with_prefix((10, 0, 0, 9), 24u8)
         .destination((10, 0, 0, 1))
-        .name("utun10")
         .up();
 
     let dev = Arc::new(tun_rs::create(&config)?);
