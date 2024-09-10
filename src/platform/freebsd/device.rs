@@ -144,7 +144,7 @@ impl Device {
 					if let Ok(addr) = self.address() {
                         let mut req_v4 = self.request()?;
                         req_v4.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr;
-                        if let Err(err) = siocdifaddr(ctl()?.as_raw_fd(), &req_v4) {
+                        if let Err(err) = siocdifaddr(ctl.as_raw_fd(), &req_v4) {
                             log::error!("{err:?}");
                         }
                     }
