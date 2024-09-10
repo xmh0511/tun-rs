@@ -367,7 +367,7 @@ impl AbstractDevice for Device {
         let ifs = addrs
             .filter(|v| v.name == if_name)
             .collect::<Vec<Interface>>();
-        if let Some(v) = ifs.last() {
+        if let Some(v) = ifs.first() {
             return Ok(v.address);
         }
         Err(Error::String("AddrNotAvailable".to_string()))
