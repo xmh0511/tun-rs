@@ -154,9 +154,11 @@ impl Device {
 					println!("old ipv6 {addr}");
 					let mut req_v6 = self.request_v6()?;
 					req_v6.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr6;
-					if let Err(err) = siocdifaddr_in6(ctl_v6()?.as_raw_fd(), &req_v6) {
-						log::error!("{err:?}");
-					}
+					let r = siocdifaddr_in6(ctl_v6()?.as_raw_fd(), &req_v6);
+					println!("delete old ipv6 ok {:?}",r);
+					// if let Err(err) = siocdifaddr_in6(ctl_v6()?.as_raw_fd(), &req_v6) {
+					// 	log::error!("{err:?}");
+					// }
 				}
 				_=>{}
 			}
