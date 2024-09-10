@@ -175,6 +175,16 @@ impl Device {
                     if let Err(err) = siocaifaddr(ctl.as_raw_fd(), &req) {
                         return Err(io::Error::from(err).into());
                     }
+					if let Ok(addrs) =  self.addresses(){
+						let ip_v6:Vec<IpAddr> = addrs.into_iter().filter(|v|v.is_ipv6()).collect();
+						for addrv6 in ip_v6{
+							let mut req_v6 = self.request_v6()?;
+							req_v6.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr6;
+							if let Err(err) = siocdifaddr_in6(ctl_v6()?.as_raw_fd(), &req_v6) {
+								log::error!("{err:?}");
+							}
+						}
+					}
                 }
                 IpAddr::V6(_) => {
                     let IpAddr::V6(_) = mask else {
