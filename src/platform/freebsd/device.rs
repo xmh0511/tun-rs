@@ -126,33 +126,63 @@ impl Device {
 
     /// Set the IPv4 alias of the device.
     fn set_alias(&self, addr: IpAddr, dest: IpAddr, mask: IpAddr) -> Result<()> {
-        let IpAddr::V4(_) = addr else {
-            unimplemented!("do not support IPv6 yet")
-        };
-        let IpAddr::V4(_) = dest else {
-            unimplemented!("do not support IPv6 yet")
-        };
-        let IpAddr::V4(_) = mask else {
-            unimplemented!("do not support IPv6 yet")
-        };
+        // let IpAddr::V4(_) = addr else {
+        //     unimplemented!("do not support IPv6 yet")
+        // };
+        // let IpAddr::V4(_) = dest else {
+        //     unimplemented!("do not support IPv6 yet")
+        // };
+        // let IpAddr::V4(_) = mask else {
+        //     unimplemented!("do not support IPv6 yet")
+        // };
         let _guard = self.alias_lock.lock().unwrap();
         // let old_route = self.current_route();
         unsafe {
-            let ctl = ctl()?;
-            let mut req: ifaliasreq = mem::zeroed();
-            let tun_name = self.name()?;
-            ptr::copy_nonoverlapping(
-                tun_name.as_ptr() as *const c_char,
-                req.ifran.as_mut_ptr(),
-                tun_name.len(),
-            );
-
-            req.addr = posix::sockaddr_union::from((addr, 0)).addr;
-            req.dstaddr = posix::sockaddr_union::from((dest, 0)).addr;
-            req.mask = posix::sockaddr_union::from((mask, 0)).addr;
-
-            if let Err(err) = siocaifaddr(ctl.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
+			match addr {
+                IpAddr::V4(_) => {
+					let ctl = ctl()?;
+					let mut req: ifaliasreq = mem::zeroed();
+					let tun_name = self.name()?;
+					ptr::copy_nonoverlapping(
+						tun_name.as_ptr() as *const c_char,
+						req.ifran.as_mut_ptr(),
+						tun_name.len(),
+					);
+		
+					req.addr = posix::sockaddr_union::from((addr, 0)).addr;
+					req.dstaddr = posix::sockaddr_union::from((dest, 0)).addr;
+					req.mask = posix::sockaddr_union::from((mask, 0)).addr;
+		
+					if let Err(err) = siocaifaddr(ctl.as_raw_fd(), &req) {
+						return Err(io::Error::from(err).into());
+					}
+                }
+                IpAddr::V6(_) => {
+                    let IpAddr::V6(_) = mask else {
+                        return Err(Error::InvalidAddress);
+                    };
+                    // let mut req: in6_ifaliasreq = mem::zeroed();
+                    // if let Ok(addr) = self.address() {
+                    //     let mut req_v6 = self.request_v6()?;
+                    //     req_v6.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr6;
+                    //     if let Err(err) = siocdifaddr_in6(ctl_v6()?.as_raw_fd(), &req_v6) {
+                    //         log::error!("{err:?}");
+                    //     }
+                    // }
+                    // ptr::copy_nonoverlapping(
+                    //     tun_name.as_ptr() as *const c_char,
+                    //     req.ifra_name.as_mut_ptr(),
+                    //     tun_name.len(),
+                    // );
+                    // req.ifra_addr = sockaddr_union::from((addr, 0)).addr6;
+                    // req.ifra_prefixmask = sockaddr_union::from((mask, 0)).addr6;
+                    // req.in6_addrlifetime.ia6t_vltime = 0xffffffff_u32;
+                    // req.in6_addrlifetime.ia6t_pltime = 0xffffffff_u32;
+                    // req.ifra_flags = IN6_IFF_NODAD;
+                    // if let Err(err) = siocaifaddr_in6(ctl_v6()?.as_raw_fd(), &req) {
+                    //     return Err(io::Error::from(err).into());
+                    // }
+                }
             }
 
             let new_route = Route {
