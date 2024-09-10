@@ -131,15 +131,6 @@ impl Device {
 
     /// Set the IPv4 alias of the device.
     fn set_alias(&self, addr: IpAddr, dest: IpAddr, mask: IpAddr) -> Result<()> {
-        // let IpAddr::V4(_) = addr else {
-        //     unimplemented!("do not support IPv6 yet")
-        // };
-        // let IpAddr::V4(_) = dest else {
-        //     unimplemented!("do not support IPv6 yet")
-        // };
-        // let IpAddr::V4(_) = mask else {
-        //     unimplemented!("do not support IPv6 yet")
-        // };
         let _guard = self.alias_lock.lock().unwrap();
         // let old_route = self.current_route();
         unsafe {
@@ -383,7 +374,7 @@ impl AbstractDevice for Device {
         let ifs = addrs
             .filter(|v| v.name == if_name)
             .collect::<Vec<Interface>>();
-        if let Some(v) = ifs.last() {
+        if let Some(v) = ifs.first() {
             return Ok(v.address);
         }
         Err(Error::String("AddrNotAvailable".to_string()))
@@ -395,7 +386,7 @@ impl AbstractDevice for Device {
         let ifs = addrs
             .filter(|v| v.name == if_name)
             .collect::<Vec<Interface>>();
-        if let Some(v) = ifs.last() {
+        if let Some(v) = ifs.first() {
             return v
                 .dest_addr
                 .ok_or(Error::String("DestAddrNotAvailable".to_string()));
@@ -424,7 +415,7 @@ impl AbstractDevice for Device {
         let ifs = addrs
             .filter(|v| v.name == if_name)
             .collect::<Vec<Interface>>();
-        if let Some(v) = ifs.last() {
+        if let Some(v) = ifs.first() {
             return v
                 .netmask
                 .ok_or(Error::String("NetMaskNotAvailable".to_string()));
