@@ -19,7 +19,7 @@ use mac_address::mac_address_by_name;
 struct Route {
     addr: IpAddr,
     netmask: IpAddr,
-	#[allow(dead_code)]
+    #[allow(dead_code)]
     dest: IpAddr,
 }
 
@@ -134,28 +134,25 @@ impl Device {
         let _guard = self.alias_lock.lock().unwrap();
         // let old_route = self.current_route();
         unsafe {
-            match self.addresses() {
-                Ok(addrs) => {
-                    for addr in addrs {
-                        match addr {
-                            IpAddr::V4(addr) => {
-                                let mut req_v4 = self.request()?;
-                                req_v4.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr;
-                                if let Err(err) = siocdifaddr(ctl()?.as_raw_fd(), &req_v4) {
-                                    log::error!("{err:?}");
-                                }
+            if let Ok(addrs) = self.addresses() {
+                for addr in addrs {
+                    match addr {
+                        IpAddr::V4(addr) => {
+                            let mut req_v4 = self.request()?;
+                            req_v4.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr;
+                            if let Err(err) = siocdifaddr(ctl()?.as_raw_fd(), &req_v4) {
+                                log::error!("{err:?}");
                             }
-                            IpAddr::V6(addr) => {
-                                let mut req_v6 = self.request_v6()?;
-                                req_v6.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr6;
-                                if let Err(err) = siocdifaddr_in6(ctl_v6()?.as_raw_fd(), &req_v6) {
-                                    log::error!("{err:?}");
-                                }
+                        }
+                        IpAddr::V6(addr) => {
+                            let mut req_v6 = self.request_v6()?;
+                            req_v6.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr6;
+                            if let Err(err) = siocdifaddr_in6(ctl_v6()?.as_raw_fd(), &req_v6) {
+                                log::error!("{err:?}");
                             }
                         }
                     }
                 }
-                Err(_) => {}
             }
             match addr {
                 IpAddr::V4(_) => {
@@ -175,16 +172,17 @@ impl Device {
                     if let Err(err) = siocaifaddr(ctl.as_raw_fd(), &req) {
                         return Err(io::Error::from(err).into());
                     }
-					if let Ok(addrs) =  self.addresses(){
-						let ip_v6:Vec<IpAddr> = addrs.into_iter().filter(|v|v.is_ipv6()).collect();
-						for addrv6 in ip_v6{
-							let mut req_v6 = self.request_v6()?;
-							req_v6.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr6;
-							if let Err(err) = siocdifaddr_in6(ctl_v6()?.as_raw_fd(), &req_v6) {
-								log::error!("{err:?}");
-							}
-						}
-					}
+                    if let Ok(addrs) = self.addresses() {
+                        let ip_v6: Vec<IpAddr> =
+                            addrs.into_iter().filter(|v| v.is_ipv6()).collect();
+                        for addrv6 in ip_v6 {
+                            let mut req_v6 = self.request_v6()?;
+                            req_v6.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr6;
+                            if let Err(err) = siocdifaddr_in6(ctl_v6()?.as_raw_fd(), &req_v6) {
+                                log::error!("{err:?}");
+                            }
+                        }
+                    }
                 }
                 IpAddr::V6(_) => {
                     let IpAddr::V6(_) = mask else {
@@ -258,7 +256,7 @@ impl Device {
     }
 
     fn set_route(&self, _old_route: Option<Route>, new_route: Route) -> Result<()> {
-		let if_name = self.name()?;
+        let if_name = self.name()?;
         let prefix_len =
             ipnet::ip_mask_to_prefix(new_route.netmask).map_err(|_| Error::InvalidConfig)?;
         let args = [
@@ -266,8 +264,8 @@ impl Device {
             "add",
             "-net",
             &format!("{}/{}", new_route.addr, prefix_len),
-			"-iface",
-			&if_name,
+            "-iface",
+            &if_name,
         ];
         run_command("route", &args)?;
         log::info!("route {}", args.join(" "));

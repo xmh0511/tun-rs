@@ -32,7 +32,7 @@ fn main_entry(_quit: Receiver<()>) -> Result<(), BoxError> {
     target_os = "freebsd",
 ))]
 fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
-	#[allow(unused_imports)]
+    #[allow(unused_imports)]
     use std::net::IpAddr;
 
     let mut config = tun_rs::Configuration::default();
