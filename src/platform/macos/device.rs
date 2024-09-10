@@ -131,7 +131,7 @@ impl Device {
 
         Ok(req)
     }
-
+    /// # Safety
     unsafe fn request_v6(&self) -> Result<in6_ifreq> {
         let tun_name = self.name()?;
         let mut req: in6_ifreq = mem::zeroed();
@@ -179,16 +179,26 @@ impl Device {
         let old_route = self.current_route();
         let tun_name = self.name()?;
         unsafe {
+			match self.address(){
+				Ok(IpAddr::V4(addr))=>{
+					let mut req_v4 = self.request()?;
+					req_v4.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr;
+					if let Err(err) = siocdifaddr(ctl()?.as_raw_fd(), &req_v4) {
+						log::error!("{err:?}");
+					}
+				}
+				Ok(IpAddr::V6(addr))=>{
+					let mut req_v6 = self.request_v6()?;
+					req_v6.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr6;
+					if let Err(err) = siocdifaddr_in6(ctl_v6()?.as_raw_fd(), &req_v6) {
+						log::error!("{err:?}");
+					}
+				}
+				_=>{}
+			}
             match addr {
                 IpAddr::V4(_) => {
                     let mut req: ifaliasreq = mem::zeroed();
-                    if let Ok(addr) = self.address() {
-                        let mut req_v4 = self.request()?;
-                        req_v4.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr;
-                        if let Err(err) = siocdifaddr(ctl()?.as_raw_fd(), &req_v4) {
-                            log::error!("{err:?}");
-                        }
-                    }
                     ptr::copy_nonoverlapping(
                         tun_name.as_ptr() as *const c_char,
                         req.ifra_name.as_mut_ptr(),
@@ -207,13 +217,6 @@ impl Device {
                         return Err(Error::InvalidAddress);
                     };
                     let mut req: in6_ifaliasreq = mem::zeroed();
-                    if let Ok(addr) = self.address() {
-                        let mut req_v6 = self.request_v6()?;
-                        req_v6.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr6;
-                        if let Err(err) = siocdifaddr_in6(ctl_v6()?.as_raw_fd(), &req_v6) {
-                            log::error!("{err:?}");
-                        }
-                    }
                     ptr::copy_nonoverlapping(
                         tun_name.as_ptr() as *const c_char,
                         req.ifra_name.as_mut_ptr(),

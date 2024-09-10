@@ -8,7 +8,7 @@ use crate::{
 };
 use libc::{
     self, c_char, c_short, fcntl, ifreq, kinfo_file, AF_INET, AF_LINK, F_KINFO, IFF_RUNNING,
-    IFF_UP, IFNAMSIZ, KINFO_FILE_SIZE, O_RDWR, SOCK_DGRAM,
+    IFF_UP, IFNAMSIZ, KINFO_FILE_SIZE, O_RDWR, SOCK_DGRAM,AF_INET6
 };
 use std::{ffi::CStr, io, mem, net::IpAddr, os::unix::io::AsRawFd, ptr, sync::Mutex};
 
@@ -30,6 +30,9 @@ pub struct Device {
 
 unsafe fn ctl() -> io::Result<Fd> {
     Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)
+}
+unsafe fn ctl_v6() -> io::Result<Fd> {
+    Fd::new(libc::socket(AF_INET6, SOCK_DGRAM, 0), true)
 }
 impl Device {
     /// Create a new `Device` for the given `Configuration`.
@@ -139,16 +142,26 @@ impl Device {
         let _guard = self.alias_lock.lock().unwrap();
         // let old_route = self.current_route();
         unsafe {
+			match self.address(){
+				Ok(IpAddr::V4(addr))=>{
+					let mut req_v4 = self.request()?;
+					req_v4.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr;
+					if let Err(err) = siocdifaddr(ctl()?.as_raw_fd(), &req_v4) {
+						log::error!("{err:?}");
+					}
+				}
+				Ok(IpAddr::V6(addr))=>{
+					let mut req_v6 = self.request_v6()?;
+					req_v6.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr6;
+					if let Err(err) = siocdifaddr_in6(ctl_v6()?.as_raw_fd(), &req_v6) {
+						log::error!("{err:?}");
+					}
+				}
+				_=>{}
+			}
 			match addr {
                 IpAddr::V4(_) => {
 					let ctl = ctl()?;
-					if let Ok(addr) = self.address() {
-                        let mut req_v4 = self.request()?;
-                        req_v4.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr;
-                        if let Err(err) = siocdifaddr(ctl.as_raw_fd(), &req_v4) {
-                            log::error!("{err:?}");
-                        }
-                    }
 					let mut req: ifaliasreq = mem::zeroed();
 					let tun_name = self.name()?;
 					ptr::copy_nonoverlapping(
@@ -218,6 +231,19 @@ impl Device {
 
         Ok(req)
     }
+
+	/// # Safety
+	unsafe fn request_v6(&self) -> Result<in6_ifreq> {
+		let tun_name = self.name()?;
+		let mut req: in6_ifreq = mem::zeroed();
+		ptr::copy_nonoverlapping(
+			tun_name.as_ptr() as *const c_char,
+			req.ifra_name.as_mut_ptr(),
+			tun_name.len(),
+		);
+		req.ifr_ifru.ifru_flags = IN6_IFF_NODAD as _;
+		Ok(req)
+	}
 
     fn set_route(&self, _old_route: Option<Route>, new_route: Route) -> Result<()> {
         let prefix_len =
