@@ -84,7 +84,7 @@ impl IntoAddress for IpAddr {
         match self {
             IpAddr::V4(value) => Ok(IpAddr::V4(*value)),
 
-            IpAddr::V6(_) => unimplemented!(),
+            IpAddr::V6(value) => Ok(IpAddr::V6(*value)),
         }
     }
 }
