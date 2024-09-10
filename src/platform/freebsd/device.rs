@@ -13,6 +13,7 @@ use libc::{
 use std::{ffi::CStr, io, mem, net::IpAddr, os::unix::io::AsRawFd, ptr, sync::Mutex};
 
 use mac_address::mac_address_by_name;
+use getifaddrs::Interface;
 
 #[derive(Clone, Copy, Debug)]
 struct Route {
