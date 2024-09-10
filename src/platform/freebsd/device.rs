@@ -384,7 +384,7 @@ impl AbstractDevice for Device {
         let ifs = addrs
             .filter(|v| v.name == if_name)
             .collect::<Vec<Interface>>();
-        if let Some(v) = ifs.first() {
+        if let Some(v) = ifs.last() {
             return Ok(v.address);
         }
         Err(Error::String("AddrNotAvailable".to_string()))
@@ -396,7 +396,7 @@ impl AbstractDevice for Device {
         let ifs = addrs
             .filter(|v| v.name == if_name)
             .collect::<Vec<Interface>>();
-        if let Some(v) = ifs.first() {
+        if let Some(v) = ifs.last() {
             return v
                 .dest_addr
                 .ok_or(Error::String("DestAddrNotAvailable".to_string()));
@@ -425,7 +425,7 @@ impl AbstractDevice for Device {
         let ifs = addrs
             .filter(|v| v.name == if_name)
             .collect::<Vec<Interface>>();
-        if let Some(v) = ifs.first() {
+        if let Some(v) = ifs.last() {
             return v
                 .netmask
                 .ok_or(Error::String("NetMaskNotAvailable".to_string()));
