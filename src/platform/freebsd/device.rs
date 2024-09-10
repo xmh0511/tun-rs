@@ -19,6 +19,7 @@ use mac_address::mac_address_by_name;
 struct Route {
     addr: IpAddr,
     netmask: IpAddr,
+	#[allow(dead_code)]
     dest: IpAddr,
 }
 
@@ -256,6 +257,7 @@ impl Device {
     }
 
     fn set_route(&self, _old_route: Option<Route>, new_route: Route) -> Result<()> {
+		let if_name = self.name()?;
         let prefix_len =
             ipnet::ip_mask_to_prefix(new_route.netmask).map_err(|_| Error::InvalidConfig)?;
         let args = [
@@ -263,7 +265,8 @@ impl Device {
             "add",
             "-net",
             &format!("{}/{}", new_route.addr, prefix_len),
-            &new_route.dest.to_string(),
+			"-iface",
+			&if_name,
         ];
         run_command("route", &args)?;
         log::info!("route {}", args.join(" "));
