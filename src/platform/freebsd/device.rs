@@ -151,6 +151,7 @@ impl Device {
 					}
 				}
 				Ok(IpAddr::V6(addr))=>{
+					println!("old ipv6 {addr}");
 					let mut req_v6 = self.request_v6()?;
 					req_v6.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr6;
 					if let Err(err) = siocdifaddr_in6(ctl_v6()?.as_raw_fd(), &req_v6) {
