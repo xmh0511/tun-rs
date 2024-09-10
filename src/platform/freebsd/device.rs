@@ -141,6 +141,13 @@ impl Device {
 			match addr {
                 IpAddr::V4(_) => {
 					let ctl = ctl()?;
+					if let Ok(addr) = self.address() {
+                        let mut req_v4 = self.request()?;
+                        req_v4.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr;
+                        if let Err(err) = siocdifaddr(ctl()?.as_raw_fd(), &req_v4) {
+                            log::error!("{err:?}");
+                        }
+                    }
 					let mut req: ifaliasreq = mem::zeroed();
 					let tun_name = self.name()?;
 					ptr::copy_nonoverlapping(
@@ -331,25 +338,29 @@ impl AbstractDevice for Device {
     }
 
     fn address(&self) -> Result<IpAddr> {
-        unsafe {
-            let mut req = self.request()?;
-            if let Err(err) = siocgifaddr(ctl()?.as_raw_fd(), &mut req) {
-                return Err(io::Error::from(err).into());
-            }
-            let sa = sockaddr_union::from(req.ifr_ifru.ifru_addr);
-            Ok(std::net::SocketAddr::try_from(sa)?.ip())
+		let if_name = self.name()?;
+        let addrs = getifaddrs::getifaddrs()?;
+        let ifs = addrs
+            .filter(|v| v.name == if_name)
+            .collect::<Vec<Interface>>();
+        if let Some(v) = ifs.last() {
+            return Ok(v.address);
         }
+        Err(Error::String("AddrNotAvailable".to_string()))
     }
 
     fn destination(&self) -> Result<IpAddr> {
-        unsafe {
-            let mut req = self.request()?;
-            if let Err(err) = siocgifdstaddr(ctl()?.as_raw_fd(), &mut req) {
-                return Err(io::Error::from(err).into());
-            }
-            let sa = sockaddr_union::from(req.ifr_ifru.ifru_dstaddr);
-            Ok(std::net::SocketAddr::try_from(sa)?.ip())
+		let if_name = self.name()?;
+        let addrs = getifaddrs::getifaddrs()?;
+        let ifs = addrs
+            .filter(|v| v.name == if_name)
+            .collect::<Vec<Interface>>();
+        if let Some(v) = ifs.last() {
+            return v
+                .dest_addr
+                .ok_or(Error::String("DestAddrNotAvailable".to_string()));
         }
+        Err(Error::String("DestAddrNotAvailable".to_string()))
     }
 
     fn broadcast(&self) -> Result<IpAddr> {
@@ -368,15 +379,17 @@ impl AbstractDevice for Device {
     }
 
     fn netmask(&self) -> Result<IpAddr> {
-        unsafe {
-            let mut req = self.request()?;
-            if let Err(err) = siocgifnetmask(ctl()?.as_raw_fd(), &mut req) {
-                return Err(io::Error::from(err).into());
-            }
-            // NOTE: Here should be `ifru_netmask` instead of `ifru_addr`, but `ifreq` does not define it.
-            let sa = sockaddr_union::from(req.ifr_ifru.ifru_addr);
-            Ok(std::net::SocketAddr::try_from(sa)?.ip())
+		let if_name = self.name()?;
+        let addrs = getifaddrs::getifaddrs()?;
+        let ifs = addrs
+            .filter(|v| v.name == if_name)
+            .collect::<Vec<Interface>>();
+        if let Some(v) = ifs.last() {
+            return v
+                .netmask
+                .ok_or(Error::String("NetMaskNotAvailable".to_string()));
         }
+        Err(Error::String("NetMaskNotAvailable".to_string()))
     }
 
     fn mtu(&self) -> Result<u16> {
