@@ -36,8 +36,8 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
 
     let mut config = tun_rs::Configuration::default();
 
-    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
-    config.layer(Layer::L2);
+    // #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
+    // config.layer(Layer::L2);
 
     config
         // .address_with_prefix(
