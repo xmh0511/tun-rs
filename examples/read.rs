@@ -49,7 +49,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
             "ffff:ffff:ffff:ffff::".parse::<IpAddr>().unwrap(),
         )
         //.address_with_prefix((10, 0, 0, 9), 24u8)
-        .destination((10, 0, 0, 1))
+        //.destination((10, 0, 0, 1))
         .up();
 
     let dev = Arc::new(tun_rs::create(&config)?);
