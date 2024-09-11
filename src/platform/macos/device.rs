@@ -144,13 +144,12 @@ impl Device {
         Ok(req)
     }
 
-    fn addresses(&self) -> Result<Vec<IpAddr>> {
+    fn addresses(&self) -> Result<Vec<Interface>> {
         let if_name = self.name()?;
         let addrs = getifaddrs::getifaddrs()?;
         let ifs = addrs
             .filter(|v| v.name == if_name)
-            .map(|v| v.address)
-            .collect::<Vec<IpAddr>>();
+            .collect::<Vec<Interface>>();
         Ok(ifs)
     }
 
@@ -182,7 +181,7 @@ impl Device {
         unsafe {
             if let Ok(addrs) = self.addresses() {
                 for addr in addrs {
-                    match addr {
+                    match addr.address {
                         IpAddr::V4(addr) => {
                             let mut req_v4 = self.request()?;
                             req_v4.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr;
@@ -260,7 +259,7 @@ impl Device {
             let args = [
                 "-n",
                 "delete",
-                "-net",
+                if v.addr.is_ipv4() { "-net" } else { "-inet6" },
                 &format!("{}/{}", network, prefix_len),
                 "-iface",
                 &if_name,
@@ -278,7 +277,11 @@ impl Device {
         let args = [
             "-n",
             "add",
-            "-net",
+            if new_route.addr.is_ipv4() {
+                "-net"
+            } else {
+                "-inet6"
+            },
             &format!("{}/{}", new_route.addr, prefix_len),
             "-iface",
             &if_name,
