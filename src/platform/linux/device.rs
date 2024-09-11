@@ -6,7 +6,7 @@ use std::{
     ptr,
 };
 
-use getifaddrs::Interface;
+use crate::getifaddrs::{self, Interface};
 use libc::{
     self, c_char, c_short, ifreq, in6_ifreq, AF_INET, AF_INET6, ARPHRD_ETHER, IFF_MULTI_QUEUE,
     IFF_NO_PI, IFF_RUNNING, IFF_TAP, IFF_TUN, IFF_UP, IFNAMSIZ, O_RDWR, SOCK_DGRAM,

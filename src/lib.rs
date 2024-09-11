@@ -32,4 +32,4 @@ pub const DEFAULT_MTU: u16 = 0xFFFF; // 65535
 
 pub const PACKET_INFORMATION_LENGTH: usize = 4;
 
-pub use getifaddrs::Interface;
+pub mod getifaddrs;
