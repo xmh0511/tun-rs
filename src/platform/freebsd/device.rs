@@ -173,8 +173,11 @@ impl Device {
                         return Err(io::Error::from(err).into());
                     }
                     if let Ok(addrs) = self.addresses() {
-                        let ip_v6: Vec<IpAddr> =
-                            addrs.into_iter().filter(|v| v.is_ipv6()).collect();
+                        let ip_v6: Vec<IpAddr> = addrs
+                            .into_iter()
+                            .filter(|v| v.address.is_ipv6())
+                            .map(|v| v.address)
+                            .collect();
                         let mut req_v6 = self.request_v6()?;
                         let ctl_v6 = ctl_v6()?;
                         let ctl_v6 = ctl_v6.as_raw_fd();
