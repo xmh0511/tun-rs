@@ -27,7 +27,7 @@ tokio = { version = "1", features = [
 tokio-util = { version = "0.7", features = ["codec"], optional = true }
 rustversion = "1.0.17"
 
-[target.'cfg(any(target_os = "macos",target_os = "freebsd"))'.dependencies]
+[target.'cfg(any(target_os = "macos",target_os = "freebsd",target_os = "linux"))'.dependencies]
 getifaddrs = {git = "https://github.com/xmh0511/getifaddrs.git"}
 
 [target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "android", target_os="freebsd"))'.dependencies]
@@ -56,7 +56,7 @@ windows-sys = { version = "0.59", features = [
 wintun = { version = "0.7.6", features = ["panic_on_unsent_packets"], package = "wintun-bindings" }
 libloading = "0.8"
 
-[target.'cfg(any(target_os = "macos", target_os = "freebsd"))'.dependencies]
+[target.'cfg(any(target_os = "macos", target_os = "freebsd", target_os = "linux"))'.dependencies]
 ipnet = "2"
 
 [target.'cfg(any(target_os = "linux", target_os = "freebsd",target_os = "windows"))'.dependencies]
