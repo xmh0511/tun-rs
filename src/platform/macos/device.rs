@@ -144,7 +144,7 @@ impl Device {
         Ok(req)
     }
 
-    fn addresses(&self) -> Result<Vec<Interface>> {
+    pub fn addresses(&self) -> Result<Vec<Interface>> {
         let if_name = self.name()?;
         let addrs = getifaddrs::getifaddrs()?;
         let ifs = addrs
