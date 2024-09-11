@@ -260,6 +260,9 @@ impl Device {
     }
 
     fn set_route(&self, _old_route: Option<Route>, new_route: Route) -> Result<()> {
+        if new_route.addr.is_ipv6() {
+            return Ok(());
+        }
         let if_name = self.name()?;
         let prefix_len =
             ipnet::ip_mask_to_prefix(new_route.netmask).map_err(|_| Error::InvalidConfig)?;
