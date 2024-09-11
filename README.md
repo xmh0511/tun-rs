@@ -41,7 +41,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
             "ffff:ffff:ffff:ffff::".parse::<IpAddr>().unwrap(),
         )
         //.address_with_prefix((10, 0, 0, 9), 24u8)
-        .destination((10, 0, 0, 1))
+        //.destination((10, 0, 0, 1))
         .up();
 
     let dev = tun_rs::create(&config)?;
