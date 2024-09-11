@@ -1,7 +1,7 @@
 use std::{
     ffi::CString,
     io, mem,
-    net::IpAddr,
+    net::{IpAddr, Ipv4Addr},
     os::unix::io::{AsRawFd, RawFd},
     ptr,
 };
@@ -130,6 +130,46 @@ impl Device {
     }
     fn set_address(&self, value: IpAddr, mask: Option<u32>) -> Result<()> {
         unsafe {
+            if let Ok(addrs) = self.addresses() {
+                for addr in addrs {
+                    match addr.address {
+                        IpAddr::V4(_) => {
+                            let mut req = self.request()?;
+                            ipaddr_to_sockaddr(
+                                IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
+                                0,
+                                &mut req.ifr_ifru.ifru_addr,
+                                OVERWRITE_SIZE,
+                            );
+                            if let Err(err) = siocsifaddr(ctl()?.as_raw_fd(), &req) {
+                                log::error!("{err:?}");
+                            }
+                        }
+                        IpAddr::V6(_) => {
+                            let if_index = {
+                                let name = self.name()?;
+                                let name = CString::new(name)?;
+                                libc::if_nametoindex(name.as_ptr())
+                            };
+                            let ctl = ctl_v6()?;
+                            let mut ifrv6: in6_ifreq = mem::zeroed();
+                            ifrv6.ifr6_ifindex = if_index as i32;
+                            ifrv6.ifr6_prefixlen = if let Some(v) = addr.netmask {
+                                ipnet::ip_mask_to_prefix(v).unwrap_or(64) as u32
+                            } else {
+                                64
+                            };
+                            ifrv6.ifr6_addr =
+                                sockaddr_union::from(std::net::SocketAddr::new(addr.address, 0))
+                                    .addr6
+                                    .sin6_addr;
+                            if let Err(e) = siocdifaddr_in6(ctl.as_raw_fd(), &ifrv6) {
+                                log::error!("{e:?}");
+                            }
+                        }
+                    }
+                }
+            }
             match value {
                 IpAddr::V4(addr) => {
                     let mut req = self.request()?;
