@@ -265,7 +265,7 @@ mod unix {
                                 .and_then(|sa| sockaddr_to_ipaddr(sa).ok())
                         };
 
-                        #[cfg(not(target_os = "linux"))]
+                        #[cfg(any(target_os = "macos", target_os = "freebsd"))]
                         let dest_addr = unsafe {
                             ifaddr
                                 .ifa_dstaddr
@@ -273,7 +273,7 @@ mod unix {
                                 .and_then(|sa| sockaddr_to_ipaddr(sa).ok())
                         };
 
-                        #[cfg(target_os = "linux")]
+                        #[cfg(all(not(target_os = "macos"), not(target_os = "freebsd")))]
                         let dest_addr = None;
 
                         return Some(Interface {
@@ -890,7 +890,7 @@ mod tests {
                 .unwrap()
                 .collect();
             eprintln!("Name filter {name}: {v:?}");
-            assert!(v.len() >= 1);
+            assert!(!v.is_empty());
             for interface in v {
                 assert_eq!(name, interface.name);
             }
@@ -899,7 +899,7 @@ mod tests {
             if let Some(index) = interface.index {
                 let v: Vec<_> = InterfaceFilter::new().index(index).get().unwrap().collect();
                 eprintln!("Index filter {index}: {v:?}");
-                assert!(v.len() >= 1);
+                assert!(!v.is_empty());
                 for interface in v {
                     assert_eq!(Some(index), interface.index);
                 }
