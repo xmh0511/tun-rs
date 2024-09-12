@@ -425,7 +425,19 @@ impl AbstractDevice for Device {
     }
 
     fn set_broadcast<A: IntoAddress>(&self, _value: A) -> Result<()> {
-        Ok(())
+        let value = value.into_address()?;
+        let IpAddr::V4(value) = value else {
+            unimplemented!("do not support IPv6 yet")
+        };
+        unsafe {
+            let ctl = ctl()?;
+            let mut req = self.request()?;
+            ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_broadaddr, OVERWRITE_SIZE);
+            if let Err(err) = siocsifbrdaddr(ctl.as_raw_fd(), &req) {
+                return Err(io::Error::from(err).into());
+            }
+            Ok(())
+        }
     }
 
     fn netmask(&self) -> Result<IpAddr> {
