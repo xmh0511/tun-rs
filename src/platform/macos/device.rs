@@ -144,23 +144,20 @@ impl Device {
         Ok(req)
     }
 
-    pub fn addresses(&self) -> Result<Vec<Interface>> {
-        let if_name = self.name()?;
-        let addrs = getifaddrs::getifaddrs()?;
-        let ifs = addrs
-            .filter(|v| v.name == if_name)
-            .collect::<Vec<Interface>>();
-        Ok(ifs)
-    }
-
     fn current_route(&self) -> Option<Route> {
-        let addr = self.address().ok()?;
-        let netmask = self.netmask().ok()?;
-        let dest = self
-            .destination()
-            .unwrap_or(self.calc_dest_addr(addr, netmask).ok()?);
+        let addr = self.addresses().ok()?;
+        let addr = addr
+            .into_iter()
+            .filter(|v| v.address.is_ipv4())
+            .collect::<Vec<Interface>>();
+        let addr = addr.first()?;
+        let addr_ = addr.address;
+        let netmask = addr.netmask?;
+        let dest = addr
+            .dest_addr
+            .unwrap_or(self.calc_dest_addr(addr_, netmask).ok()?);
         Some(Route {
-            addr,
+            addr: addr_,
             netmask,
             dest,
         })
@@ -400,30 +397,13 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn address(&self) -> Result<IpAddr> {
+    fn addresses(&self) -> Result<Vec<Interface>> {
         let if_name = self.name()?;
         let addrs = getifaddrs::getifaddrs()?;
         let ifs = addrs
             .filter(|v| v.name == if_name)
             .collect::<Vec<Interface>>();
-        if let Some(v) = ifs.last() {
-            return Ok(v.address);
-        }
-        Err(Error::String("AddrNotAvailable".to_string()))
-    }
-
-    fn destination(&self) -> Result<IpAddr> {
-        let if_name = self.name()?;
-        let addrs = getifaddrs::getifaddrs()?;
-        let ifs = addrs
-            .filter(|v| v.name == if_name)
-            .collect::<Vec<Interface>>();
-        if let Some(v) = ifs.last() {
-            return v
-                .dest_addr
-                .ok_or(Error::String("DestAddrNotAvailable".to_string()));
-        }
-        Err(Error::String("DestAddrNotAvailable".to_string()))
+        Ok(ifs)
     }
 
     // /// Question on macOS
@@ -455,20 +435,6 @@ impl AbstractDevice for Device {
     //         Ok(())
     //     }
     // }
-
-    fn netmask(&self) -> Result<IpAddr> {
-        let if_name = self.name()?;
-        let addrs = getifaddrs::getifaddrs()?;
-        let ifs = addrs
-            .filter(|v| v.name == if_name)
-            .collect::<Vec<Interface>>();
-        if let Some(v) = ifs.last() {
-            return v
-                .netmask
-                .ok_or(Error::String("NetMaskNotAvailable".to_string()));
-        }
-        Err(Error::String("NetMaskNotAvailable".to_string()))
-    }
 
     fn mtu(&self) -> Result<u16> {
         unsafe {

@@ -38,16 +38,7 @@ pub trait AbstractDevice {
         target_os = "macos",
         target_os = "freebsd"
     ))]
-    fn address(&self) -> Result<IpAddr>;
-
-    /// Get the destination address.
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
-    fn destination(&self) -> Result<IpAddr>;
+    fn addresses(&self) -> Result<Vec<crate::getifaddrs::Interface>>;
 
     /// Get the broadcast address.
     #[cfg(target_os = "linux")]
@@ -56,15 +47,6 @@ pub trait AbstractDevice {
     /// Set the broadcast address.
     #[cfg(target_os = "linux")]
     fn set_broadcast<A: IntoAddress>(&self, value: A) -> Result<()>;
-
-    /// Get the netmask.
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
-    fn netmask(&self) -> Result<IpAddr>;
 
     /// Sets the network addresses of this adapter, including network address, subnet mask, and gateway
     #[cfg(any(

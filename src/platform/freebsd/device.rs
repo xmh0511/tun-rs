@@ -250,15 +250,6 @@ impl Device {
         Ok(req)
     }
 
-    pub fn addresses(&self) -> Result<Vec<Interface>> {
-        let if_name = self.name()?;
-        let addrs = getifaddrs::getifaddrs()?;
-        let ifs = addrs
-            .filter(|v| v.name == if_name)
-            .collect::<Vec<Interface>>();
-        Ok(ifs)
-    }
-
     fn set_route(&self, _old_route: Option<Route>, new_route: Route) -> Result<()> {
         if new_route.addr.is_ipv6() {
             return Ok(());
@@ -387,30 +378,13 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn address(&self) -> Result<IpAddr> {
+    fn addresses(&self) -> Result<Vec<Interface>> {
         let if_name = self.name()?;
         let addrs = getifaddrs::getifaddrs()?;
         let ifs = addrs
             .filter(|v| v.name == if_name)
             .collect::<Vec<Interface>>();
-        if let Some(v) = ifs.first() {
-            return Ok(v.address);
-        }
-        Err(Error::String("AddrNotAvailable".to_string()))
-    }
-
-    fn destination(&self) -> Result<IpAddr> {
-        let if_name = self.name()?;
-        let addrs = getifaddrs::getifaddrs()?;
-        let ifs = addrs
-            .filter(|v| v.name == if_name)
-            .collect::<Vec<Interface>>();
-        if let Some(v) = ifs.first() {
-            return v
-                .dest_addr
-                .ok_or(Error::String("DestAddrNotAvailable".to_string()));
-        }
-        Err(Error::String("DestAddrNotAvailable".to_string()))
+        Ok(ifs)
     }
 
     // fn broadcast(&self) -> Result<IpAddr> {
@@ -439,20 +413,6 @@ impl AbstractDevice for Device {
     //         Ok(())
     //     }
     // }
-
-    fn netmask(&self) -> Result<IpAddr> {
-        let if_name = self.name()?;
-        let addrs = getifaddrs::getifaddrs()?;
-        let ifs = addrs
-            .filter(|v| v.name == if_name)
-            .collect::<Vec<Interface>>();
-        if let Some(v) = ifs.first() {
-            return v
-                .netmask
-                .ok_or(Error::String("NetMaskNotAvailable".to_string()));
-        }
-        Err(Error::String("NetMaskNotAvailable".to_string()))
-    }
 
     fn mtu(&self) -> Result<u16> {
         unsafe {

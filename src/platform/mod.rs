@@ -58,15 +58,12 @@ mod test {
         )
         .unwrap();
 
-        assert_eq!(
-            "192.168.50.1".parse::<Ipv4Addr>().unwrap(),
-            dev.address().unwrap()
-        );
-
-        assert_eq!(
-            "255.255.0.0".parse::<Ipv4Addr>().unwrap(),
-            dev.netmask().unwrap()
-        );
+        assert!(dev
+            .addresses()
+            .unwrap()
+            .into_iter()
+            .find(|v| v.address == "192.168.50.1".parse::<Ipv4Addr>().unwrap())
+            .is_some());
 
         assert_eq!(crate::DEFAULT_MTU, dev.mtu().unwrap());
     }

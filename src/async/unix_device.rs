@@ -4,7 +4,6 @@
     target_os = "freebsd",
     target_os = "windows"
 ))]
-use std::net::IpAddr;
 use std::os::fd::{FromRawFd, RawFd};
 
 use crate::platform::Device;
@@ -84,19 +83,10 @@ impl AbstractDevice for AsyncDevice {
         target_os = "freebsd",
         target_os = "windows"
     ))]
-    fn address(&self) -> crate::Result<IpAddr> {
-        self.inner.get_ref().address()
+    fn addresses(&self) -> crate::Result<Vec<crate::getifaddrs::Interface>> {
+        self.inner.get_ref().addresses()
     }
 
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd",
-        target_os = "windows"
-    ))]
-    fn destination(&self) -> crate::Result<IpAddr> {
-        self.inner.get_ref().destination()
-    }
     #[cfg(target_os = "linux")]
     fn broadcast(&self) -> crate::Result<IpAddr> {
         self.inner.get_ref().broadcast()
@@ -105,15 +95,7 @@ impl AbstractDevice for AsyncDevice {
     fn set_broadcast<A: crate::IntoAddress>(&self, value: A) -> crate::Result<()> {
         self.inner.get_ref().set_broadcast(value)
     }
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
-    fn netmask(&self) -> crate::Result<IpAddr> {
-        self.inner.get_ref().netmask()
-    }
+
     #[cfg(any(
         target_os = "windows",
         target_os = "linux",

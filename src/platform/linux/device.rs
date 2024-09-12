@@ -130,14 +130,7 @@ impl Device {
     unsafe fn request(&self) -> Result<ifreq> {
         request(&self.name()?)
     }
-    pub fn addresses(&self) -> Result<Vec<Interface>> {
-        let if_name = self.name()?;
-        let addrs = getifaddrs::getifaddrs()?;
-        let ifs = addrs
-            .filter(|v| v.name == if_name)
-            .collect::<Vec<Interface>>();
-        Ok(ifs)
-    }
+
     fn set_address(&self, value: IpAddr, mask: Option<u32>) -> Result<()> {
         unsafe {
             if let Ok(addrs) = self.addresses() {
@@ -341,22 +334,13 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn address(&self) -> Result<IpAddr> {
-        let addrs = self.addresses()?;
-        if let Some(v) = addrs.last() {
-            return Ok(v.address);
-        }
-        Err(Error::String("AddrNotAvailable".to_string()))
-    }
-
-    fn destination(&self) -> Result<IpAddr> {
-        let addrs = self.addresses()?;
-        if let Some(v) = addrs.last() {
-            return v
-                .dest_addr
-                .ok_or(Error::String("DestAddrNotAvailable".to_string()));
-        }
-        Err(Error::String("DestAddrNotAvailable".to_string()))
+    fn addresses(&self) -> Result<Vec<Interface>> {
+        let if_name = self.name()?;
+        let addrs = getifaddrs::getifaddrs()?;
+        let ifs = addrs
+            .filter(|v| v.name == if_name)
+            .collect::<Vec<Interface>>();
+        Ok(ifs)
     }
 
     fn broadcast(&self) -> Result<IpAddr> {
@@ -380,16 +364,6 @@ impl AbstractDevice for Device {
             }
             Ok(())
         }
-    }
-
-    fn netmask(&self) -> Result<IpAddr> {
-        let addrs = self.addresses()?;
-        if let Some(v) = addrs.last() {
-            return v
-                .netmask
-                .ok_or(Error::String("NetMaskNotAvailable".to_string()));
-        }
-        Err(Error::String("NetMaskNotAvailable".to_string()))
     }
 
     fn set_network_address<A: IntoAddress>(

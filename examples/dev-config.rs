@@ -37,14 +37,9 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
         .up();
 
     let dev = tun_rs::create(&config)?;
-    let r = dev.address()?;
+    let r = dev.addresses()?;
     println!("{:?}", r);
 
-    let r = dev.destination()?;
-    println!("{:?}", r);
-
-    let r = dev.netmask()?;
-    println!("{:?}", r);
     dev.set_network_address((10, 0, 0, 2), (255, 255, 255, 0), None)?;
     dev.set_mtu(65535)?;
 
