@@ -4,7 +4,7 @@ Tun/Tap interfaces
 ![tun-rs](https://docs.rs/tun-rs/badge.svg)
 ![Apache-2.0](https://img.shields.io/github/license/xmh0511/tun-rs?style=flat)
 
-This crate allows the creation and usage of Tun/Tap interfaces(supporting both Ipv4 and ipv6), the aim is to make this cross-platform.
+This crate allows the creation and usage of Tun/Tap interfaces(**supporting both Ipv4 and ipv6**), the aim is to make this cross-platform.
 
 
 Usage
@@ -38,7 +38,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
             "CDCD:910A:2222:5498:8475:1111:3900:2020"
                 .parse::<IpAddr>()
                 .unwrap(),
-            "ffff:ffff:ffff:ffff::".parse::<IpAddr>().unwrap(),
+			64
         )
         //.address_with_prefix((10, 0, 0, 9), 24u8)
         //.destination((10, 0, 0, 1))
