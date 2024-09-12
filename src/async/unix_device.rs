@@ -97,11 +97,11 @@ impl AbstractDevice for AsyncDevice {
     fn destination(&self) -> crate::Result<IpAddr> {
         self.inner.get_ref().destination()
     }
-    #[cfg(any(target_os = "linux"))]
+    #[cfg(target_os = "linux")]
     fn broadcast(&self) -> crate::Result<IpAddr> {
         self.inner.get_ref().broadcast()
     }
-    #[cfg(any(target_os = "linux"))]
+    #[cfg(target_os = "linux")]
     fn set_broadcast<A: crate::IntoAddress>(&self, value: A) -> crate::Result<()> {
         self.inner.get_ref().set_broadcast(value)
     }
