@@ -333,6 +333,12 @@ impl AbstractDevice for Device {
         } else {
             None
         };
+        if let Ok(addr) = self.address() {
+            if addr.is_ipv6() {
+                netsh::delete_interface_ipv6(self.driver.index()?, addr)?;
+            }
+        }
+
         netsh::set_interface_ip(
             self.driver.index()?,
             address.into_address()?,

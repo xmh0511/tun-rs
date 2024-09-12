@@ -76,6 +76,16 @@ impl Device {
                 tun: Tun::new(tun_fd),
             };
             configure(&device, config)?;
+            if let Some(tx_queue_len) = config.platform_config.tx_queue_len {
+                let _out = std::process::Command::new("sh")
+                    .arg("-c")
+                    .arg(format!(
+                        "ip link set {} txqueuelen {}",
+                        device.name()?,
+                        tx_queue_len
+                    ))
+                    .output();
+            }
             Ok(device)
         }
     }

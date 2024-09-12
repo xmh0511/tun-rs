@@ -52,7 +52,7 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_Threading",
     "Win32_UI_WindowsAndMessaging",
     "Win32_System_LibraryLoader",
-	"Win32_NetworkManagement_IpHelper",
+    "Win32_NetworkManagement_IpHelper",
 ] }
 wintun = { version = "0.7.6", features = ["panic_on_unsent_packets"], package = "wintun-bindings" }
 libloading = "0.8"
