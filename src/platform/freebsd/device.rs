@@ -15,6 +15,8 @@ use std::{ffi::CStr, io, mem, net::IpAddr, os::unix::io::AsRawFd, ptr, sync::Mut
 use crate::getifaddrs::{self, Interface};
 use mac_address::mac_address_by_name;
 
+const OVERWRITE_SIZE: usize = std::mem::size_of::<libc::__c_anonymous_ifr_ifru>();
+
 #[derive(Clone, Copy, Debug)]
 struct Route {
     addr: IpAddr,
