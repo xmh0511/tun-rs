@@ -50,11 +50,11 @@ pub trait AbstractDevice {
     fn destination(&self) -> Result<IpAddr>;
 
     /// Get the broadcast address.
-    #[cfg(any(target_os = "linux"))]
+    #[cfg(target_os = "linux")]
     fn broadcast(&self) -> Result<IpAddr>;
 
     /// Set the broadcast address.
-    #[cfg(any(target_os = "linux"))]
+    #[cfg(target_os = "linux")]
     fn set_broadcast<A: IntoAddress>(&self, value: A) -> Result<()>;
 
     /// Get the netmask.
