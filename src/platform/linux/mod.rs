@@ -13,7 +13,7 @@ use crate::error::Result;
 pub struct PlatformConfig {
     /// switch of Enable/Disable packet information for network driver
     pub(crate) packet_information: bool,
-    pub(crate) tx_queue_len:Option<usize>,
+    pub(crate) tx_queue_len: Option<usize>,
 }
 
 /// `packet_information` is default to be `false` and `ensure_root_privileges` is default to be `true`.

@@ -3,6 +3,7 @@ use std::net::IpAddr;
 use std::os::windows::process::CommandExt;
 use std::process::{Command, Output};
 
+use crate::IntoAddress;
 use encoding_rs::GBK;
 use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
 
@@ -62,6 +63,18 @@ pub fn exe_command(cmd: &mut Command) -> io::Result<()> {
         .collect::<Vec<String>>();
     output(&command.join(" ").to_string(), out)
 }
+pub fn delete_interface_ipv6(index: u32, address: IpAddr) -> io::Result<()> {
+    let mut binding = Command::new("netsh");
+    let cmd = binding
+        .arg("interface")
+        .arg("ipv6")
+        .arg("delete ")
+        .arg("address")
+        .arg(index.to_string().as_str())
+        .arg(format!("address={}", address).as_str());
+    println!("{:?}", cmd);
+    exe_command(cmd)
+}
 
 /// 设置网卡ip
 pub fn set_interface_ip(
@@ -71,15 +84,29 @@ pub fn set_interface_ip(
     gateway: Option<IpAddr>,
 ) -> io::Result<()> {
     let mut binding = Command::new("netsh");
-    let cmd = binding
-        .arg("interface")
-        .arg(if address.is_ipv4() { "ipv4" } else { "ipv6" })
-        .arg("set")
-        .arg("address")
-        .arg(index.to_string().as_str())
-        .arg("source=static")
-        .arg(format!("address={}", address).as_str())
-        .arg(format!("mask={}", netmask).as_str());
+
+    let cmd = if address.is_ipv4() {
+        binding
+            .arg("interface")
+            .arg("ipv4")
+            .arg("set")
+            .arg("address")
+            .arg(index.to_string().as_str())
+            .arg("source=static")
+            .arg(format!("address={}", address).as_str())
+            .arg(format!("mask={}", netmask).as_str())
+    } else {
+        let prefix_len = ipnet::ip_mask_to_prefix(netmask.into_address()?)
+            .map_err(|_| io::Error::from(io::ErrorKind::InvalidData))?;
+        binding
+            .arg("interface")
+            .arg("ipv6")
+            .arg("set")
+            .arg("address")
+            .arg(index.to_string().as_str())
+            .arg(format!("address={}/{}", address, prefix_len).as_str())
+    };
+
     if let Some(gateway) = gateway {
         _ = cmd.arg(format!("gateway={}", gateway).as_str());
     }

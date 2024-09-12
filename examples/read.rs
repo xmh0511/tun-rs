@@ -46,7 +46,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
             "CDCD:910A:2222:5498:8475:1111:3900:2020"
                 .parse::<IpAddr>()
                 .unwrap(),
-            "ffff:ffff:ffff:ffff::".parse::<IpAddr>().unwrap(),
+            64,
         )
         //.address_with_prefix((10, 0, 0, 9), 24u8)
         //.destination((10, 0, 0, 1))
