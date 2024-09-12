@@ -11,6 +11,9 @@ use crate::AbstractDevice;
 use tokio::io::unix::AsyncFd;
 use tokio::io::Interest;
 
+#[allow(unused_imports)]
+use std::net::IpAddr;
+
 /// An async TUN device wrapper around a TUN device.
 pub struct AsyncDevice {
     inner: AsyncFd<Device>,
