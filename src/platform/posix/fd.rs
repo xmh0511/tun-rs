@@ -1,7 +1,8 @@
-use std::io;
+use std::io::IoSlice;
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 #[cfg(feature = "experimental")]
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::{cmp, io};
 
 use libc::{self, fcntl, F_GETFL, F_SETFL, O_NONBLOCK};
 
@@ -57,6 +58,40 @@ impl Fd {
         }
         Ok(amount as usize)
     }
+    #[inline]
+    pub fn writev(&self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
+        let amount = unsafe {
+            libc::writev(
+                self.as_raw_fd(),
+                bufs.as_ptr() as *const libc::iovec,
+                cmp::min(bufs.len(), max_iov()) as libc::c_int,
+            )
+        };
+        if amount < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(amount as usize)
+    }
+}
+#[cfg(any(
+    target_os = "dragonfly",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_vendor = "apple",
+))]
+const fn max_iov() -> usize {
+    libc::IOV_MAX as usize
+}
+
+#[cfg(any(
+    target_os = "android",
+    target_os = "emscripten",
+    target_os = "linux",
+    target_os = "nto",
+))]
+const fn max_iov() -> usize {
+    libc::UIO_MAXIOV as usize
 }
 #[cfg(not(feature = "experimental"))]
 impl Fd {

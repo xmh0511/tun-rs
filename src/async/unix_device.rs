@@ -1,3 +1,4 @@
+use std::io::IoSlice;
 #[cfg(any(
     target_os = "linux",
     target_os = "macos",
@@ -56,6 +57,11 @@ impl AsyncDevice {
     pub async fn send(&self, buf: &[u8]) -> std::io::Result<usize> {
         self.inner
             .async_io(Interest::WRITABLE, |device| device.send(buf))
+            .await
+    }
+    pub async fn send_vectored(&self, bufs: &[IoSlice<'_>]) -> std::io::Result<usize> {
+        self.inner
+            .async_io(Interest::WRITABLE, |device| device.send_vectored(bufs))
             .await
     }
 }
