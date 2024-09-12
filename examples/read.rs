@@ -54,7 +54,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
 
     let dev = Arc::new(tun_rs::create(&config)?);
 	#[cfg(any(target_os = "linux", target_os = "freebsd",))]
-	dev.set_broadcast((10,0,0,1))?;
+	dev.set_broadcast((10,0,0,9))?;
     let dev_t = dev.clone();
     let _join = std::thread::spawn(move || {
         let mut buf = [0; 4096];
