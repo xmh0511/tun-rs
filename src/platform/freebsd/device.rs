@@ -3,7 +3,7 @@ use crate::{
     device::{AbstractDevice, ETHER_ADDR_LEN},
     error::{Error, Result},
     platform::freebsd::sys::*,
-    platform::posix::{self, ipaddr_to_sockaddr, sockaddr_union, Fd, Tun},
+    platform::posix::{self, sockaddr_union, Fd, Tun},
     IntoAddress,
 };
 use libc::{
@@ -14,8 +14,6 @@ use std::{ffi::CStr, io, mem, net::IpAddr, os::unix::io::AsRawFd, ptr, sync::Mut
 
 use crate::getifaddrs::{self, Interface};
 use mac_address::mac_address_by_name;
-
-const OVERWRITE_SIZE: usize = std::mem::size_of::<libc::__c_anonymous_ifr_ifru>();
 
 #[derive(Clone, Copy, Debug)]
 struct Route {
@@ -434,7 +432,7 @@ impl AbstractDevice for Device {
         unsafe {
             let ctl = ctl()?;
             let mut req = self.request()?;
-            ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_broadaddr, OVERWRITE_SIZE);
+            req.ifr_ifru.ifru_broadaddr = posix::sockaddr_union::from((addr, 0)).addr;
             if let Err(err) = siocsifbrdaddr(ctl.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
