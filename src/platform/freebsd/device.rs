@@ -426,13 +426,13 @@ impl AbstractDevice for Device {
 
     fn set_broadcast<A: IntoAddress>(&self, value: A) -> Result<()> {
         let value = value.into_address()?;
-        let IpAddr::V4(value) = value else {
+        let IpAddr::V4(_) = value else {
             unimplemented!("do not support IPv6 yet")
         };
         unsafe {
             let ctl = ctl()?;
             let mut req = self.request()?;
-            req.ifr_ifru.ifru_broadaddr = posix::sockaddr_union::from((addr, 0)).addr;
+            req.ifr_ifru.ifru_broadaddr = posix::sockaddr_union::from((value, 0)).addr;
             if let Err(err) = siocsifbrdaddr(ctl.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
