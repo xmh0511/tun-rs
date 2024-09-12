@@ -349,22 +349,30 @@ mod unix {
 }
 
 #[cfg(windows)]
-mod windows {
+pub(crate) mod windows {
+    use crate::BoxError;
+
     use super::{
         AddressFilterCriteria, Interface, InterfaceFilter, InterfaceFilterCriteria, InterfaceFlags,
     };
     use std::{ffi::OsString, io, net::IpAddr, os::windows::prelude::OsStringExt};
     use windows_sys::Win32::Foundation::{
-        ERROR_BUFFER_OVERFLOW, ERROR_NOT_ENOUGH_MEMORY, ERROR_NO_DATA, NO_ERROR,
+        GetLastError, LocalFree, ERROR_BUFFER_OVERFLOW, ERROR_NOT_ENOUGH_MEMORY, ERROR_NO_DATA,
+        ERROR_SUCCESS, NO_ERROR,
     };
     use windows_sys::Win32::NetworkManagement::IpHelper::{
         if_indextoname, if_nametoindex, ConvertInterfaceLuidToIndex, ConvertLengthToIpv4Mask,
-        GetAdaptersAddresses, GetNumberOfInterfaces, IF_TYPE_IEEE80211, IP_ADAPTER_ADDRESSES_LH,
+        GetAdaptersAddresses, GetNumberOfInterfaces, GAA_FLAG_INCLUDE_GATEWAYS,
+        GAA_FLAG_INCLUDE_PREFIX, IF_TYPE_IEEE80211, IP_ADAPTER_ADDRESSES_LH,
         IP_ADAPTER_UNICAST_ADDRESS_LH, MIB_IF_TYPE_LOOPBACK, MIB_IF_TYPE_PPP,
     };
     use windows_sys::Win32::Networking::WinSock::{
-        AF_INET, AF_INET6, SOCKADDR, SOCKADDR_IN, SOCKADDR_IN6,
+        AF_INET, AF_INET6, AF_UNSPEC, SOCKADDR, SOCKADDR_IN, SOCKADDR_IN6,
     };
+    use windows_sys::Win32::System::Diagnostics::Debug::{
+        FormatMessageW, FORMAT_MESSAGE_ALLOCATE_BUFFER, FORMAT_MESSAGE_FROM_SYSTEM,
+    };
+    use windows_sys::Win32::System::SystemServices::{LANG_NEUTRAL, SUBLANG_DEFAULT};
 
     // Larger than necessary
     const IF_NAMESIZE: usize = 1024;
@@ -723,6 +731,136 @@ mod windows {
         } else {
             Ok(result as _)
         }
+    }
+
+    pub(crate) fn get_adapters_addresses() -> Result<Vec<Interface>, crate::Error> {
+        let mut size = 0;
+        let flags = GAA_FLAG_INCLUDE_PREFIX | GAA_FLAG_INCLUDE_GATEWAYS;
+        let family = AF_UNSPEC as u32;
+
+        // Make an initial call to GetAdaptersAddresses to get the
+        // size needed into the size variable
+        let result = unsafe {
+            GetAdaptersAddresses(
+                family,
+                flags,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                &mut size,
+            )
+        };
+
+        if result != ERROR_BUFFER_OVERFLOW {
+            return Err(format!(
+                "GetAdaptersAddresses failed: {}",
+                format_message(result).map_err(|v| v.to_string())?
+            )
+            .into());
+        }
+        // Allocate memory for the buffer
+        let mut addresses: Vec<u8> = vec![0; (size + 4) as usize];
+
+        // Make a second call to GetAdaptersAddresses to get the actual data we want
+        let result = unsafe {
+            let addr = addresses.as_mut_ptr() as *mut IP_ADAPTER_ADDRESSES_LH;
+            GetAdaptersAddresses(family, flags, std::ptr::null_mut(), addr, &mut size)
+        };
+
+        if ERROR_SUCCESS != result {
+            return Err(format!(
+                "GetAdaptersAddresses failed: {}",
+                format_message(result).map_err(|v| v.to_string())?
+            )
+            .into());
+        }
+
+        // If successful, output some information from the data we received
+        let mut all_address = vec![];
+        let mut current_addresses = addresses.as_ptr() as *const IP_ADAPTER_ADDRESSES_LH;
+        while !current_addresses.is_null() {
+            unsafe {
+                let adapter = &*current_addresses;
+                let mut current_address = adapter.FirstUnicastAddress;
+                while !current_address.is_null() {
+                    match convert_to_interface(adapter, &*current_address) {
+                        Ok(interface) => {
+                            all_address.push(interface);
+                        }
+                        Err(e) => {
+                            log::error!("Failed to parse address: {}", e);
+                        }
+                    }
+                    current_address = (*current_address).Next;
+                }
+                current_addresses = (*current_addresses).Next;
+            }
+        }
+        Ok(all_address)
+    }
+
+    #[allow(non_snake_case)]
+    #[inline]
+    fn MAKELANGID(p: u32, s: u32) -> u32 {
+        ((s & 0x0000ffff) << 10) | (p & 0x0000ffff)
+    }
+
+    /// Returns a a human readable error message from a windows error code
+    pub fn format_message(error_code: u32) -> Result<String, BoxError> {
+        let buf: *mut u16 = std::ptr::null_mut();
+
+        let chars_written = unsafe {
+            FormatMessageW(
+                FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_ALLOCATE_BUFFER,
+                std::ptr::null_mut(),
+                error_code,
+                MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                &buf as *const windows_sys::core::PWSTR as *mut u16,
+                0,
+                std::ptr::null_mut(),
+            )
+        };
+        if chars_written == 0 {
+            return Ok(get_last_error()?);
+        }
+        let result = unsafe { win_pwstr_to_string(buf)? };
+        // Win32 returns the same handle if LocalFree fails.
+        if unsafe { !LocalFree(buf as *mut _).is_null() } {
+            log::trace!("LocalFree failed: {:?}", get_last_error());
+        }
+
+        Ok(result)
+    }
+
+    pub(crate) fn get_last_error() -> std::io::Result<String> {
+        get_os_error_from_id(unsafe { GetLastError() as _ })?;
+        Ok("No error".to_string())
+    }
+
+    pub(crate) fn get_os_error_from_id(id: i32) -> std::io::Result<()> {
+        match id {
+            0 => Ok(()),
+            e => Err(std::io::Error::from_raw_os_error(e)),
+        }
+    }
+
+    pub(crate) unsafe fn win_pwstr_to_string(
+        pwstr: ::windows_sys::core::PWSTR,
+    ) -> Result<String, crate::Error> {
+        if pwstr.is_null() {
+            return Err("Null pointer received".into());
+        }
+
+        let mut len = 0;
+        while *pwstr.add(len) != 0 {
+            len += 1;
+        }
+
+        let slice = std::slice::from_raw_parts(pwstr, len);
+
+        let os_string = std::ffi::OsString::from_wide(slice);
+        os_string
+            .into_string()
+            .map_err(|e| format!("Invalid UTF-8 sequence: {:?}", e).into())
     }
 }
 

@@ -1,8 +1,8 @@
 use crate::device::ETHER_ADDR_LEN;
+use crate::getifaddrs::Interface;
 use crate::platform::Device;
 use crate::{AbstractDevice, IntoAddress};
 use std::io;
-use std::net::IpAddr;
 use std::sync::Arc;
 
 use crate::platform::windows::PacketVariant;
@@ -77,16 +77,8 @@ impl AbstractDevice for AsyncDevice {
         self.inner.enabled(value)
     }
 
-    fn address(&self) -> crate::Result<IpAddr> {
-        self.inner.address()
-    }
-
-    fn destination(&self) -> crate::Result<IpAddr> {
-        self.inner.destination()
-    }
-
-    fn netmask(&self) -> crate::Result<IpAddr> {
-        self.inner.netmask()
+    fn addresses(&self) -> crate::Result<Vec<Interface>> {
+        self.inner.addresses()
     }
 
     fn set_network_address<A: IntoAddress>(

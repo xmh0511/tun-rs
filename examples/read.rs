@@ -38,8 +38,8 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
 
     let mut config = tun_rs::Configuration::default();
 
-    // #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
-    // config.layer(Layer::L2);
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
+    config.layer(Layer::L2);
 
     config
         // .address_with_prefix(
@@ -63,7 +63,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
         #[allow(unreachable_code)]
         Ok::<(), BoxError>(())
     });
-    dev_t.set_network_address((10, 0, 0, 88), (255, 255, 255, 0), None)?;
+    //dev_t.set_network_address((10, 0, 0, 88), (255, 255, 255, 0), None)?;
     // dev_t.set_network_address(
     //     "CDCD:910A:2222:5498:8475:1111:3900:2024"
     //         .parse::<IpAddr>()
@@ -73,7 +73,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     // )?;
     quit.recv().expect("Quit error.");
     println!("recv quit!!!!!");
-    println!("{:?}", dev_t.addresses()?);
+    println!("{:#?}", dev_t.addresses()?);
     dev_t.enabled(false)?;
     Ok(())
 }

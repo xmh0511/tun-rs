@@ -1,12 +1,12 @@
 use std::io;
-use std::net::IpAddr;
 use std::sync::Arc;
 
 use wintun::{load_from_path, Packet, Session};
 
 use crate::configuration::{configure, Configuration};
 use crate::device::{AbstractDevice, ETHER_ADDR_LEN};
-use crate::error::{Error, Result};
+use crate::error::Result;
+use crate::getifaddrs::Interface;
 use crate::platform::windows::netsh;
 use crate::platform::windows::tap::TapDevice;
 use crate::{IntoAddress, Layer};
@@ -218,6 +218,9 @@ impl Device {
             }
         )
     }
+    pub fn get_all_adapter_address(&self) -> Result<Vec<Interface>, crate::Error> {
+        crate::getifaddrs::windows::get_adapters_addresses()
+    }
 }
 
 impl AbstractDevice for Device {
@@ -265,59 +268,18 @@ impl AbstractDevice for Device {
         Ok(())
     }
 
-    fn address(&self) -> Result<IpAddr> {
+    fn addresses(&self) -> Result<Vec<Interface>> {
         driver_case!(
             &self.driver;
             tun=>{
-                let addresses =tun.session.get_adapter().get_addresses()?;
-                addresses
-                    .iter()
-                    .find_map(|a| match a {
-                        std::net::IpAddr::V4(a) => Some(std::net::IpAddr::V4(*a)),
-                        _ => None,
-                    })
-                    .ok_or(Error::InvalidConfig)
+                let tun_index = tun.session.get_adapter().get_adapter_index()?;
+                let r = self.get_all_adapter_address()?.into_iter().filter(|v|v.index == Some(tun_index)).collect();
+                Ok(r)
             };
             tap=>{
-                tap.get_address().map_err(|e|e.into())
-            }
-        )
-    }
-
-    fn destination(&self) -> Result<IpAddr> {
-        // It's just the default gateway in windows.
-        driver_case!(
-            &self.driver;
-            tun=>{
-               tun
-                .session
-                .get_adapter()
-                .get_gateways()?
-                .iter()
-                .find_map(|a| match a {
-                    std::net::IpAddr::V4(a) => Some(std::net::IpAddr::V4(*a)),
-                    _ => None,
-                })
-                .ok_or(Error::InvalidConfig)
-            };
-            tap=>{
-                tap.get_destination().map_err(|e|e.into())
-            }
-        )
-    }
-
-    fn netmask(&self) -> Result<IpAddr> {
-        let current_addr = self.address()?;
-        driver_case!(
-            &self.driver;
-            tun=>{
-                tun .session
-                .get_adapter()
-                .get_netmask_of_address(&current_addr)
-                .map_err(Error::WintunError)
-            };
-            tap=>{
-               tap.get_netmask().map_err(|e|e.into())
+                let tap_index = tap.index();
+                let r = self.get_all_adapter_address()?.into_iter().filter(|v|v.index == Some(tap_index)).collect();
+                Ok(r)
             }
         )
     }
@@ -333,9 +295,13 @@ impl AbstractDevice for Device {
         } else {
             None
         };
-        if let Ok(addr) = self.address() {
-            if addr.is_ipv6() {
-                netsh::delete_interface_ipv6(self.driver.index()?, addr)?;
+        if let Ok(addr) = self.addresses() {
+            for e in addr {
+                if e.address.is_ipv6() {
+                    if let Err(e) = netsh::delete_interface_ipv6(self.driver.index()?, e.address) {
+                        log::error!("{e:?}");
+                    }
+                }
             }
         }
 
