@@ -38,8 +38,8 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
 
     let mut config = tun_rs::Configuration::default();
 
-    // #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
-    // config.layer(Layer::L2);
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
+    config.layer(Layer::L2);
 
     config
         // .address_with_prefix(
@@ -53,6 +53,8 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
         .up();
 
     let dev = Arc::new(tun_rs::create(&config)?);
+	#[cfg(any(target_os = "linux", target_os = "freebsd",))]
+	dev.set_broadcast((10,0,0,1))?;
     let dev_t = dev.clone();
     let _join = std::thread::spawn(move || {
         let mut buf = [0; 4096];
