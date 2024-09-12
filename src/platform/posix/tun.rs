@@ -3,7 +3,7 @@ use crate::platform::posix::Fd;
 use crate::PACKET_INFORMATION_LENGTH as PIL;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 use bytes::BufMut;
-use std::io::{self, Read, Write};
+use std::io::{self, IoSlice, Read, Write};
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -149,6 +149,24 @@ impl Tun {
             }
         }
         self.fd.write(in_buf)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+    #[inline]
+    pub(crate) fn send_vectored(&self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
+        self.fd.writev(bufs)
+    }
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    #[inline]
+    pub(crate) fn send_vectored(&self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
+        if self.ignore_packet_info() {
+            let buf = bufs
+                .iter()
+                .find(|b| !b.is_empty())
+                .map_or(&[][..], |b| &**b);
+            self.send(buf)
+        } else {
+            self.fd.writev(bufs)
+        }
     }
     #[cfg(not(any(target_os = "macos", target_os = "ios")))]
     #[inline]

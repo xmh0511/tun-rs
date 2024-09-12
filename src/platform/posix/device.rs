@@ -1,5 +1,6 @@
 use crate::platform::posix::Fd;
 use crate::platform::{Device, Tun};
+use std::io::IoSlice;
 use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
 
 impl FromRawFd for Device {
@@ -36,6 +37,9 @@ impl Device {
     /// Send a packet to tun device
     pub fn send(&self, buf: &[u8]) -> std::io::Result<usize> {
         self.tun.send(buf)
+    }
+    pub fn send_vectored(&self, bufs: &[IoSlice<'_>]) -> std::io::Result<usize> {
+        self.tun.send_vectored(bufs)
     }
     /// Do not use nonblocking fd when you want to use shutdown
     #[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
