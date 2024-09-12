@@ -2,7 +2,9 @@
     target_os = "linux",
     target_os = "macos",
     target_os = "freebsd",
-    target_os = "windows"
+    target_os = "windows",
+    target_os = "ios",
+    target_os = "android"
 ))]
 use std::os::fd::{FromRawFd, RawFd};
 
