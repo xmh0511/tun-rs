@@ -62,8 +62,7 @@ mod test {
             .addresses()
             .unwrap()
             .into_iter()
-            .find(|v| v.address == "192.168.50.1".parse::<Ipv4Addr>().unwrap())
-            .is_some());
+            .any(|v| v.address == "192.168.50.1".parse::<Ipv4Addr>().unwrap()));
 
         assert_eq!(crate::DEFAULT_MTU, dev.mtu().unwrap());
     }
