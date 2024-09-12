@@ -42,17 +42,19 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     // config.layer(Layer::L2);
 
     config
-        .address_with_prefix(
-            "CDCD:910A:2222:5498:8475:1111:3900:2020"
-                .parse::<IpAddr>()
-                .unwrap(),
-            64,
-        )
-        //.address_with_prefix((10, 0, 0, 9), 24u8)
+        // .address_with_prefix(
+        //     "CDCD:910A:2222:5498:8475:1111:3900:2020"
+        //         .parse::<IpAddr>()
+        //         .unwrap(),
+        //     64,
+        // )
+        .address_with_prefix((10, 0, 0, 9), 24u8)
         //.destination((10, 0, 0, 1))
         .up();
 
     let dev = Arc::new(tun_rs::create(&config)?);
+    dev.set_broadcast((10, 0, 0, 255))?;
+    println!("{:?}", dev.broadcast());
     let dev_t = dev.clone();
     let _join = std::thread::spawn(move || {
         let mut buf = [0; 4096];
@@ -64,13 +66,13 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
         Ok::<(), BoxError>(())
     });
     //dev_t.set_network_address((10, 0, 0, 88), (255, 255, 255, 0), None)?;
-    dev_t.set_network_address(
-        "CDCD:910A:2222:5498:8475:1111:3900:2024"
-            .parse::<IpAddr>()
-            .unwrap(),
-        "ffff:ffff:ffff:ffff::".parse::<IpAddr>().unwrap(),
-        None,
-    )?;
+    // dev_t.set_network_address(
+    //     "CDCD:910A:2222:5498:8475:1111:3900:2024"
+    //         .parse::<IpAddr>()
+    //         .unwrap(),
+    //     "ffff:ffff:ffff:ffff::".parse::<IpAddr>().unwrap(),
+    //     None,
+    // )?;
     quit.recv().expect("Quit error.");
     println!("recv quit!!!!!");
     println!("{:?}", dev_t.address()?);
