@@ -64,15 +64,15 @@ pub fn exe_command(cmd: &mut Command) -> io::Result<()> {
     output(&command.join(" ").to_string(), out)
 }
 pub fn delete_interface_ipv6(index: u32, address: IpAddr) -> io::Result<()> {
-    let mut binding = Command::new("netsh");
+    let mut binding = Command::new("cmd");
     let cmd = binding
+        .arg("netsh")
         .arg("interface")
         .arg("ipv6")
         .arg("delete ")
         .arg("address")
         .arg(index.to_string().as_str())
         .arg(format!("address={}", address).as_str());
-    println!("{:?}", cmd);
     exe_command(cmd)
 }
 
