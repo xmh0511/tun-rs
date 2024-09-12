@@ -3,7 +3,7 @@ use crate::{
     device::{AbstractDevice, ETHER_ADDR_LEN},
     error::{Error, Result},
     platform::freebsd::sys::*,
-    platform::posix::{self, sockaddr_union, Fd, Tun},
+    platform::posix::{self, ipaddr_to_sockaddr, sockaddr_union, Fd, Tun},
     IntoAddress,
 };
 use libc::{
@@ -424,7 +424,7 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_broadcast<A: IntoAddress>(&self, _value: A) -> Result<()> {
+    fn set_broadcast<A: IntoAddress>(&self, value: A) -> Result<()> {
         let value = value.into_address()?;
         let IpAddr::V4(value) = value else {
             unimplemented!("do not support IPv6 yet")
