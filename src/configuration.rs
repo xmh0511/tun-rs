@@ -106,13 +106,11 @@ impl Configuration {
         target_os = "macos",
         target_os = "freebsd"
     ))]
-    pub fn address_with_prefix<A: IntoAddress, P: IntoAddress>(
-        &mut self,
-        value: A,
-        prefix: P,
-    ) -> &mut Self {
-        self.address = Some(value.into_address().unwrap());
-        self.netmask = Some(prefix.into_address().unwrap());
+    pub fn address_with_prefix<A: IntoAddress>(&mut self, value: A, prefix: u8) -> &mut Self {
+        let address = value.into_address().unwrap();
+        self.address = Some(address);
+        let ip_net = ipnet::IpNet::new(address, prefix).unwrap();
+        self.netmask = Some(ip_net.netmask());
         self
     }
 
