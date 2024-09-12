@@ -6,12 +6,12 @@ use crate::{
     error::{Error, Result},
     platform::{
         macos::sys::*,
-        posix::{self, ipaddr_to_sockaddr, sockaddr_union, Fd},
+        posix::{self, sockaddr_union, Fd},
     },
     IntoAddress,
 };
 
-const OVERWRITE_SIZE: usize = std::mem::size_of::<libc::__c_anonymous_ifr_ifru>();
+//const OVERWRITE_SIZE: usize = std::mem::size_of::<libc::__c_anonymous_ifr_ifru>();
 
 use crate::getifaddrs::{self, Interface};
 use crate::platform::Tun;
@@ -426,35 +426,35 @@ impl AbstractDevice for Device {
         Err(Error::String("DestAddrNotAvailable".to_string()))
     }
 
-    /// Question on macOS
-    fn broadcast(&self) -> Result<IpAddr> {
-        unsafe {
-            let ctl = ctl()?;
-            let mut req = self.request()?;
-            if let Err(err) = siocgifbrdaddr(ctl.as_raw_fd(), &mut req) {
-                return Err(io::Error::from(err).into());
-            }
-            let sa = sockaddr_union::from(req.ifr_ifru.ifru_broadaddr);
-            Ok(std::net::SocketAddr::try_from(sa)?.ip())
-        }
-    }
+    // /// Question on macOS
+    // fn broadcast(&self) -> Result<IpAddr> {
+    //     unsafe {
+    //         let ctl = ctl()?;
+    //         let mut req = self.request()?;
+    //         if let Err(err) = siocgifbrdaddr(ctl.as_raw_fd(), &mut req) {
+    //             return Err(io::Error::from(err).into());
+    //         }
+    //         let sa = sockaddr_union::from(req.ifr_ifru.ifru_broadaddr);
+    //         Ok(std::net::SocketAddr::try_from(sa)?.ip())
+    //     }
+    // }
 
-    /// Question on macOS
-    fn set_broadcast<A: IntoAddress>(&self, value: A) -> Result<()> {
-        let value = value.into_address()?;
-        let IpAddr::V4(value) = value else {
-            unimplemented!("do not support IPv6 yet")
-        };
-        unsafe {
-            let ctl = ctl()?;
-            let mut req = self.request()?;
-            ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_broadaddr, OVERWRITE_SIZE);
-            if let Err(err) = siocsifbrdaddr(ctl.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
-            }
-            Ok(())
-        }
-    }
+    // /// Question on macOS
+    // fn set_broadcast<A: IntoAddress>(&self, value: A) -> Result<()> {
+    //     let value = value.into_address()?;
+    //     let IpAddr::V4(value) = value else {
+    //         unimplemented!("do not support IPv6 yet")
+    //     };
+    //     unsafe {
+    //         let ctl = ctl()?;
+    //         let mut req = self.request()?;
+    //         ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_broadaddr, OVERWRITE_SIZE);
+    //         if let Err(err) = siocsifbrdaddr(ctl.as_raw_fd(), &req) {
+    //             return Err(io::Error::from(err).into());
+    //         }
+    //         Ok(())
+    //     }
+    // }
 
     fn netmask(&self) -> Result<IpAddr> {
         let if_name = self.name()?;

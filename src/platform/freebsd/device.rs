@@ -413,32 +413,32 @@ impl AbstractDevice for Device {
         Err(Error::String("DestAddrNotAvailable".to_string()))
     }
 
-    fn broadcast(&self) -> Result<IpAddr> {
-        unsafe {
-            let mut req = self.request()?;
-            if let Err(err) = siocgifbrdaddr(ctl()?.as_raw_fd(), &mut req) {
-                return Err(io::Error::from(err).into());
-            }
-            let sa = sockaddr_union::from(req.ifr_ifru.ifru_broadaddr);
-            Ok(std::net::SocketAddr::try_from(sa)?.ip())
-        }
-    }
+    // fn broadcast(&self) -> Result<IpAddr> {
+    //     unsafe {
+    //         let mut req = self.request()?;
+    //         if let Err(err) = siocgifbrdaddr(ctl()?.as_raw_fd(), &mut req) {
+    //             return Err(io::Error::from(err).into());
+    //         }
+    //         let sa = sockaddr_union::from(req.ifr_ifru.ifru_broadaddr);
+    //         Ok(std::net::SocketAddr::try_from(sa)?.ip())
+    //     }
+    // }
 
-    fn set_broadcast<A: IntoAddress>(&self, value: A) -> Result<()> {
-        let value = value.into_address()?;
-        let IpAddr::V4(_) = value else {
-            unimplemented!("do not support IPv6 yet")
-        };
-        unsafe {
-            let ctl = ctl()?;
-            let mut req = self.request()?;
-            req.ifr_ifru.ifru_broadaddr = posix::sockaddr_union::from((value, 0)).addr;
-            if let Err(err) = siocsifbrdaddr(ctl.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
-            }
-            Ok(())
-        }
-    }
+    // fn set_broadcast<A: IntoAddress>(&self, value: A) -> Result<()> {
+    //     let value = value.into_address()?;
+    //     let IpAddr::V4(_) = value else {
+    //         unimplemented!("do not support IPv6 yet")
+    //     };
+    //     unsafe {
+    //         let ctl = ctl()?;
+    //         let mut req = self.request()?;
+    //         req.ifr_ifru.ifru_broadaddr = posix::sockaddr_union::from((value, 0)).addr;
+    //         if let Err(err) = siocsifbrdaddr(ctl.as_raw_fd(), &req) {
+    //             return Err(io::Error::from(err).into());
+    //         }
+    //         Ok(())
+    //     }
+    // }
 
     fn netmask(&self) -> Result<IpAddr> {
         let if_name = self.name()?;

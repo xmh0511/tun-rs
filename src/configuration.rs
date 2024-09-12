@@ -215,7 +215,7 @@ pub(crate) fn configure<D: AbstractDevice>(
             device.set_mac_address(mac_addr)?;
         }
     }
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
+    #[cfg(any(target_os = "linux"))]
     if let Some(ip) = config.broadcast {
         device.set_broadcast(ip)?;
     }

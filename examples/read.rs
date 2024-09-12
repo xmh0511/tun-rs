@@ -53,8 +53,6 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
         .up();
 
     let dev = Arc::new(tun_rs::create(&config)?);
-    dev.set_broadcast((10, 0, 0, 255))?;
-    println!("{:?}", dev.broadcast());
     let dev_t = dev.clone();
     let _join = std::thread::spawn(move || {
         let mut buf = [0; 4096];
