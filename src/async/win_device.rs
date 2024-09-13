@@ -27,29 +27,29 @@ impl AsyncDevice {
     }
 
     /// Recv a packet from tun device - Not implemented for windows
-    pub async fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
-        let packet = match self.inner.driver.try_receive()? {
-            None => {
-                let device = self.inner.clone();
-                tokio::task::spawn_blocking(move || device.driver.receive_blocking())
-                    .await
-                    .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("{}", e)))??
+    pub async fn recv(&self, mut buf: &mut [u8]) -> io::Result<usize> {
+        match self.try_recv(buf) {
+            Ok(len) => return Ok(len),
+            Err(e) => {
+                if e.kind() != io::ErrorKind::WouldBlock {
+                    Err(e)?
+                }
             }
-            Some(packet) => packet,
-        };
-        let packet = match &packet {
+        }
+        let device = self.inner.clone();
+        let packet = tokio::task::spawn_blocking(move || device.driver.receive_blocking())
+            .await
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("{}", e)))??;
+
+        let mut packet = match &packet {
             PacketVariant::Tun(packet) => packet.bytes(),
             PacketVariant::Tap(packet) => packet.as_ref(),
         };
-        let len = packet.len();
-        if buf.len() < len {
-            Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "buffer too small",
-            ))?;
+
+        match io::copy(&mut packet, &mut buf) {
+            Ok(n) => Ok(n as usize),
+            Err(e) => Err(e),
         }
-        buf[0..len].copy_from_slice(packet);
-        Ok(len)
     }
     pub fn try_recv(&self, buf: &mut [u8]) -> io::Result<usize> {
         self.inner.try_recv(buf)
