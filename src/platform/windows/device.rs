@@ -10,6 +10,7 @@ use crate::getifaddrs::Interface;
 use crate::platform::windows::netsh;
 use crate::platform::windows::tap::TapDevice;
 use crate::{IntoAddress, Layer};
+use std::net::IpAddr;
 
 pub enum Driver {
     Tun(Tun),
@@ -325,7 +326,7 @@ impl AbstractDevice for Device {
 
     fn add_address_v6(&self, addr: IpAddr, prefix: u8) -> Result<()> {
         let network_addr =
-            ipnet::IpNet::new(addr, prefix).map_err(|e| Error::String(e.to_string()))?;
+            ipnet::IpNet::new(addr, prefix).map_err(|e| crate::Error::String(e.to_string()))?;
         let mask = network_addr.netmask();
         netsh::set_interface_ip(self.driver.index()?, addr, mask, None)?;
         Ok(())
