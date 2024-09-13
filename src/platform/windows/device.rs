@@ -330,6 +330,9 @@ impl AbstractDevice for Device {
     }
 
     fn add_address_v6(&self, addr: IpAddr, prefix: u8) -> Result<()> {
+        if !addr.is_ipv6() {
+            return Err(crate::Error::InvalidAddress);
+        }
         let network_addr =
             ipnet::IpNet::new(addr, prefix).map_err(|e| crate::Error::String(e.to_string()))?;
         let mask = network_addr.netmask();
