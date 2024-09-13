@@ -16,7 +16,7 @@ First, add the following to your `Cargo.toml`:
 tun_rs = "1"
 ```
 
-If you want to use the TUN interface with mio/tokio, you need to enable the `async` feature:
+If you want to use the TUN interface with tokio, you need to enable the `async` feature:
 
 ```toml
 [dependencies]
@@ -25,12 +25,9 @@ tun_rs = { version = "1", features = ["async"] }
 
 Example
 -------
-The following example creates and configures a TUN interface and starts reading
-packets from it.
+The following example creates and configures a TUN interface and reads packets from it synchronously.
 
 ```rust
-use std::io::Read;
-
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     let mut config = tun_rs::Configuration::default();
     config
@@ -45,6 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         .up();
 
     let dev = tun_rs::create(&config)?;
+	// let shared = Arc::new(dev);
     let mut buf = [0; 4096];
 
     loop {
@@ -53,6 +51,32 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     }
 }
 ```
+
+An example of asynchronously reading packets from an interface  
+
+````rust
+#[tokio::main]
+async fn main(mut quit: Receiver<()>) -> Result<(), BoxError> {
+    let mut config = tun_rs::Configuration::default();
+
+    config
+        .address_with_prefix((10, 0, 0, 9), 24)
+        .mtu(tun_rs::DEFAULT_MTU)
+        .up();
+
+    let dev = Arc::new(tun_rs::create_as_async(&config)?);
+	#[cfg(target_os="macos")]
+	dev.set_ignore_packet_info(true);
+
+    let mut buf = vec![0; 1500];
+    loop {
+		let len = dev.recv(&mut buf).await?;
+        println!("pkt: {:?}", &buf[..len]);
+		//dev.send(buf).await?;
+    }
+    Ok(())
+}
+````
 
 Platforms
 =========
