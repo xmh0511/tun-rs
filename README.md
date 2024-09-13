@@ -37,13 +37,13 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
 
     let dev = tun_rs::create(&config)?;
     // let shared = Arc::new(dev);
-	dev.add_address_v6(
-		"CDCD:910A:2222:5498:8475:1111:3900:2024"
-			.parse::<IpAddr>()
-			.unwrap(),
-		64
+    dev.add_address_v6(
+	  "CDCD:910A:2222:5498:8475:1111:3900:2024"
+           .parse::<IpAddr>()
+           .unwrap(),
+              64
     )?;
-	//dev_t.remove_network_address(vec![(ip,prefix)])?;
+    //dev_t.remove_network_address(vec![(ip,prefix)])?;
     let mut buf = [0; 4096];
 
     loop {
@@ -66,7 +66,7 @@ async fn main(mut quit: Receiver<()>) -> Result<(), BoxError> {
         .up();
 
     let dev = Arc::new(tun_rs::create_as_async(&config)?);
-	// ignore the head 4bytes packet information for calling `recv` and `send` on macOS
+    // ignore the head 4bytes packet information for calling `recv` and `send` on macOS
     #[cfg(target_os="macos")]
     dev.set_ignore_packet_info(true);  
 
