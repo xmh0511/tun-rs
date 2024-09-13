@@ -319,7 +319,7 @@ impl AbstractDevice for Device {
         Ok(())
     }
 
-    fn remove_network_address(&self, _addrs: Vec<IpAddr>) -> Result<()> {
+    fn remove_network_address(&self, _addrs: Vec<(IpAddr, u8)>) -> Result<()> {
         unimplemented!()
     }
 

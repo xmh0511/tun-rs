@@ -457,10 +457,10 @@ impl AbstractDevice for Device {
         Ok(())
     }
 
-    fn remove_network_address(&self, addrs: Vec<IpAddr>) -> Result<()> {
+    fn remove_network_address(&self, addrs: Vec<(IpAddr, u8)>) -> Result<()> {
         unsafe {
             for addr in addrs {
-                match addr {
+                match addr.0 {
                     IpAddr::V4(addr) => {
                         let mut req_v4 = self.request()?;
                         req_v4.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr;

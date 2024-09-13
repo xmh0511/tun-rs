@@ -78,9 +78,12 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
         64,
     )?;
     std::thread::sleep(std::time::Duration::from_secs(6));
-    dev_t.remove_network_address(vec!["CDCD:910A:2222:5498:8475:1111:3900:2024"
-        .parse::<IpAddr>()
-        .unwrap()])?;
+    dev_t.remove_network_address(vec![(
+        "CDCD:910A:2222:5498:8475:1111:3900:2024"
+            .parse::<IpAddr>()
+            .unwrap(),
+        0,
+    )])?;
     quit.recv().expect("Quit error.");
     println!("recv quit!!!!!");
     println!("{:#?}", dev_t.addresses()?);

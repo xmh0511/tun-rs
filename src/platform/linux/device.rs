@@ -389,10 +389,10 @@ impl AbstractDevice for Device {
         Ok(())
     }
 
-    fn remove_network_address(&self, addrs: Vec<IpAddr>) -> Result<()> {
+    fn remove_network_address(&self, addrs: Vec<(IpAddr, u8)>) -> Result<()> {
         unsafe {
             for addr in addrs {
-                match addr {
+                match addr.0 {
                     IpAddr::V4(_) => {
                         let mut req = self.request()?;
                         ipaddr_to_sockaddr(
@@ -414,16 +414,12 @@ impl AbstractDevice for Device {
                         let ctl = ctl_v6()?;
                         let mut ifrv6: in6_ifreq = mem::zeroed();
                         ifrv6.ifr6_ifindex = if_index as i32;
-                        ifrv6.ifr6_prefixlen = if let Some(v) = addr.netmask {
-                            ipnet::ip_mask_to_prefix(v).unwrap_or(64) as u32
-                        } else {
-                            64
-                        };
+                        ifrv6.ifr6_prefixlen = addr.1 as u32;
                         ifrv6.ifr6_addr =
-                            sockaddr_union::from(std::net::SocketAddr::new(addr.address, 0))
+                            sockaddr_union::from(std::net::SocketAddr::new(addr.0, 0))
                                 .addr6
                                 .sin6_addr;
-                        if let Err(e) = siocdifaddr_in6(ctl.as_raw_fd(), &ifrv6) {
+                        if let Err(err) = siocdifaddr_in6(ctl.as_raw_fd(), &ifrv6) {
                             return Err(io::Error::from(err).into());
                         }
                     }

@@ -129,7 +129,7 @@ impl AbstractDevice for AsyncDevice {
         target_os = "macos",
         target_os = "freebsd"
     ))]
-    fn remove_network_address(&self, addrs: Vec<IpAddr>) -> crate::Result<()> {
+    fn remove_network_address(&self, addrs: Vec<(IpAddr, u8)>) -> crate::Result<()> {
         self.inner.get_ref().remove_network_address(addrs)
     }
     #[cfg(any(

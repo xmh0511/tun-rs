@@ -69,7 +69,7 @@ pub trait AbstractDevice {
         target_os = "macos",
         target_os = "freebsd",
     ))]
-    fn remove_network_address(&self, addrs: Vec<IpAddr>) -> Result<()>;
+    fn remove_network_address(&self, addrs: Vec<(IpAddr, u8)>) -> Result<()>;
 
     /// Add Ipv6 address
     #[cfg(any(
