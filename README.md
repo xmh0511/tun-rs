@@ -42,7 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
         .up();
 
     let dev = tun_rs::create(&config)?;
-	// let shared = Arc::new(dev);
+    // let shared = Arc::new(dev);
     let mut buf = [0; 4096];
 
     loop {
@@ -65,14 +65,14 @@ async fn main(mut quit: Receiver<()>) -> Result<(), BoxError> {
         .up();
 
     let dev = Arc::new(tun_rs::create_as_async(&config)?);
-	#[cfg(target_os="macos")]
-	dev.set_ignore_packet_info(true);
+    #[cfg(target_os="macos")]
+    dev.set_ignore_packet_info(true);  // ignore the head 4bytes packet information for calling `recv` and `send` on macOS
 
     let mut buf = vec![0; 1500];
     loop {
-		let len = dev.recv(&mut buf).await?;
+        let len = dev.recv(&mut buf).await?;
         println!("pkt: {:?}", &buf[..len]);
-		//dev.send(buf).await?;
+        //dev.send(buf).await?;
     }
     Ok(())
 }
