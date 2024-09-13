@@ -64,16 +64,8 @@ pub fn exe_command(cmd: &mut Command) -> io::Result<()> {
     output(&command.join(" ").to_string(), out)
 }
 pub fn delete_interface_ip(index: u32, address: IpAddr) -> io::Result<()> {
-    let mut binding = Command::new("cmd");
-    let cmd = binding
-        .arg("netsh")
-        .arg("interface")
-        .arg(if address.is_ipv6() { "ipv6" } else { "ip" })
-        .arg("delete ")
-        .arg("address")
-        .arg(index.to_string().as_str())
-        .arg(format!("address={}", address).as_str());
-    exe_command(cmd)
+    let cmd = format!("netsh interface ipv6 delete address {index} {address}");
+    exe_cmd(&cmd)
 }
 
 /// 设置网卡ip
