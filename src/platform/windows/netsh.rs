@@ -63,12 +63,12 @@ pub fn exe_command(cmd: &mut Command) -> io::Result<()> {
         .collect::<Vec<String>>();
     output(&command.join(" ").to_string(), out)
 }
-pub fn delete_interface_ipv6(index: u32, address: IpAddr) -> io::Result<()> {
+pub fn delete_interface_ip(index: u32, address: IpAddr) -> io::Result<()> {
     let mut binding = Command::new("cmd");
     let cmd = binding
         .arg("netsh")
         .arg("interface")
-        .arg("ipv6")
+        .arg(if address.is_ipv6() { "ipv6" } else { "ip" })
         .arg("delete ")
         .arg("address")
         .arg(index.to_string().as_str())

@@ -304,7 +304,7 @@ impl AbstractDevice for Device {
         if let Ok(addr) = self.addresses() {
             for e in addr {
                 if e.address.is_ipv6() {
-                    if let Err(e) = netsh::delete_interface_ipv6(self.driver.index()?, e.address) {
+                    if let Err(e) = netsh::delete_interface_ip(self.driver.index()?, e.address) {
                         log::error!("{e:?}");
                     }
                 }
@@ -320,8 +320,12 @@ impl AbstractDevice for Device {
         Ok(())
     }
 
-    fn remove_network_address(&self, _addrs: Vec<(IpAddr, u8)>) -> Result<()> {
-        unimplemented!()
+    fn remove_network_address(&self, addrs: Vec<(IpAddr, u8)>) -> Result<()> {
+        for addr in addrs {
+            if let Err(e) = netsh::delete_interface_ip(self.driver.index()?, addr.0) {
+                return Err(crate::Error::String(e.to_string()));
+            }
+        }
     }
 
     fn add_address_v6(&self, addr: IpAddr, prefix: u8) -> Result<()> {
