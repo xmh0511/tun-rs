@@ -64,7 +64,10 @@ pub fn exe_command(cmd: &mut Command) -> io::Result<()> {
     output(&command.join(" ").to_string(), out)
 }
 pub fn delete_interface_ip(index: u32, address: IpAddr) -> io::Result<()> {
-    let cmd = format!("netsh interface ipv6 delete address {index} {address}");
+    let cmd = format!(
+        "netsh interface {} delete address {index} {address}",
+        if address.is_ipv4() { "ip" } else { "ipv6" }
+    );
     exe_cmd(&cmd)
 }
 
