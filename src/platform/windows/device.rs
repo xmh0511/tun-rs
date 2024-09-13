@@ -88,12 +88,17 @@ impl Driver {
                 Some(packet) => Ok(Some(PacketVariant::Tun(packet))),
             },
             Driver::Tap(tap) => {
-                let mut buf = [0u8; u16::MAX as usize];
+                const MAX_LEN: usize = u16::MAX as usize;
+                let mut buf = Vec::with_capacity(MAX_LEN);
+                // guarantee all read bytes are initialized by the modification of the read function.
+                #[allow(clippy::uninit_vec)]
+                unsafe {
+                    buf.set_len(MAX_LEN);
+                };
                 match tap.try_read(&mut buf) {
                     Ok(len) => {
-                        let mut vec = vec![];
-                        vec.extend_from_slice(&buf[..len]);
-                        Ok(Some(PacketVariant::Tap(vec.into_boxed_slice())))
+                        buf.resize(len, 0);
+                        Ok(Some(PacketVariant::Tap(buf.into_boxed_slice())))
                     }
                     Err(e) => {
                         if e.kind() == io::ErrorKind::WouldBlock {
