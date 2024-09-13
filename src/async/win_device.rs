@@ -106,4 +106,12 @@ impl AbstractDevice for AsyncDevice {
     fn get_mac_address(&self) -> crate::Result<[u8; ETHER_ADDR_LEN as usize]> {
         self.inner.get_mac_address()
     }
+
+    fn remove_network_address(&self, addrs: Vec<(std::net::IpAddr, u8)>) -> crate::Result<()> {
+        self.inner.remove_network_address(addrs)
+    }
+
+    fn add_address_v6(&self, addr: std::net::IpAddr, prefix: u8) -> crate::Result<()> {
+        self.inner.add_address_v6(addr, prefix)
+    }
 }

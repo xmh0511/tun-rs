@@ -326,6 +326,7 @@ impl AbstractDevice for Device {
                 return Err(crate::Error::String(e.to_string()));
             }
         }
+        Ok(())
     }
 
     fn add_address_v6(&self, addr: IpAddr, prefix: u8) -> Result<()> {
