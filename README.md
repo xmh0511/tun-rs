@@ -31,18 +31,19 @@ The following example creates and configures a TUN interface and reads packets f
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     let mut config = tun_rs::Configuration::default();
     config
-        .address_with_prefix(
-            "CDCD:910A:2222:5498:8475:1111:3900:2020"
-                .parse::<IpAddr>()
-                .unwrap(),
-			64
-        )
-        //.address_with_prefix((10, 0, 0, 9), 24u8)
+        .address_with_prefix((10, 0, 0, 9), 24u8)
         //.destination((10, 0, 0, 1))
         .up();
 
     let dev = tun_rs::create(&config)?;
     // let shared = Arc::new(dev);
+	dev.add_address_v6(
+		"CDCD:910A:2222:5498:8475:1111:3900:2024"
+			.parse::<IpAddr>()
+			.unwrap(),
+		64
+    )?;
+	//dev_t.remove_network_address(vec![(ip,prefix)])?;
     let mut buf = [0; 4096];
 
     loop {
@@ -65,8 +66,9 @@ async fn main(mut quit: Receiver<()>) -> Result<(), BoxError> {
         .up();
 
     let dev = Arc::new(tun_rs::create_as_async(&config)?);
+	// ignore the head 4bytes packet information for calling `recv` and `send` on macOS
     #[cfg(target_os="macos")]
-    dev.set_ignore_packet_info(true);  // ignore the head 4bytes packet information for calling `recv` and `send` on macOS
+    dev.set_ignore_packet_info(true);  
 
     let mut buf = vec![0; 1500];
     loop {

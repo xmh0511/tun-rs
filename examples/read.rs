@@ -77,12 +77,12 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
             .unwrap(),
         64,
     )?;
-    dev_t.add_address_v6(
-        "CDCD:910A:2222:5498:8475:1111:3900:2020"
-            .parse::<IpAddr>()
-            .unwrap(),
-        64,
-    )?;
+    // dev_t.add_address_v6(
+    //     "CDCD:910A:2222:5498:8475:1111:3900:2020"
+    //         .parse::<IpAddr>()
+    //         .unwrap(),
+    //     64,
+    // )?;
     std::thread::sleep(std::time::Duration::from_secs(6));
     dev_t.remove_network_address(vec![(
         "CDCD:910A:2222:5498:8475:1111:3900:2024"
