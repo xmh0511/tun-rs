@@ -389,6 +389,74 @@ impl AbstractDevice for Device {
         Ok(())
     }
 
+    fn remove_network_address(&self, addrs: Vec<IpAddr>) -> Result<()> {
+        unsafe {
+            for addr in addrs {
+                match addr {
+                    IpAddr::V4(_) => {
+                        let mut req = self.request()?;
+                        ipaddr_to_sockaddr(
+                            IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
+                            0,
+                            &mut req.ifr_ifru.ifru_addr,
+                            OVERWRITE_SIZE,
+                        );
+                        if let Err(err) = siocsifaddr(ctl()?.as_raw_fd(), &req) {
+                            return Err(io::Error::from(err).into());
+                        }
+                    }
+                    IpAddr::V6(_) => {
+                        let if_index = {
+                            let name = self.name()?;
+                            let name = CString::new(name)?;
+                            libc::if_nametoindex(name.as_ptr())
+                        };
+                        let ctl = ctl_v6()?;
+                        let mut ifrv6: in6_ifreq = mem::zeroed();
+                        ifrv6.ifr6_ifindex = if_index as i32;
+                        ifrv6.ifr6_prefixlen = if let Some(v) = addr.netmask {
+                            ipnet::ip_mask_to_prefix(v).unwrap_or(64) as u32
+                        } else {
+                            64
+                        };
+                        ifrv6.ifr6_addr =
+                            sockaddr_union::from(std::net::SocketAddr::new(addr.address, 0))
+                                .addr6
+                                .sin6_addr;
+                        if let Err(e) = siocdifaddr_in6(ctl.as_raw_fd(), &ifrv6) {
+                            return Err(io::Error::from(err).into());
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn add_address_v6(&self, addr: IpAddr, prefix: u8) -> Result<()> {
+        if !addr.is_ipv6() {
+            return Err(Error::InvalidAddress);
+        }
+        unsafe {
+            let if_index = {
+                let name = self.name()?;
+                let name = CString::new(name)?;
+                libc::if_nametoindex(name.as_ptr())
+            };
+            let ctl = ctl_v6()?;
+            let mut ifrv6: in6_ifreq = mem::zeroed();
+            ifrv6.ifr6_ifindex = if_index as i32;
+            ifrv6.ifr6_prefixlen = prefix as u32;
+            ifrv6.ifr6_addr = sockaddr_union::from(std::net::SocketAddr::new(addr, 0))
+                .addr6
+                .sin6_addr;
+            if let Err(err) = siocsifaddr_in6(ctl.as_raw_fd(), &ifrv6) {
+                return Err(io::Error::from(err).into());
+            }
+        }
+        Ok(())
+    }
+
     fn mtu(&self) -> Result<u16> {
         unsafe {
             let mut req = self.request()?;

@@ -129,6 +129,24 @@ impl AbstractDevice for AsyncDevice {
         target_os = "macos",
         target_os = "freebsd"
     ))]
+    fn remove_network_address(&self, addrs: Vec<IpAddr>) -> crate::Result<()> {
+        self.inner.get_ref().remove_network_address(addrs)
+    }
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
+    fn add_address_v6(&self, addr: IpAddr, prefix: u8) -> crate::Result<()> {
+        self.inner.get_ref().add_address_v6(addr, prefix)
+    }
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
     fn mtu(&self) -> crate::Result<u16> {
         self.inner.get_ref().mtu()
     }

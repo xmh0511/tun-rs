@@ -42,13 +42,13 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     // config.layer(Layer::L2);
 
     config
-        .address_with_prefix(
-            "CDCD:910A:2222:5498:8475:1111:3900:2020"
-                .parse::<IpAddr>()
-                .unwrap(),
-            64,
-        )
-        //.address_with_prefix((10, 0, 0, 2), 24u8)
+        // .address_with_prefix(
+        //     "CDCD:910A:2222:5498:8475:1111:3900:2020"
+        //         .parse::<IpAddr>()
+        //         .unwrap(),
+        //     64,
+        // )
+        .address_with_prefix((10, 0, 0, 2), 24u8)
         //.destination((10, 0, 0, 1))
         .up();
 
@@ -71,6 +71,16 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     //     "ffff:ffff:ffff:ffff::".parse::<IpAddr>().unwrap(),
     //     None,
     // )?;
+    dev_t.add_address_v6(
+        "CDCD:910A:2222:5498:8475:1111:3900:2024"
+            .parse::<IpAddr>()
+            .unwrap(),
+        64,
+    )?;
+    std::thread::sleep(std::time::Duration::from_secs(6));
+    dev_t.remove_network_address(vec!["CDCD:910A:2222:5498:8475:1111:3900:2024"
+        .parse::<IpAddr>()
+        .unwrap()])?;
     quit.recv().expect("Quit error.");
     println!("recv quit!!!!!");
     println!("{:#?}", dev_t.addresses()?);

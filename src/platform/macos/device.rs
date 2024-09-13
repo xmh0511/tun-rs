@@ -481,6 +481,57 @@ impl AbstractDevice for Device {
         Ok(())
     }
 
+    fn remove_network_address(&self, addrs: Vec<IpAddr>) -> Result<()> {
+        unsafe {
+            for addr in addrs {
+                match addr {
+                    IpAddr::V4(addr) => {
+                        let mut req_v4 = self.request()?;
+                        req_v4.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr;
+                        if let Err(err) = siocdifaddr(ctl()?.as_raw_fd(), &req_v4) {
+                            return Err(io::Error::from(err).into());
+                        }
+                    }
+                    IpAddr::V6(addr) => {
+                        let mut req_v6 = self.request_v6()?;
+                        req_v6.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr6;
+                        if let Err(err) = siocdifaddr_in6(ctl_v6()?.as_raw_fd(), &req_v6) {
+                            return Err(io::Error::from(err).into());
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn add_address_v6(&self, addr: IpAddr, prefix: u8) -> Result<()> {
+        if !addr.is_ipv6() {
+            return Err(Error::InvalidAddress);
+        }
+        unsafe {
+            let tun_name = self.name()?;
+            let mut req: in6_ifaliasreq = mem::zeroed();
+            ptr::copy_nonoverlapping(
+                tun_name.as_ptr() as *const c_char,
+                req.ifra_name.as_mut_ptr(),
+                tun_name.len(),
+            );
+            req.ifra_addr = sockaddr_union::from((addr, 0)).addr6;
+            let network_addr =
+                ipnet::IpNet::new(addr, prefix).map_err(|e| Error::String(e.to_string()))?;
+            let mask = network_addr.netmask();
+            req.ifra_prefixmask = sockaddr_union::from((mask, 0)).addr6;
+            req.in6_addrlifetime.ia6t_vltime = 0xffffffff_u32;
+            req.in6_addrlifetime.ia6t_pltime = 0xffffffff_u32;
+            req.ifra_flags = IN6_IFF_NODAD;
+            if let Err(err) = siocaifaddr_in6(ctl_v6()?.as_raw_fd(), &req) {
+                return Err(io::Error::from(err).into());
+            }
+        }
+        Ok(())
+    }
+
     fn ignore_packet_info(&self) -> bool {
         self.tun.ignore_packet_info()
     }

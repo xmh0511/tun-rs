@@ -319,6 +319,18 @@ impl AbstractDevice for Device {
         Ok(())
     }
 
+    fn remove_network_address(&self, _addrs: Vec<IpAddr>) -> Result<()> {
+        unimplemented!()
+    }
+
+    fn add_address_v6(&self, addr: IpAddr, prefix: u8) -> Result<()> {
+        let network_addr =
+            ipnet::IpNet::new(addr, prefix).map_err(|e| Error::String(e.to_string()))?;
+        let mask = network_addr.netmask();
+        netsh::set_interface_ip(self.driver.index()?, addr, mask, None)?;
+        Ok(())
+    }
+
     /// The return value is always `Ok(65535)` due to wintun
     fn mtu(&self) -> Result<u16> {
         driver_case!(

@@ -62,6 +62,24 @@ pub trait AbstractDevice {
         destination: Option<A>,
     ) -> Result<()>;
 
+    /// Remove the specified address
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd",
+    ))]
+    fn remove_network_address(&self, addrs: Vec<IpAddr>) -> Result<()>;
+
+    /// Add Ipv6 address
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd",
+    ))]
+    fn add_address_v6(&self, addr: IpAddr, prefix: u8) -> Result<()>;
+
     /// Get the MTU.
     #[cfg(any(
         target_os = "windows",
