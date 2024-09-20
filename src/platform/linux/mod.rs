@@ -13,7 +13,7 @@ use crate::error::Result;
 pub struct PlatformConfig {
     /// switch of Enable/Disable packet information for network driver
     pub(crate) packet_information: bool,
-    pub(crate) tx_queue_len: Option<usize>,
+    pub(crate) tx_queue_len: Option<u32>,
 }
 
 /// `packet_information` is default to be `false` and `ensure_root_privileges` is default to be `true`.
@@ -33,7 +33,7 @@ impl PlatformConfig {
         self.packet_information = value;
         self
     }
-    pub fn tx_queue_len(&mut self, value: usize) -> &mut Self {
+    pub fn tx_queue_len(&mut self, value: u32) -> &mut Self {
         self.tx_queue_len = Some(value);
         self
     }

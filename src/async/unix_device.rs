@@ -65,6 +65,12 @@ impl AsyncDevice {
             .await
     }
 }
+impl AsyncDevice {
+    #[cfg(target_os = "linux")]
+    pub fn tx_queue_len(&self) -> crate::Result<u32> {
+        self.inner.get_ref().tx_queue_len()
+    }
+}
 impl AbstractDevice for AsyncDevice {
     #[cfg(any(
         target_os = "windows",

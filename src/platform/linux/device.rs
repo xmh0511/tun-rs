@@ -77,20 +77,26 @@ impl Device {
             };
             configure(&device, config)?;
             if let Some(tx_queue_len) = config.platform_config.tx_queue_len {
-                let _out = std::process::Command::new("sh")
-                    .arg("-c")
-                    .arg(format!(
-                        "ip link set {} txqueuelen {}",
-                        device.name()?,
-                        tx_queue_len
-                    ))
-                    .output();
+                let mut ifreq = device.request()?;
+                ifreq.ifr_ifru.ifru_metric = tx_queue_len as _;
+                if let Err(err) = change_tx_queue_len(ctl()?.as_raw_fd(), &ifreq) {
+                    return Err(io::Error::from(err).into());
+                }
             }
             Ok(device)
         }
     }
     pub(crate) fn from_tun(tun: Tun) -> Self {
         Self { tun }
+    }
+    pub fn tx_queue_len(&self) -> Result<u32> {
+        unsafe {
+            let mut ifreq = self.request()?;
+            if let Err(err) = tx_queue_len(ctl()?.as_raw_fd(), &mut ifreq) {
+                return Err(io::Error::from(err).into());
+            }
+            Ok(ifreq.ifr_ifru.ifru_metric as _)
+        }
     }
     /// Make the device persistent.
     pub fn persist(&self) -> Result<()> {
