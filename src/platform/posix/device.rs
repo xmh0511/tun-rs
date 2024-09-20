@@ -1,6 +1,6 @@
 use crate::platform::posix::Fd;
 use crate::platform::{Device, Tun};
-use std::io::IoSlice;
+use std::io::{IoSlice, IoSliceMut};
 use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
 
 impl FromRawFd for Device {
@@ -32,6 +32,9 @@ impl Device {
     /// Recv a packet from tun device
     pub fn recv(&self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.tun.recv(buf)
+    }
+    pub fn recv_vectored(&self, bufs: &mut [IoSliceMut<'_>]) -> std::io::Result<usize> {
+        self.tun.recv_vectored(bufs)
     }
 
     /// Send a packet to tun device

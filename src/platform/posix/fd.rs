@@ -1,8 +1,8 @@
-use std::io::IoSlice;
+use std::io;
+use std::io::{IoSlice, IoSliceMut};
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 #[cfg(feature = "experimental")]
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::{cmp, io};
 
 use libc::{self, fcntl, F_GETFL, F_SETFL, O_NONBLOCK};
 
@@ -48,6 +48,23 @@ impl Fd {
         }
         Ok(amount as usize)
     }
+    #[inline]
+    fn readv0(&self, bufs: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
+        if bufs.len() > max_iov() {
+            return Err(io::Error::from(io::ErrorKind::InvalidInput));
+        }
+        let amount = unsafe {
+            libc::readv(
+                self.as_raw_fd(),
+                bufs.as_mut_ptr() as *mut libc::iovec as *const libc::iovec,
+                bufs.len() as libc::c_int,
+            )
+        };
+        if amount < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(amount as usize)
+    }
 
     #[inline]
     pub fn write(&self, buf: &[u8]) -> io::Result<usize> {
@@ -60,11 +77,14 @@ impl Fd {
     }
     #[inline]
     pub fn writev(&self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
+        if bufs.len() > max_iov() {
+            return Err(io::Error::from(io::ErrorKind::InvalidInput));
+        }
         let amount = unsafe {
             libc::writev(
                 self.as_raw_fd(),
                 bufs.as_ptr() as *const libc::iovec,
-                cmp::min(bufs.len(), max_iov()) as libc::c_int,
+                bufs.len() as libc::c_int,
             )
         };
         if amount < 0 {
@@ -80,7 +100,7 @@ impl Fd {
     target_os = "openbsd",
     target_vendor = "apple",
 ))]
-const fn max_iov() -> usize {
+pub(crate) const fn max_iov() -> usize {
     libc::IOV_MAX as usize
 }
 
@@ -90,13 +110,16 @@ const fn max_iov() -> usize {
     target_os = "linux",
     target_os = "nto",
 ))]
-const fn max_iov() -> usize {
+pub(crate) const fn max_iov() -> usize {
     libc::UIO_MAXIOV as usize
 }
 #[cfg(not(feature = "experimental"))]
 impl Fd {
     pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
         self.read0(buf)
+    }
+    pub fn readv(&self, bufs: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
+        self.readv0(bufs)
     }
 }
 #[cfg(feature = "experimental")]
@@ -117,6 +140,20 @@ impl Fd {
         if self.is_fd_nonblocking()? {
             return self.read0(buf);
         }
+        self.wait()?;
+        self.read0(buf)
+    }
+    pub fn readv(&self, bufs: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
+        if self.is_shutdown.load(Ordering::Relaxed) {
+            return Err(io::Error::new(io::ErrorKind::ConnectionAborted, "close"));
+        }
+        if self.is_fd_nonblocking()? {
+            return self.readv0(bufs);
+        }
+        self.wait()?;
+        self.readv0(bufs)
+    }
+    fn wait(&self) -> io::Result<()> {
         let fd = self.as_raw_fd() as libc::c_int;
 
         let event_fd = self.event_fd.as_event_fd();
@@ -143,7 +180,7 @@ impl Fd {
         if result == 0 {
             return Err(io::Error::from(io::ErrorKind::TimedOut));
         }
-        self.read0(buf)
+        Ok(())
     }
     pub fn shutdown(&self) -> io::Result<()> {
         self.is_shutdown.store(true, Ordering::SeqCst);

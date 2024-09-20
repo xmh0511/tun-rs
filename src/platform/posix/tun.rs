@@ -1,9 +1,7 @@
 use crate::platform::posix::Fd;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 use crate::PACKET_INFORMATION_LENGTH as PIL;
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-use bytes::BufMut;
-use std::io::{self, IoSlice, Read, Write};
+use std::io::{self, IoSlice, IoSliceMut, Read, Write};
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -22,7 +20,7 @@ pub(crate) fn is_ipv6(buf: &[u8]) -> std::io::Result<bool> {
     }
 }
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-pub(crate) fn generate_packet_information(_ipv6: bool) -> Option<[u8; PIL]> {
+pub(crate) fn generate_packet_information(_ipv6: bool) -> [u8; PIL] {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     const TUN_PROTO_IP6: [u8; PIL] = (libc::ETH_P_IPV6 as u32).to_be_bytes();
     #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -40,67 +38,10 @@ pub(crate) fn generate_packet_information(_ipv6: bool) -> Option<[u8; PIL]> {
     const TUN_PROTO_IP4: [u8; PIL] = 0x0800_u32.to_be_bytes();
 
     if _ipv6 {
-        Some(TUN_PROTO_IP6)
+        TUN_PROTO_IP6
     } else {
-        Some(TUN_PROTO_IP4)
+        TUN_PROTO_IP4
     }
-}
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-#[rustversion::since(1.79)]
-macro_rules! local_buf_util {
-	($e:expr,$size:expr) => {
-		if $e{
-			&mut vec![0u8; $size][..]
-		}else{
-			const STACK_BUF_LEN: usize = crate::DEFAULT_MTU as usize + PIL;
-			&mut [0u8; STACK_BUF_LEN]
-		}
-	};
-}
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-#[rustversion::before(1.79)]
-macro_rules! local_buf_util {
-	($e:expr,$size:expr) =>{
-		{
-			#[allow(clippy::large_enum_variant)]
-			pub(crate) enum OptBuf{
-				Heap(Vec<u8>),
-				Stack([u8;crate::DEFAULT_MTU as usize + PIL])
-			}
-			impl OptBuf{
-				pub(crate) fn as_mut(& mut self)->& mut [u8]{
-					match self{
-						OptBuf::Heap(v)=>v.as_mut(),
-						OptBuf::Stack(v)=>v.as_mut()
-					}
-				}
-			}
-
-			fn get_local_buf(cond:bool,in_buf_len:usize)-> OptBuf{
-				if cond{
-					OptBuf::Heap(vec![0u8; in_buf_len])
-				}else{
-					const STACK_BUF_LEN: usize = crate::DEFAULT_MTU as usize + PIL;
-					OptBuf::Stack([0u8; STACK_BUF_LEN])
-				}
-			}
-			get_local_buf($e,$size)
-		}
-	}
-}
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-#[rustversion::since(1.79)]
-macro_rules! need_mut {
-    ($id:ident, $e:expr) => {
-        let $id = $e;
-    };
-}
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-#[rustversion::before(1.79)]
-macro_rules! need_mut {
-    ($id:ident, $e:expr) => {
-        let mut $id = $e;
-    };
 }
 
 pub struct Tun {
@@ -123,32 +64,20 @@ impl Tun {
     }
     #[cfg(not(any(target_os = "macos", target_os = "ios")))]
     #[inline]
-    pub(crate) fn send(&self, in_buf: &[u8]) -> io::Result<usize> {
-        self.fd.write(in_buf)
+    pub(crate) fn send(&self, buf: &[u8]) -> io::Result<usize> {
+        self.fd.write(buf)
     }
     #[cfg(any(target_os = "macos", target_os = "ios"))]
-    pub(crate) fn send(&self, in_buf: &[u8]) -> io::Result<usize> {
+    pub(crate) fn send(&self, buf: &[u8]) -> io::Result<usize> {
         if self.ignore_packet_info() {
-            let ipv6 = is_ipv6(in_buf)?;
-            if let Some(header) = generate_packet_information(ipv6) {
-                const STACK_BUF_LEN: usize = crate::DEFAULT_MTU as usize + PIL;
-                let in_buf_len = in_buf.len() + PIL;
-
-                // The following logic is to prevent dynamically allocating Vec on every send
-                // As long as the MTU is set to value lesser than 1500, this api uses `stack_buf`
-                // and avoids `Vec` allocation
-                let local_buf_v0 = local_buf_util!(in_buf_len > STACK_BUF_LEN, in_buf_len);
-                need_mut! {local_buf_v1,local_buf_v0};
-                #[allow(clippy::useless_asref)]
-                let local_buf = local_buf_v1.as_mut();
-
-                (&mut local_buf[..PIL]).put_slice(header.as_ref());
-                (&mut local_buf[PIL..in_buf_len]).put_slice(in_buf);
-                let amount = self.fd.write(&local_buf[..in_buf_len])?;
-                return Ok(amount - PIL);
-            }
+            let ipv6 = is_ipv6(buf)?;
+            let header = generate_packet_information(ipv6);
+            let len = self
+                .fd
+                .writev(&[IoSlice::new(&header), IoSlice::new(buf)])?;
+            return Ok(len.saturating_sub(PIL));
         }
-        self.fd.write(in_buf)
+        self.fd.write(buf)
     }
     #[cfg(not(any(target_os = "macos", target_os = "ios")))]
     #[inline]
@@ -159,39 +88,68 @@ impl Tun {
     #[inline]
     pub(crate) fn send_vectored(&self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
         if self.ignore_packet_info() {
+            if crate::platform::posix::fd::max_iov() - 1 < bufs.len() {
+                return Err(io::Error::from(io::ErrorKind::InvalidInput));
+            }
             let buf = bufs
                 .iter()
                 .find(|b| !b.is_empty())
                 .map_or(&[][..], |b| &**b);
-            self.send(buf)
+            let ipv6 = is_ipv6(buf)?;
+            let head = generate_packet_information(ipv6);
+            let mut iov_block = [IoSlice::new(&head); crate::platform::posix::fd::max_iov()];
+            for (index, buf) in bufs.iter().enumerate() {
+                iov_block[index + 1] = *buf
+            }
+            let len = self.fd.writev(&iov_block[..bufs.len() + 1])?;
+            Ok(len.saturating_sub(PIL))
         } else {
             self.fd.writev(bufs)
         }
     }
     #[cfg(not(any(target_os = "macos", target_os = "ios")))]
     #[inline]
-    pub(crate) fn recv(&self, in_buf: &mut [u8]) -> io::Result<usize> {
-        self.fd.read(in_buf)
+    pub(crate) fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
+        self.fd.read(buf)
     }
     #[cfg(any(target_os = "macos", target_os = "ios"))]
-    pub(crate) fn recv(&self, mut in_buf: &mut [u8]) -> io::Result<usize> {
+    pub(crate) fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
         if self.ignore_packet_info() {
-            const STACK_BUF_LEN: usize = crate::DEFAULT_MTU as usize + PIL;
-            let in_buf_len = in_buf.len() + PIL;
-
-            // The following logic is to prevent dynamically allocating Vec on every recv
-            // As long as the MTU is set to value lesser than 1500, this api uses `stack_buf`
-            // and avoids `Vec` allocation
-
-            let local_buf_v0 = local_buf_util!(in_buf_len > STACK_BUF_LEN, in_buf_len);
-            need_mut! {local_buf_v1,local_buf_v0};
-            #[allow(clippy::useless_asref)]
-            let local_buf = local_buf_v1.as_mut();
-            let amount = self.fd.read(local_buf)?;
-            in_buf.put_slice(&local_buf[PIL..amount]);
-            Ok(amount - PIL)
+            let mut head = [0u8; PIL];
+            let bufs = &mut [IoSliceMut::new(&mut head), IoSliceMut::new(buf)];
+            let len = self.fd.readv(bufs)?;
+            Ok(len.saturating_sub(PIL))
         } else {
-            self.fd.read(in_buf)
+            self.fd.read(buf)
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+    #[inline]
+    pub(crate) fn recv_vectored(&self, bufs: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
+        self.fd.readv(bufs)
+    }
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    pub(crate) fn recv_vectored(&self, bufs: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
+        if self.ignore_packet_info() {
+            if crate::platform::posix::fd::max_iov() - 1 < bufs.len() {
+                return Err(io::Error::from(io::ErrorKind::InvalidInput));
+            }
+            let offset = bufs.len() + 1;
+            let mut head = [0u8; PIL];
+            let mut iov_block: [std::mem::MaybeUninit<IoSliceMut>;
+                crate::platform::posix::fd::max_iov()] =
+                unsafe { std::mem::MaybeUninit::uninit().assume_init() };
+            iov_block[0] = std::mem::MaybeUninit::new(IoSliceMut::new(&mut head));
+            for (index, buf) in bufs.iter_mut().enumerate() {
+                iov_block[index + 1] = std::mem::MaybeUninit::new(IoSliceMut::new(buf.as_mut()));
+            }
+            let part: &mut [IoSliceMut] = unsafe {
+                std::slice::from_raw_parts_mut(iov_block.as_mut_ptr() as *mut IoSliceMut, offset)
+            };
+            let len = self.fd.readv(part)?;
+            Ok(len.saturating_sub(PIL))
+        } else {
+            self.fd.readv(bufs)
         }
     }
     #[cfg(any(target_os = "macos", target_os = "ios"))]
