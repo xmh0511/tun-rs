@@ -24,8 +24,6 @@ tokio = { version = "1", features = [
     "io-util",
     "rt",
 ], optional = true }
-tokio-util = { version = "0.7", features = ["codec"], optional = true }
-rustversion = "1.0.17"
 bitflags = "2.6.0"
 ipnet = "2"
 
@@ -71,7 +69,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "time"] }
 
 [features]
 default = ["wintun-dns"]
-async = ["tokio", "futures-core", "tokio-util"]
+async = ["tokio", "futures-core",]
 wintun-dns = []
 experimental = []
 
