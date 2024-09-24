@@ -155,11 +155,11 @@ impl Tun {
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     #[inline]
     pub(crate) fn ignore_packet_info(&self) -> bool {
-        self.ignore_packet_information.load(Ordering::Acquire)
+        self.ignore_packet_information.load(Ordering::Relaxed)
     }
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     pub(crate) fn set_ignore_packet_info(&self, ign: bool) {
-        self.ignore_packet_information.store(ign, Ordering::Release)
+        self.ignore_packet_information.store(ign, Ordering::Relaxed);
     }
     #[cfg(feature = "experimental")]
     pub(crate) fn shutdown(&self) -> io::Result<()> {
