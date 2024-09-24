@@ -171,7 +171,7 @@ impl Fd {
                 std::ptr::null_mut(),
             )
         };
-        if self.is_shutdown.load(Ordering::SeqCst) {
+        if self.is_shutdown.load(Ordering::Relaxed) {
             return Err(io::Error::new(io::ErrorKind::ConnectionAborted, "close"));
         }
         if result == -1 {
@@ -183,7 +183,7 @@ impl Fd {
         Ok(())
     }
     pub fn shutdown(&self) -> io::Result<()> {
-        self.is_shutdown.store(true, Ordering::SeqCst);
+        self.is_shutdown.store(true, Ordering::Relaxed);
         self.event_fd.wake()
     }
 }
