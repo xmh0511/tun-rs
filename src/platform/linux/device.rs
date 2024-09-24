@@ -491,7 +491,7 @@ impl AbstractDevice for Device {
             let mut req = self.request()?;
             req.ifr_ifru.ifru_hwaddr.sa_family = ARPHRD_ETHER;
             req.ifr_ifru.ifru_hwaddr.sa_data[0..ETHER_ADDR_LEN as usize]
-                .copy_from_slice(eth_addr.map(|c| c as i8).as_slice());
+                .copy_from_slice(eth_addr.map(|c| c as _).as_slice());
             if let Err(err) = siocsifhwaddr(ctl()?.as_raw_fd(), &req) {
                 return Err(io::Error::from(err).into());
             }
