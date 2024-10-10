@@ -256,7 +256,7 @@ impl AbstractDevice for Device {
     }
 
     fn if_index(&self) -> Result<u32> {
-        self.index()
+        self.driver.index()
     }
 
     fn enabled(&self, value: bool) -> Result<()> {
