@@ -73,6 +73,10 @@ impl AbstractDevice for AsyncDevice {
         self.inner.set_name(name)
     }
 
+    fn if_index(&self) -> Result<u32> {
+        self.inner.if_index()
+    }
+
     fn enabled(&self, value: bool) -> crate::Result<()> {
         self.inner.enabled(value)
     }
