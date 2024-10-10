@@ -50,6 +50,7 @@ impl Device {
     pub fn shutdown(&self) -> std::io::Result<()> {
         self.tun.shutdown()
     }
+    #[allow(dead_code)]
     pub(crate) fn get_if_index(name: &str) -> std::io::Result<u32> {
         let ifname = std::ffi::CString::new(name)?;
         unsafe { Ok(libc::if_nametoindex(ifname.as_ptr())) }
