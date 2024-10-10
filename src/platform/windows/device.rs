@@ -22,7 +22,7 @@ pub enum PacketVariant {
     Tap(Box<[u8]>),
 }
 impl Driver {
-    pub fn index(&self) -> Result<u32> {
+    pub(crate) fn index(&self) -> Result<u32> {
         match self {
             Driver::Tun(tun) => {
                 let index = tun.session.get_adapter().get_adapter_index()?;
@@ -31,18 +31,18 @@ impl Driver {
             Driver::Tap(tap) => Ok(tap.index()),
         }
     }
-    pub fn name(&self) -> Result<String> {
-        match self {
-            Driver::Tun(tun) => {
-                let name = tun.session.get_adapter().get_name()?;
-                Ok(name)
-            }
-            Driver::Tap(tap) => {
-                let name = tap.get_name()?;
-                Ok(name)
-            }
-        }
-    }
+    // pub fn name(&self) -> Result<String> {
+    //     match self {
+    //         Driver::Tun(tun) => {
+    //             let name = tun.session.get_adapter().get_name()?;
+    //             Ok(name)
+    //         }
+    //         Driver::Tap(tap) => {
+    //             let name = tap.get_name()?;
+    //             Ok(name)
+    //         }
+    //     }
+    // }
     pub fn read_by_ref(&self, buf: &mut [u8]) -> std::io::Result<usize> {
         match self {
             Driver::Tap(tap) => tap.read(buf),
@@ -253,6 +253,10 @@ impl AbstractDevice for Device {
             }
         );
         Ok(())
+    }
+
+    fn if_index(&self) -> Result<u32> {
+        self.index()
     }
 
     fn enabled(&self, value: bool) -> Result<()> {

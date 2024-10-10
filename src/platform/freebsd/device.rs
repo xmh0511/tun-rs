@@ -356,6 +356,12 @@ impl AbstractDevice for Device {
         }
     }
 
+    fn if_index(&self) -> Result<u32> {
+        let if_name = self.name()?;
+        let index = Self::get_if_index(&if_name)?;
+        Ok(index)
+    }
+
     fn enabled(&self, value: bool) -> Result<()> {
         unsafe {
             let mut req = self.request()?;

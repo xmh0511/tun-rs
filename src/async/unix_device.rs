@@ -86,6 +86,15 @@ impl AbstractDevice for AsyncDevice {
         self.inner.get_ref().set_name(name)
     }
     #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd",
+    ))]
+    fn if_index(&self) -> crate::Result<u32> {
+        self.inner.get_ref().if_index()
+    }
+    #[cfg(any(
         target_os = "linux",
         target_os = "macos",
         target_os = "freebsd",

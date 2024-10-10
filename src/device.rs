@@ -22,6 +22,14 @@ pub trait AbstractDevice {
     #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
     fn set_name(&self, name: &str) -> Result<()>;
 
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd",
+    ))]
+    fn if_index(&self) -> Result<u32>;
+
     /// Turn on or off the interface.
     #[cfg(any(
         target_os = "linux",
