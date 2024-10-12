@@ -144,18 +144,32 @@ impl Device {
     /// Create a new `Device` for the given `Configuration`.
     pub fn new(config: &Configuration) -> Result<Self> {
         let layer = config.layer.unwrap_or(Layer::L3);
-        let name = config.name.as_deref().unwrap_or("tun3");
+        let mut count = 0;
 
         let device = if layer == Layer::L3 {
             let wintun_file = &config.platform_config.wintun_file;
             let wintun = unsafe { load_from_path(wintun_file)? };
-            let mut guid = config.platform_config.device_guid;
-            if guid.is_none() {
-                guid.replace(hash_name(name));
-            }
-            let adapter = match wintun::Adapter::open(&wintun, name) {
-                Ok(a) => a,
-                Err(_) => wintun::Adapter::create(&wintun, name, name, guid)?,
+
+            let adapter = loop {
+                let default_name = format!("tun{count}");
+                let name = config.name.as_deref().unwrap_or(&default_name);
+
+                match wintun::Adapter::open(&wintun, name) {
+                    Ok(a) => {
+                        if config.name.is_none() {
+                            count += 1;
+                            continue;
+                        }
+                        break a;
+                    }
+                    Err(_e) => {
+                        let mut guid = config.platform_config.device_guid;
+                        if guid.is_none() {
+                            guid.replace(hash_name(name));
+                        }
+                        break wintun::Adapter::create(&wintun, name, name, guid)?;
+                    }
+                }
             };
 
             #[cfg(feature = "wintun-dns")]
@@ -174,22 +188,30 @@ impl Device {
             }
         } else if layer == Layer::L2 {
             const HARDWARE_ID: &str = "tap0901";
-            let tap = if let Ok(tap) = TapDevice::open(HARDWARE_ID, name) {
-                tap
-            } else {
-                let tap = TapDevice::create(HARDWARE_ID)?;
-                if let Err(e) = tap.set_name(name) {
-                    if config.name.is_some() {
-                        Err(e)?
+            let tap = loop {
+                let default_name = format!("tap{count}");
+                let name = config.name.as_deref().unwrap_or(&default_name);
+                if let Ok(tap) = TapDevice::open(HARDWARE_ID, name) {
+                    if config.name.is_none() {
+                        count += 1;
+                        continue;
                     }
+                    break tap;
+                } else {
+                    let tap = TapDevice::create(HARDWARE_ID)?;
+                    if let Err(e) = tap.set_name(name) {
+                        if config.name.is_some() {
+                            Err(e)?
+                        }
+                    }
+                    break tap;
                 }
-                tap
             };
             Device {
                 driver: Driver::Tap(tap),
             }
         } else {
-            panic!("unknow layer {:?}", layer);
+            panic!("unknown layer {:?}", layer);
         };
         configure(&device, config)?;
         if let Some(metric) = config.metric {
