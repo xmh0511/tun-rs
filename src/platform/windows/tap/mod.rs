@@ -53,6 +53,7 @@ impl TapDevice {
                 Ok(handle) => {
                     if get_version(handle).is_err() {
                         std::thread::sleep(time::Duration::from_millis(200));
+                        let _ = ffi::close_handle(handle);
                         continue;
                     }
                     break handle;
@@ -60,7 +61,14 @@ impl TapDevice {
             };
         };
 
-        let index = ffi::luid_to_index(&luid)?;
+        let index = match ffi::luid_to_index(&luid) {
+            Ok(index) => index,
+            Err(e) => {
+                let _ = ffi::close_handle(handle);
+                let _ = iface::delete_interface(component_id, &luid);
+                Err(e)?
+            }
+        };
         Ok(Self {
             luid,
             handle,
