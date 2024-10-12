@@ -32,7 +32,8 @@ async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
 
     config
         .address_with_prefix((10, 0, 0, 9), 24)
-        .destination((10, 0, 0, 1))
+        // will add 0.0.0.0 to interface on windows platform, which route all traffic here
+        //.destination((10, 0, 0, 1))
         .up();
 
     #[cfg(target_os = "windows")]
