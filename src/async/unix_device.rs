@@ -52,12 +52,18 @@ impl AsyncDevice {
             })
             .await
     }
+    pub fn try_recv(&self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.inner.get_ref().recv(buf)
+    }
 
     /// Send a packet to tun device
     pub async fn send(&self, buf: &[u8]) -> std::io::Result<usize> {
         self.inner
             .async_io(Interest::WRITABLE, |device| device.send(buf))
             .await
+    }
+    pub fn try_send(&self, buf: &[u8]) -> std::io::Result<usize> {
+        self.inner.get_ref().send(buf)
     }
     pub async fn send_vectored(&self, bufs: &[IoSlice<'_>]) -> std::io::Result<usize> {
         self.inner
