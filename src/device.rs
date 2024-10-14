@@ -120,4 +120,6 @@ pub trait AbstractDevice {
     /// Get mac address
     #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
     fn get_mac_address(&self) -> Result<[u8; ETHER_ADDR_LEN as usize]>;
+    #[cfg(target_os = "windows")]
+    fn set_metric(&self, metric: u16) -> Result<()>;
 }

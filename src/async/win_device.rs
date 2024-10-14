@@ -118,4 +118,8 @@ impl AbstractDevice for AsyncDevice {
     fn add_address_v6(&self, addr: std::net::IpAddr, prefix: u8) -> crate::Result<()> {
         self.inner.add_address_v6(addr, prefix)
     }
+
+    fn set_metric(&self, metric: u16) -> crate::Result<()> {
+        self.inner.set_metric(metric)
+    }
 }

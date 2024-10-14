@@ -71,8 +71,6 @@ pub struct Configuration {
     pub(crate) enabled: Option<bool>,
     #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
     pub(crate) layer: Option<Layer>,
-    #[cfg(windows)]
-    pub(crate) metric: Option<u16>,
 }
 
 impl Configuration {
@@ -179,12 +177,6 @@ impl Configuration {
     #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
     pub fn layer(&mut self, value: Layer) -> &mut Self {
         self.layer = Some(value);
-        self
-    }
-
-    #[cfg(windows)]
-    pub fn metric(&mut self, metric: u16) -> &mut Self {
-        self.metric = Some(metric);
         self
     }
 }

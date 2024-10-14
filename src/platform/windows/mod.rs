@@ -21,6 +21,7 @@ pub struct PlatformConfig {
     #[cfg(feature = "wintun-dns")]
     pub(crate) dns_servers: Option<Vec<IpAddr>>,
     pub(crate) ring_capacity: Option<u32>,
+    pub(crate) metric: Option<u16>,
 }
 
 impl Default for PlatformConfig {
@@ -31,6 +32,7 @@ impl Default for PlatformConfig {
             #[cfg(feature = "wintun-dns")]
             dns_servers: None,
             ring_capacity: None,
+            metric: None,
         }
     }
 }
@@ -57,6 +59,11 @@ impl PlatformConfig {
 
     pub fn ring_capacity(&mut self, ring_capacity: u32) -> &mut Self {
         self.ring_capacity = Some(ring_capacity);
+        self
+    }
+
+    pub fn metric(&mut self, metric: u16) -> &mut Self {
+        self.metric = Some(metric);
         self
     }
 }

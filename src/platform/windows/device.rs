@@ -214,7 +214,7 @@ impl Device {
             panic!("unknown layer {:?}", layer);
         };
         configure(&device, config)?;
-        if let Some(metric) = config.metric {
+        if let Some(metric) = config.platform_config.metric {
             netsh::set_interface_metric(device.driver.index()?, metric)?;
         }
         Ok(device)
@@ -417,6 +417,11 @@ impl AbstractDevice for Device {
                 tap.get_mac().map_err(|e|e.into())
             }
         )
+    }
+
+    fn set_metric(&self, metric: u16) -> Result<()> {
+        netsh::set_interface_metric(self.if_index()?, metric)?;
+        Ok(())
     }
 }
 
