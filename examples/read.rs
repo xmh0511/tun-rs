@@ -42,13 +42,10 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     // config.layer(Layer::L2);
 
     config
-        // .address_with_prefix(
-        //     "CDCD:910A:2222:5498:8475:1111:3900:2020"
-        //         .parse::<IpAddr>()
-        //         .unwrap(),
-        //     64,
-        // )
-        .address_with_prefix((10, 0, 0, 2), 24u8)
+        .address_with_prefix_multi(&vec![
+            ("CDCD:910A:2222:5498:8475:1111:3900:2020", 64),
+            ("10.0.0.2", 24u8),
+        ])
         //.destination((10, 0, 0, 1))
         .up();
 

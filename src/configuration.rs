@@ -32,8 +32,20 @@ pub struct Configuration {
     ))]
     #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
     pub(crate) mac_addr: Option<[u8; 6]>,
-    #[allow(dead_code)]
-    pub(crate) address: Option<IpAddr>,
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
+    pub(crate) address_prefix_v6: Option<Vec<(IpAddr, u8)>>,
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
+    pub(crate) address_mask_v4: Option<(IpAddr, IpAddr)>,
     #[cfg(any(
         target_os = "windows",
         target_os = "linux",
@@ -48,13 +60,6 @@ pub struct Configuration {
         target_os = "freebsd"
     ))]
     pub(crate) broadcast: Option<IpAddr>,
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
-    pub(crate) netmask: Option<IpAddr>,
     #[cfg(any(
         target_os = "windows",
         target_os = "linux",
@@ -106,12 +111,39 @@ impl Configuration {
     ))]
     pub fn address_with_prefix<A: IntoAddress>(&mut self, value: A, prefix: u8) -> &mut Self {
         let address = value.into_address().unwrap();
-        self.address = Some(address);
-        let ip_net = ipnet::IpNet::new(address, prefix).unwrap();
-        self.netmask = Some(ip_net.netmask());
+        if address.is_ipv4() {
+            let ip_net = ipnet::IpNet::new(address, prefix).unwrap();
+            self.address_mask_v4.replace((address, ip_net.netmask()));
+        } else {
+            self.address_prefix_v6.replace(vec![(address, prefix)]);
+        }
         self
     }
-
+    /// Set the address.
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
+    pub fn address_with_prefix_multi<A: IntoAddress>(&mut self, values: &[(A, u8)]) -> &mut Self {
+        let mut address_mask_v4 = None;
+        let mut address_mask_v6 = Vec::new();
+        for (value, prefix) in values {
+            let address = value.into_address().unwrap();
+            if address.is_ipv4() {
+                let ip_net = ipnet::IpNet::new(address, *prefix).unwrap();
+                address_mask_v4.replace((address, ip_net.netmask()));
+            } else {
+                address_mask_v6.push((address, *prefix));
+            }
+        }
+        self.address_mask_v4 = address_mask_v4;
+        if !address_mask_v6.is_empty() {
+            self.address_prefix_v6.replace(address_mask_v6);
+        }
+        self
+    }
     /// Set the destination address.
     #[cfg(any(
         target_os = "windows",
@@ -197,8 +229,13 @@ pub(crate) fn configure<D: AbstractDevice>(
         if let Some(mtu) = config.mtu {
             device.set_mtu(mtu)?;
         }
-        if let (Some(address), Some(netmask)) = (config.address, config.netmask) {
+        if let Some((address, netmask)) = config.address_mask_v4 {
             device.set_network_address(address, netmask, config.destination)?;
+        }
+        if let Some(values) = &config.address_prefix_v6 {
+            for (address, prefix) in values {
+                device.add_address_v6(*address, *prefix)?
+            }
         }
     }
     #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
