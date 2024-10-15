@@ -42,7 +42,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     // config.layer(Layer::L2);
 
     config
-        .address_with_prefix_multi(&vec![
+        .address_with_prefix_multi(&[
             ("CDCD:910A:2222:5498:8475:1111:3900:2020", 64),
             ("10.0.0.2", 24u8),
         ])
