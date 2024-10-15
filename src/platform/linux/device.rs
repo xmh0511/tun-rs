@@ -89,6 +89,16 @@ impl Device {
     pub(crate) fn from_tun(tun: Tun) -> Self {
         Self { tun }
     }
+    pub fn set_tx_queue_len(&self, tx_queue_len: u32) -> Result<()> {
+        unsafe {
+            let mut ifreq = self.request()?;
+            ifreq.ifr_ifru.ifru_metric = tx_queue_len as _;
+            if let Err(err) = change_tx_queue_len(ctl()?.as_raw_fd(), &ifreq) {
+                return Err(io::Error::from(err).into());
+            }
+        }
+        Ok(())
+    }
     pub fn tx_queue_len(&self) -> Result<u32> {
         unsafe {
             let mut ifreq = self.request()?;
