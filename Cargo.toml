@@ -1,8 +1,8 @@
 [package]
 name = "tun-rs"
-version = "1.4.3"
+version = "1.4.4"
 edition = "2021"
-authors = ["xmh0511, vnt-dev, ssrlive"]
+authors = ["xmh0511, vnt-dev"]
 license = "Apache-2.0"
 description = "A cross-platform infrastructure of Tun/Tap device creation and handling."
 repository = "https://github.com/xmh0511/tun-rs"
@@ -68,6 +68,8 @@ futures = "0.3"
 packet = "0.1"
 serde_json = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "time"] }
+async-std = {version ="1",features = ["attributes","unstable"]}
+async-ctrlc = "1.2.0"
 
 [features]
 default = ["wintun-dns"]
@@ -82,14 +84,26 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [[example]]
-name = "read-async"
-required-features = ["async"]
+name = "read-async-tokio"
+required-features = ["async_tokio"]
+
+[[example]]
+name = "read-async-std"
+required-features = ["async_std"]
 
 
 [[example]]
-name = "ping-tun"
-required-features = ["async"]
+name = "ping-tun-tokio"
+required-features = ["async_tokio"]
 
 [[example]]
-name = "ping-tap"
-required-features = ["async"]
+name = "ping-tun-async-std"
+required-features = ["async_std"]
+
+[[example]]
+name = "ping-tap-tokio"
+required-features = ["async_tokio"]
+
+[[example]]
+name = "ping-tap-async-std"
+required-features = ["async_std"]
