@@ -16,9 +16,9 @@ pub use crate::platform::create;
 #[cfg(unix)]
 pub use crate::platform::create_with_fd;
 
-#[cfg(feature = "async")]
+#[cfg(any(feature = "async_std", feature = "async_tokio"))]
 pub mod r#async;
-#[cfg(feature = "async")]
+#[cfg(any(feature = "async_std", feature = "async_tokio"))]
 pub use r#async::*;
 
 pub fn configure() -> Configuration {

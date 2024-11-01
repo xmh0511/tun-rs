@@ -1,7 +1,7 @@
 use crate::platform::posix::Fd;
 use crate::platform::{Device, Tun};
 use std::io::{IoSlice, IoSliceMut};
-use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, RawFd};
 
 impl FromRawFd for Device {
     unsafe fn from_raw_fd(fd: RawFd) -> Self {
@@ -11,6 +11,11 @@ impl FromRawFd for Device {
 impl AsRawFd for Device {
     fn as_raw_fd(&self) -> RawFd {
         self.tun.as_raw_fd()
+    }
+}
+impl AsFd for Device {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        unsafe { BorrowedFd::borrow_raw(self.as_raw_fd()) }
     }
 }
 

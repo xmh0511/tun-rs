@@ -11,15 +11,14 @@ use std::os::fd::{FromRawFd, RawFd};
 
 use crate::platform::Device;
 use crate::AbstractDevice;
-use tokio::io::unix::AsyncFd;
-use tokio::io::Interest;
 
+use crate::r#async::async_device::AsyncFd;
 #[allow(unused_imports)]
 use std::net::IpAddr;
 
 /// An async TUN device wrapper around a TUN device.
 pub struct AsyncDevice {
-    inner: AsyncFd<Device>,
+    inner: AsyncFd,
 }
 
 impl FromRawFd for AsyncDevice {
@@ -31,7 +30,6 @@ impl FromRawFd for AsyncDevice {
 impl AsyncDevice {
     /// Create a new `AsyncDevice` wrapping around a `Device`.
     pub fn new(device: Device) -> std::io::Result<AsyncDevice> {
-        device.set_nonblock()?;
         Ok(AsyncDevice {
             inner: AsyncFd::new(device)?,
         })
@@ -46,11 +44,7 @@ impl AsyncDevice {
 
     /// Recv a packet from tun device
     pub async fn recv(&self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.inner
-            .async_io(Interest::READABLE.add(Interest::ERROR), |device| {
-                device.recv(buf)
-            })
-            .await
+        self.inner.recv(buf).await
     }
     pub fn try_recv(&self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.inner.get_ref().recv(buf)
@@ -58,17 +52,13 @@ impl AsyncDevice {
 
     /// Send a packet to tun device
     pub async fn send(&self, buf: &[u8]) -> std::io::Result<usize> {
-        self.inner
-            .async_io(Interest::WRITABLE, |device| device.send(buf))
-            .await
+        self.inner.send(buf).await
     }
     pub fn try_send(&self, buf: &[u8]) -> std::io::Result<usize> {
         self.inner.get_ref().send(buf)
     }
     pub async fn send_vectored(&self, bufs: &[IoSlice<'_>]) -> std::io::Result<usize> {
-        self.inner
-            .async_io(Interest::WRITABLE, |device| device.send_vectored(bufs))
-            .await
+        self.inner.send_vectored(bufs).await
     }
 }
 impl AsyncDevice {

@@ -18,6 +18,14 @@ libc = { version = "0.2", features = ["extra_traits"] }
 log = "0.4"
 thiserror = "1"
 blocking = { version = "1.6", optional = true }
+tokio = { version = "1", features = [
+    "net",
+    "macros",
+    "io-util",
+    "rt",
+], optional = true }
+async-io = { version = "2.3", optional = true }
+
 bitflags = "2.6.0"
 ipnet = "2"
 
@@ -63,7 +71,9 @@ tokio = { version = "1", features = ["rt-multi-thread", "time"] }
 
 [features]
 default = ["wintun-dns"]
-async = ["blocking"]
+async = ["async_tokio"]
+async_tokio = ["blocking", "tokio"]
+async_std = ["blocking", "async-io"]
 wintun-dns = []
 experimental = []
 
