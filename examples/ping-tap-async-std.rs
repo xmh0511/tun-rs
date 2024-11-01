@@ -4,7 +4,9 @@ use std::{fmt, io};
 use packet::{builder::Builder, icmp, ip, Packet};
 use packet::{ether, PacketMut};
 
+#[allow(unused_imports)]
 use async_ctrlc::CtrlC;
+#[allow(unused_imports)]
 use async_std::prelude::FutureExt;
 
 #[allow(unused_imports)]
