@@ -37,9 +37,9 @@ impl AsyncDevice {
             }
         }
         let device = self.inner.clone();
-        let packet = tokio::task::spawn_blocking(move || device.driver.receive_blocking())
+        let packet = blocking::unblock(move || device.driver.receive_blocking())
             .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("{}", e)))??;
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("{}", e)))?;
 
         let mut packet = match &packet {
             PacketVariant::Tun(packet) => packet.bytes(),

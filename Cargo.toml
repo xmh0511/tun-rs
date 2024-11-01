@@ -14,16 +14,10 @@ crate-type = ["staticlib", "cdylib", "lib"]
 [dependencies]
 bytes = { version = "1" }
 cfg-if = "1"
-futures-core = { version = "0.3", optional = true }
 libc = { version = "0.2", features = ["extra_traits"] }
 log = "0.4"
 thiserror = "1"
-tokio = { version = "1", features = [
-    "net",
-    "macros",
-    "io-util",
-    "rt",
-], optional = true }
+blocking = { version = "1.6", optional = true }
 bitflags = "2.6.0"
 ipnet = "2"
 
@@ -69,7 +63,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "time"] }
 
 [features]
 default = ["wintun-dns"]
-async = ["tokio", "futures-core",]
+async = ["blocking"]
 wintun-dns = []
 experimental = []
 
