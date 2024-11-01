@@ -8,15 +8,13 @@ mod async_std;
 #[cfg(all(feature = "async_std", not(feature = "async_tokio")))]
 pub use async_std::*;
 
-#[cfg(all(feature = "async_tokio", feature = "async_std"))]
+#[cfg(all(feature = "async_tokio", feature = "async_std", not(doc)))]
 compile_error! {"More than one asynchronous runtime is simultaneously specified in features"}
 
 // Polyfill implementation, which is not usable and shouldn't be reachable
-#[doc(hidden)]
 #[cfg(all(feature = "async_tokio", feature = "async_std"))]
 pub struct AsyncFd;
 
-#[doc(hidden)]
 #[cfg(all(feature = "async_tokio", feature = "async_std"))]
 impl AsyncFd {
     pub fn new(_device: crate::platform::Device) -> std::io::Result<Self> {
