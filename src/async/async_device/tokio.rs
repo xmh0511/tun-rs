@@ -2,7 +2,7 @@ use crate::platform::Device;
 use ::tokio::io::Interest;
 use std::io;
 use std::io::IoSlice;
-use tokio::io::unix::AsyncFd as TokioAsyncFd;
+use ::tokio::io::unix::AsyncFd as TokioAsyncFd;
 
 pub struct AsyncFd(TokioAsyncFd<Device>);
 impl AsyncFd {
