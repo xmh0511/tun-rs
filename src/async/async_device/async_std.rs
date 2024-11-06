@@ -1,5 +1,5 @@
 use crate::platform::Device;
-use async_io::Async;
+use ::async_io::Async;
 use std::io;
 use std::io::IoSlice;
 

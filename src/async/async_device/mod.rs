@@ -1,12 +1,12 @@
 #[cfg(all(feature = "async_tokio", not(feature = "async_std")))]
 mod tokio;
 #[cfg(all(feature = "async_tokio", not(feature = "async_std")))]
-pub use tokio::*;
+pub use self::tokio::*;
 
 #[cfg(all(feature = "async_std", not(feature = "async_tokio")))]
 mod async_std;
 #[cfg(all(feature = "async_std", not(feature = "async_tokio")))]
-pub use async_std::*;
+pub use self::async_std::*;
 
 #[cfg(all(feature = "async_tokio", feature = "async_std", not(doc)))]
 compile_error! {"More than one asynchronous runtime is simultaneously specified in features"}
