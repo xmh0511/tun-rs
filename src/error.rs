@@ -18,8 +18,10 @@ pub enum Error {
     #[error("invalid file descriptor")]
     InvalidDescriptor,
 
-    #[error("unsuported network layer of operation")]
+    #[error("unsupported network layer of operation")]
     UnsupportedLayer,
+    #[error("unsupported offload: {0}")]
+    UnsupportedOffload(i32),
 
     #[error("out of range integral type conversion attempted")]
     TryFromIntError,

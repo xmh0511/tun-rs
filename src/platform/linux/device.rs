@@ -71,6 +71,13 @@ impl Device {
             if let Err(err) = tunsetiff(tun_fd.inner, &mut req as *mut _ as *mut _) {
                 return Err(io::Error::from(err).into());
             }
+            if config.platform_config.offload {
+                let offload_flags =
+                    libc::TUN_F_CSUM | libc::TUN_F_TSO4 | libc::TUN_F_TSO6 | libc::TUN_F_UFO;
+                if let Err(err) = tunsetoffload(tun_fd.inner, offload_flags as _) {
+                    return Err(Error::UnsupportedOffload(err as _));
+                }
+            }
 
             let device = Device {
                 tun: Tun::new(tun_fd),
