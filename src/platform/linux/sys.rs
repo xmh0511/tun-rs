@@ -30,3 +30,4 @@ ioctl_write_ptr!(tunsetpersist, b'T', 203, c_int);
 ioctl_write_ptr!(tunsetowner, b'T', 204, c_int);
 ioctl_write_ptr!(tunsetgroup, b'T', 206, c_int);
 ioctl_write_ptr!(tunsetoffload, b'T', 208, c_int);
+ioctl_write_ptr!(tunsetvnethdrsz, b'T', 216, c_int);
