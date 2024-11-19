@@ -75,9 +75,10 @@ impl Device {
                 return Err(io::Error::from(err).into());
             }
             if config.platform_config.offload {
-                if let Err(err) = tunsetvnethdrsz(tun_fd.inner, 12 as _) {
-                    return Err(Error::UnsupportedOffload(err as _));
-                }
+                // Unsupported
+                // if let Err(err) = tunsetvnethdrsz(tun_fd.inner, 12 as _) {
+                //     return Err(Error::UnsupportedOffload(err as _));
+                // }
                 let offload_flags = libc::TUN_F_CSUM | libc::TUN_F_TSO4 | libc::TUN_F_TSO6;
                 if let Err(err) = tunsetoffload(tun_fd.inner, offload_flags as _) {
                     return Err(Error::UnsupportedOffload(err as _));
