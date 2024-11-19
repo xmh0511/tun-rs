@@ -1,3 +1,10 @@
+use crate::getifaddrs::{self, Interface};
+use libc::{
+    self, c_char, c_short, ifreq, in6_ifreq, AF_INET, AF_INET6, ARPHRD_ETHER, IFF_MULTI_QUEUE,
+    IFF_NO_PI, IFF_RUNNING, IFF_TAP, IFF_TUN, IFF_UP, IFNAMSIZ, O_RDWR, SOCK_DGRAM,
+};
+use mac_address::mac_address_by_name;
+use std::io::IoSliceMut;
 use std::{
     ffi::CString,
     io, mem,
@@ -5,15 +12,13 @@ use std::{
     os::unix::io::{AsRawFd, RawFd},
     ptr,
 };
-use std::io::IoSliceMut;
-use crate::getifaddrs::{self, Interface};
-use libc::{
-    self, c_char, c_short, ifreq, in6_ifreq, AF_INET, AF_INET6, ARPHRD_ETHER, IFF_MULTI_QUEUE,
-    IFF_NO_PI, IFF_RUNNING, IFF_TAP, IFF_TUN, IFF_UP, IFNAMSIZ, O_RDWR, SOCK_DGRAM,
-};
-use mac_address::mac_address_by_name;
 
 use crate::configuration::configure;
+use crate::platform::linux::offload::{
+    gso_none_checksum, gso_split, VirtioNetHdr, VIRTIO_NET_HDR_F_NEEDS_CSUM,
+    VIRTIO_NET_HDR_GSO_NONE, VIRTIO_NET_HDR_GSO_TCPV4, VIRTIO_NET_HDR_GSO_TCPV6,
+    VIRTIO_NET_HDR_GSO_UDP_L4, VIRTIO_NET_HDR_LEN,
+};
 use crate::{
     configuration::{Configuration, Layer},
     device::{AbstractDevice, ETHER_ADDR_LEN},
@@ -22,7 +27,6 @@ use crate::{
     platform::posix::{ipaddr_to_sockaddr, sockaddr_union, Fd, Tun},
     IntoAddress,
 };
-use crate::platform::linux::offload::{gso_none_checksum, VIRTIO_NET_HDR_F_NEEDS_CSUM, VIRTIO_NET_HDR_GSO_NONE, VIRTIO_NET_HDR_LEN, VirtioNetHdr};
 
 const OVERWRITE_SIZE: usize = std::mem::size_of::<libc::__c_anonymous_ifr_ifru>();
 
@@ -103,7 +107,10 @@ impl Device {
         }
     }
     pub(crate) fn from_tun(tun: Tun) -> Self {
-        Self { tun, vnet_hdr: false }
+        Self {
+            tun,
+            vnet_hdr: false,
+        }
     }
     pub fn set_tx_queue_len(&self, tx_queue_len: u32) -> Result<()> {
         unsafe {
@@ -156,41 +163,163 @@ impl Device {
             }
         }
     }
-    /// Recv a packet from tun device
-    /// transfer_buffer is used to assist in reading data The size needs to be 10+65535
-    pub fn recv_multiple(&self, transfer_buffer: &mut [u8], bufs: &mut [IoSliceMut<'_>], size: &mut [usize]) -> io::Result<usize> {
-        if self.vnet_hdr{
-            let mut head = [0u8; VIRTIO_NET_HDR_LEN];
-            let bufs = &mut [IoSliceMut::new(&mut head), IoSliceMut::new(transfer_buffer)];
-            let mut len = self.tun.recv_vectored(bufs)?;
-            if len < VIRTIO_NET_HDR_LEN{
-                return Err(io::Error::new(io::ErrorKind::Other,"too short"));
+    /// Recv a packet from tun device.
+    /// If offload is enabled. This method can be used to obtain processed data.
+    ///
+    /// original_buffer is used to store raw data, including the VirtioNetHdr and the unsplit IP packet. The recommended size is 10 + 65535.
+    /// bufs and sizes are used to store the segmented IP packets
+    ///
+    /// # Panics
+    /// If the length of bufs and size is insufficient, it will cause a panic
+    pub fn recv_multiple(
+        &self,
+        original_buffer: &mut [u8],
+        bufs: &mut [&mut [u8]],
+        sizes: &mut [usize],
+    ) -> io::Result<usize> {
+        if self.vnet_hdr {
+            let len = self.tun.recv(original_buffer)?;
+            if len <= VIRTIO_NET_HDR_LEN {
+                Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!(
+                        "length of packet ({len}) <= VIRTIO_NET_HDR_LEN ({VIRTIO_NET_HDR_LEN})",
+                    ),
+                ))?
             }
-            len -= VIRTIO_NET_HDR_LEN;
-            let hdr = crate::platform::linux::offload::decode(&head)?;
-
-            self.handle_virtio_read(hdr,&mut transfer_buffer[..len],bufs,size)?;
-            todo!()
-        }else{
-            self.tun.recv(&mut bufs[0])
+            let hdr =
+                crate::platform::linux::offload::decode(&original_buffer[..VIRTIO_NET_HDR_LEN])?;
+            self.handle_virtio_read(
+                hdr,
+                &mut original_buffer[VIRTIO_NET_HDR_LEN..len],
+                bufs,
+                sizes,
+            )
+        } else {
+            // you can use device.recv()
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "offload not enabled",
+            ))
         }
     }
-    fn handle_virtio_read(&self, hdr:VirtioNetHdr, buf: &mut [u8], bufs: &mut [IoSliceMut<'_>], size: &mut [usize]) -> io::Result<usize> {
-        if hdr.gso_type == VIRTIO_NET_HDR_GSO_NONE  {
-            if hdr.flags& VIRTIO_NET_HDR_F_NEEDS_CSUM != 0 {
+    fn handle_virtio_read(
+        &self,
+        mut hdr: VirtioNetHdr,
+        input: &mut [u8],
+        bufs: &mut [&mut [u8]],
+        sizes: &mut [usize],
+    ) -> io::Result<usize> {
+        let len = input.len();
+        if hdr.gso_type == VIRTIO_NET_HDR_GSO_NONE {
+            if hdr.flags & VIRTIO_NET_HDR_F_NEEDS_CSUM != 0 {
                 // This means CHECKSUM_PARTIAL in skb context. We are responsible
                 // for computing the checksum starting at hdr.csumStart and placing
                 // at hdr.csumOffset.
-                gso_none_checksum(buf,hdr.csum_start,hdr.csum_offset);
+                gso_none_checksum(input, hdr.csum_start, hdr.csum_offset);
             }
-            let len = buf.len();
-            size[0] = len;
-            bufs[0][..len].copy_from_slice(buf);
-            return Ok(1)
+            if bufs[0].len() < len {
+                Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!(
+                        "read len {len} overflows bufs element len {}",
+                        bufs[0].len()
+                    ),
+                ))?
+            }
+            sizes[0] = len;
+            bufs[0][..len].copy_from_slice(input);
+            return Ok(1);
         }
-        todo!()
+        if hdr.gso_type != VIRTIO_NET_HDR_GSO_TCPV4
+            && hdr.gso_type != VIRTIO_NET_HDR_GSO_TCPV6
+            && hdr.gso_type != VIRTIO_NET_HDR_GSO_UDP_L4
+        {
+            Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("unsupported virtio GSO type: {}", hdr.gso_type),
+            ))?
+        }
+        let ip_version = input[0] >> 4;
+        match ip_version {
+            4 => {
+                if hdr.gso_type != VIRTIO_NET_HDR_GSO_TCPV4
+                    && hdr.gso_type != VIRTIO_NET_HDR_GSO_UDP_L4
+                {
+                    Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("ip header version: 4, GSO type: {}", hdr.gso_type),
+                    ))?
+                }
+            }
+            6 => {
+                if hdr.gso_type != VIRTIO_NET_HDR_GSO_TCPV6
+                    && hdr.gso_type != VIRTIO_NET_HDR_GSO_UDP_L4
+                {
+                    Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("ip header version: 6, GSO type: {}", hdr.gso_type),
+                    ))?
+                }
+            }
+            ip_version => Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("invalid ip header version: {}", ip_version),
+            ))?,
+        }
+        // Don't trust hdr.hdrLen from the kernel as it can be equal to the length
+        // of the entire first packet when the kernel is handling it as part of a
+        // FORWARD path. Instead, parse the transport header length and add it onto
+        // csumStart, which is synonymous for IP header length.
+        if hdr.gso_type == VIRTIO_NET_HDR_GSO_UDP_L4 {
+            hdr.hdr_len = hdr.csum_start + 8
+        } else {
+            if len <= hdr.csum_start as usize + 12 {
+                Err(io::Error::new(io::ErrorKind::Other, "packet is too short"))?
+            }
+
+            let tcp_h_len = input[hdr.csum_start as usize + 12] as u16 >> 4 * 4;
+            if tcp_h_len < 20 || tcp_h_len > 60 {
+                // A TCP header must be between 20 and 60 bytes in length.
+                Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!("tcp header len is invalid: {tcp_h_len}"),
+                ))?
+            }
+            hdr.hdr_len = hdr.csum_start + tcp_h_len
+        }
+        if len < hdr.hdr_len as usize {
+            Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!(
+                    "length of packet ({len}) < virtioNetHdr.hdr_len ({})",
+                    hdr.hdr_len
+                ),
+            ))?
+        }
+        if hdr.hdr_len < hdr.csum_start {
+            Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!(
+                    "virtioNetHdr.hdrLen ({}) < virtioNetHdr.csumStart ({})",
+                    hdr.hdr_len, hdr.csum_start
+                ),
+            ))?
+        }
+        let c_sum_at = (hdr.csum_start + hdr.csum_offset) as usize;
+        if c_sum_at + 1 >= len {
+            Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!(
+                    "end of checksum offset ({}) exceeds packet length ({len})",
+                    c_sum_at + 1,
+                ),
+            ))?
+        }
+        return gso_split(input, hdr, bufs, sizes, ip_version == 6);
     }
 }
+
 impl Device {
     /// Prepare a new request.
     unsafe fn request(&self) -> Result<ifreq> {
@@ -268,8 +397,8 @@ impl Device {
                                     addr.address,
                                     0,
                                 ))
-                                    .addr6
-                                    .sin6_addr;
+                                .addr6
+                                .sin6_addr;
                                 if let Err(e) = siocdifaddr_in6(ctl.as_raw_fd(), &ifrv6) {
                                     log::error!("{e:?}");
                                 }
@@ -325,12 +454,15 @@ impl Device {
         }
     }
 }
+
 unsafe fn ctl() -> io::Result<Fd> {
     Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)
 }
+
 unsafe fn ctl_v6() -> io::Result<Fd> {
     Fd::new(libc::socket(AF_INET6, SOCK_DGRAM, 0), true)
 }
+
 unsafe fn name(fd: RawFd) -> io::Result<String> {
     let mut req: ifreq = mem::zeroed();
     if let Err(err) = tungetiff(fd, &mut req as *mut _ as *mut _) {
@@ -340,6 +472,7 @@ unsafe fn name(fd: RawFd) -> io::Result<String> {
     let tun_name = c_str.to_string_lossy().into_owned();
     Ok(tun_name)
 }
+
 unsafe fn request(name: &str) -> Result<ifreq> {
     let mut req: ifreq = mem::zeroed();
     ptr::copy_nonoverlapping(
@@ -349,6 +482,7 @@ unsafe fn request(name: &str) -> Result<ifreq> {
     );
     Ok(req)
 }
+
 impl AbstractDevice for Device {
     fn name(&self) -> Result<String> {
         unsafe { name(self.as_raw_fd()).map_err(|e| e.into()) }

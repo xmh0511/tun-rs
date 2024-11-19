@@ -1,8 +1,8 @@
 pub mod sys;
 
+mod checksum;
 mod device;
 mod offload;
-mod checksum;
 
 pub use self::device::Device;
 use std::os::fd::RawFd;
