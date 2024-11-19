@@ -1,7 +1,27 @@
 use crate::platform::linux::checksum::{checksum, pseudo_header_checksum_no_fold};
 use byteorder::{BigEndian, ByteOrder};
 use libc::IPPROTO_TCP;
+use std::collections::HashMap;
 use std::io;
+
+const TCP_FLAGS_OFFSET: usize = 13;
+
+const TCP_FLAG_FIN: u8 = 0x01;
+const TCP_FLAG_PSH: u8 = 0x08;
+const TCP_FLAG_ACK: u8 = 0x10;
+pub const VIRTIO_NET_HDR_GSO_NONE: u8 = 0;
+pub const VIRTIO_NET_HDR_F_NEEDS_CSUM: u8 = 1;
+pub const VIRTIO_NET_HDR_GSO_TCPV4: u8 = 1;
+pub const VIRTIO_NET_HDR_GSO_TCPV6: u8 = 4;
+pub const VIRTIO_NET_HDR_GSO_UDP_L4: u8 = 5;
+const IPV4_SRC_ADDR_OFFSET: usize = 12;
+const IPV6_SRC_ADDR_OFFSET: usize = 8;
+const MAX_UINT16: usize = 1 << 16 - 1;
+const COALESCE_PREPEND: isize = -1;
+const COALESCE_UNAVAILABLE: isize = 0;
+const COALESCE_APPEND: isize = 1;
+const UDP_HEADER_LEN: usize = 8;
+const IDEAL_BATCH_SIZE: usize = 128;
 
 /// https://github.com/WireGuard/wireguard-go/blob/master/tun/offload_linux.go
 ///
@@ -17,23 +37,7 @@ pub struct VirtioNetHdr {
     pub csum_start: u16,
     pub csum_offset: u16,
 }
-const TCP_FLAG_FIN: u8 = 0x01;
-const TCP_FLAG_PSH: u8 = 0x08;
-const TCP_FLAG_ACK: u8 = 0x10;
-const TCP_FLAGS_OFFSET: usize = 13;
-pub const VIRTIO_NET_HDR_GSO_NONE: u8 = 0;
-pub const VIRTIO_NET_HDR_F_NEEDS_CSUM: u8 = 1;
-pub const VIRTIO_NET_HDR_GSO_TCPV4: u8 = 1;
-pub const VIRTIO_NET_HDR_GSO_TCPV6: u8 = 4;
-pub const VIRTIO_NET_HDR_GSO_UDP_L4: u8 = 5;
-const IPV4_SRC_ADDR_OFFSET: usize = 12;
-const IPV6_SRC_ADDR_OFFSET: usize = 8;
-const MAX_UINT16: usize = 1 << 16 - 1;
-const COALESCE_PREPEND: isize = -1;
-const COALESCE_UNAVAILABLE: isize = 0;
-const COALESCE_APPEND: isize = 1;
-const UDP_HEADER_LEN: usize = 8;
-pub const VIRTIO_NET_HDR_LEN: usize = std::mem::size_of::<VirtioNetHdr>();
+
 pub fn decode(buf: &[u8]) -> io::Result<VirtioNetHdr> {
     if buf.len() < VIRTIO_NET_HDR_LEN {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "too short"));
@@ -41,6 +45,7 @@ pub fn decode(buf: &[u8]) -> io::Result<VirtioNetHdr> {
     let hdr: &VirtioNetHdr = unsafe { &*(buf.as_ptr() as *const VirtioNetHdr) };
     Ok(*hdr)
 }
+
 pub fn encode(hdr: &VirtioNetHdr, buf: &mut [u8]) -> io::Result<()> {
     if buf.len() < VIRTIO_NET_HDR_LEN {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "too short"));
@@ -51,8 +56,163 @@ pub fn encode(hdr: &VirtioNetHdr, buf: &mut [u8]) -> io::Result<()> {
         Ok(())
     }
 }
-/// udpFlowKey represents the key for a UDP flow.
+
+// virtioNetHdrLen is the length in bytes of virtioNetHdr. This matches the
+// shape of the C ABI for its kernel counterpart -- sizeof(virtio_net_hdr).
+pub const VIRTIO_NET_HDR_LEN: usize = std::mem::size_of::<VirtioNetHdr>();
+
+/// tcpFlowKey represents the key for a TCP flow.
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+struct TcpFlowKey {
+    src_addr: [u8; 16],
+    dst_addr: [u8; 16],
+    src_port: u16,
+    dst_port: u16,
+    rx_ack: u32, // varying ack values should not be coalesced. Treat them as separate flows.
+    is_v6: bool,
+}
+
+/// tcpGROTable holds flow and coalescing information for the purposes of TCP GRO.
+struct TcpGROTable {
+    items_by_flow: HashMap<TcpFlowKey, Vec<TcpGROItem>>,
+    items_pool: Vec<Vec<TcpGROItem>>,
+}
+
+impl TcpGROTable {
+    fn new() -> Self {
+        let mut items_pool = Vec::with_capacity(IDEAL_BATCH_SIZE);
+        for _ in 0..IDEAL_BATCH_SIZE {
+            items_pool.push(Vec::with_capacity(IDEAL_BATCH_SIZE));
+        }
+        TcpGROTable {
+            items_by_flow: HashMap::with_capacity(IDEAL_BATCH_SIZE),
+            items_pool,
+        }
+    }
+}
+
+impl TcpFlowKey {
+    fn new(pkt: &[u8], src_addr_offset: usize, dst_addr_offset: usize, tcph_offset: usize) -> Self {
+        let mut key = TcpFlowKey {
+            src_addr: [0; 16],
+            dst_addr: [0; 16],
+            src_port: 0,
+            dst_port: 0,
+            rx_ack: 0,
+            is_v6: false,
+        };
+
+        let addr_size = dst_addr_offset - src_addr_offset;
+        key.src_addr
+            .copy_from_slice(&pkt[src_addr_offset..dst_addr_offset]);
+        key.dst_addr
+            .copy_from_slice(&pkt[dst_addr_offset..dst_addr_offset + addr_size]);
+        key.src_port = BigEndian::read_u16(&pkt[tcph_offset..]);
+        key.dst_port = BigEndian::read_u16(&pkt[tcph_offset + 2..]);
+        key.rx_ack = BigEndian::read_u32(&pkt[tcph_offset + 8..]);
+        key.is_v6 = addr_size == 16;
+        key
+    }
+}
+
+impl TcpGROTable {
+    /// lookupOrInsert looks up a flow for the provided packet and metadata,
+    /// returning the packets found for the flow, or inserting a new one if none
+    /// is found.
+    fn lookup_or_insert(
+        &mut self,
+        pkt: &[u8],
+        src_addr_offset: usize,
+        dst_addr_offset: usize,
+        tcph_offset: usize,
+        tcph_len: usize,
+        bufs_index: usize,
+    ) -> (Option<Vec<TcpGROItem>>, bool) {
+        let key = TcpFlowKey::new(pkt, src_addr_offset, dst_addr_offset, tcph_offset);
+        if let Some(items) = self.items_by_flow.get(&key) {
+            return (Some(items.clone()), true);
+        }
+        // Insert the new item into the table
+        self.insert(
+            pkt,
+            src_addr_offset,
+            dst_addr_offset,
+            tcph_offset,
+            tcph_len,
+            bufs_index,
+        );
+        (None, false)
+    }
+    /// insert an item in the table for the provided packet and packet metadata.
+    fn insert(
+        &mut self,
+        pkt: &[u8],
+        src_addr_offset: usize,
+        dst_addr_offset: usize,
+        tcph_offset: usize,
+        tcph_len: usize,
+        bufs_index: usize,
+    ) {
+        let key = TcpFlowKey::new(pkt, src_addr_offset, dst_addr_offset, tcph_offset);
+        let item = TcpGROItem {
+            key,
+            bufs_index: bufs_index as u16,
+            num_merged: 0,
+            gso_size: pkt[tcph_offset + tcph_len..].len() as u16,
+            iph_len: tcph_offset as u8,
+            tcph_len: tcph_len as u8,
+            sent_seq: BigEndian::read_u32(&pkt[tcph_offset + 4..tcph_offset + 8]),
+            psh_set: pkt[tcph_offset + TCP_FLAGS_OFFSET] & TCP_FLAG_PSH != 0,
+        };
+
+        let items = self
+            .items_by_flow
+            .entry(key)
+            .or_insert_with(|| self.items_pool.pop().unwrap_or_else(Vec::new));
+        items.push(item);
+    }
+    fn update_at(&mut self, item: TcpGROItem, i: usize) {
+        if let Some(items) = self.items_by_flow.get_mut(&item.key) {
+            items[i] = item;
+        }
+    }
+    fn delete_at(&mut self, key: TcpFlowKey, i: usize) {
+        if let Some(mut items) = self.items_by_flow.remove(&key) {
+            items.remove(i);
+            self.items_by_flow.insert(key, items);
+        }
+    }
+}
+
+/// tcpGROItem represents bookkeeping data for a TCP packet during the lifetime
+/// of a GRO evaluation across a vector of packets.
 #[derive(Debug, Clone, Copy)]
+struct TcpGROItem {
+    key: TcpFlowKey,
+    sent_seq: u32,   // the sequence number
+    bufs_index: u16, // the index into the original bufs slice
+    num_merged: u16, // the number of packets merged into this item
+    gso_size: u16,   // payload size
+    iph_len: u8,     // ip header len
+    tcph_len: u8,    // tcp header len
+    psh_set: bool,   // psh flag is set
+}
+
+impl TcpGROTable {
+    fn new_items(&mut self) -> Vec<TcpGROItem> {
+        let items = self.items_pool.pop().unwrap_or_else(Vec::new);
+        items
+    }
+    fn reset(&mut self) {
+        for (_key, mut items) in self.items_by_flow.drain() {
+            items.clear();
+            self.items_pool.push(items);
+        }
+    }
+}
+
+/// udpFlowKey represents the key for a UDP flow.
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 struct UdpFlowKey {
     src_addr: [u8; 16], // srcAddr
     dst_addr: [u8; 16], // dstAddr
@@ -72,27 +232,48 @@ struct UdpGROItem {
     iph_len: u8,               // ip header len
     c_sum_known_invalid: bool, // UDP header checksum validity; a false value DOES NOT imply valid, just unknown.
 }
-/// tcpFlowKey represents the key for a TCP flow.
-struct TcpFlowKey {
-    src_addr: [u8; 16], // source address
-    dst_addr: [u8; 16], // destination address
-    src_port: u16,      // source port
-    dst_port: u16,      // destination port
-    rx_ack: u32,        // varying ack values should not be coalesced. Treat them as separate flows.
-    is_v6: bool,        // is IPv6
+pub struct UdpGROTable {
+    items_by_flow: HashMap<UdpFlowKey, Vec<UdpGROItem>>,
+    items_pool: Vec<Vec<UdpGROItem>>,
 }
 
-/// tcpGROItem represents bookkeeping data for a TCP packet during the lifetime
-/// of a GRO evaluation across a vector of packets.
-struct TcpGROItem {
-    key: TcpFlowKey,
-    sent_seq: u32,   // the sequence number
-    bufs_index: u16, // the index into the original bufs slice
-    num_merged: u16, // the number of packets merged into this item
-    gso_size: u16,   // payload size
-    iph_len: u8,     // ip header len
-    tcph_len: u8,    // tcp header len
-    psh_set: bool,   // psh flag is set
+impl UdpGROTable {
+    pub fn new() -> Self {
+        let mut items_pool = Vec::with_capacity(IDEAL_BATCH_SIZE);
+        for _ in 0..IDEAL_BATCH_SIZE {
+            items_pool.push(Vec::with_capacity(IDEAL_BATCH_SIZE));
+        }
+        UdpGROTable {
+            items_by_flow: HashMap::with_capacity(IDEAL_BATCH_SIZE),
+            items_pool,
+        }
+    }
+}
+
+impl UdpFlowKey {
+    pub fn new(
+        pkt: &[u8],
+        src_addr_offset: usize,
+        dst_addr_offset: usize,
+        udph_offset: usize,
+    ) -> UdpFlowKey {
+        let mut key = UdpFlowKey {
+            src_addr: [0; 16],
+            dst_addr: [0; 16],
+            src_port: 0,
+            dst_port: 0,
+            is_v6: false,
+        };
+        let addr_size = dst_addr_offset - src_addr_offset;
+        key.src_addr
+            .copy_from_slice(&pkt[src_addr_offset..dst_addr_offset]);
+        key.dst_addr
+            .copy_from_slice(&pkt[dst_addr_offset..dst_addr_offset + addr_size]);
+        key.src_port = BigEndian::read_u16(&pkt[udph_offset..]);
+        key.dst_port = BigEndian::read_u16(&pkt[udph_offset + 2..]);
+        key.is_v6 = addr_size == 16;
+        key
+    }
 }
 
 /// ipHeadersCanCoalesce returns true if the IP headers found in pktA and pktB
@@ -130,6 +311,7 @@ fn ip_headers_can_coalesce(pkt_a: &[u8], pkt_b: &[u8]) -> bool {
 
     true
 }
+
 /// udpPacketsCanCoalesce evaluates if pkt can be coalesced with the packet
 /// described by item. iphLen and gsoSize describe pkt. bufs is the vector of
 /// packets involved in the current GRO evaluation. bufsOffset is the offset at
@@ -157,6 +339,7 @@ fn udp_packets_can_coalesce(
     }
     COALESCE_APPEND
 }
+
 /// tcpPacketsCanCoalesce evaluates if pkt can be coalesced with the packet
 /// described by item. This function makes considerations that match the kernel's
 /// GRO self tests, which can be found in tools/testing/selftests/net/gro.c.
