@@ -75,14 +75,14 @@ impl Device {
                 return Err(io::Error::from(err).into());
             }
             if config.platform_config.offload {
-                // Unsupported
-                // if let Err(err) = tunsetvnethdrsz(tun_fd.inner, 12 as _) {
-                //     return Err(Error::UnsupportedOffload(err as _));
-                // }
-                let offload_flags = libc::TUN_F_CSUM | libc::TUN_F_TSO4 | libc::TUN_F_TSO6;
-                if let Err(err) = tunsetoffload(tun_fd.inner, offload_flags as _) {
+                let tun_tcp_offloads = libc::TUN_F_CSUM | libc::TUN_F_TSO4 | libc::TUN_F_TSO6;
+                let tun_udp_offloads = libc::TUN_F_USO4 | libc::TUN_F_USO6;
+                if let Err(err) = tunsetoffload(tun_fd.inner, tun_tcp_offloads as _) {
                     return Err(Error::UnsupportedOffload(err as _));
                 }
+                // tunUDPOffloads were added in Linux v6.2. We do not return an
+                // error if they are unsupported at runtime.
+                _ = tunsetoffload(tun_fd.inner, (tun_tcp_offloads | tun_udp_offloads) as _)
             }
 
             let device = Device {
