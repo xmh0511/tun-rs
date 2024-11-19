@@ -5,7 +5,7 @@ use std::{
     os::unix::io::{AsRawFd, RawFd},
     ptr,
 };
-
+use std::io::IoSliceMut;
 use crate::getifaddrs::{self, Interface};
 use libc::{
     self, c_char, c_short, ifreq, in6_ifreq, AF_INET, AF_INET6, ARPHRD_ETHER, IFF_MULTI_QUEUE,
@@ -22,12 +22,14 @@ use crate::{
     platform::posix::{ipaddr_to_sockaddr, sockaddr_union, Fd, Tun},
     IntoAddress,
 };
+use crate::platform::linux::offload::{gso_none_checksum, VIRTIO_NET_HDR_F_NEEDS_CSUM, VIRTIO_NET_HDR_GSO_NONE, VIRTIO_NET_HDR_LEN, VirtioNetHdr};
 
 const OVERWRITE_SIZE: usize = std::mem::size_of::<libc::__c_anonymous_ifr_ifru>();
 
 /// A TUN device using the TUN/TAP Linux driver.
 pub struct Device {
     pub(crate) tun: Tun,
+    vnet_hdr: bool,
 }
 
 impl Device {
@@ -74,7 +76,7 @@ impl Device {
             if let Err(err) = tunsetiff(tun_fd.inner, &mut req as *mut _ as *mut _) {
                 return Err(io::Error::from(err).into());
             }
-            if config.platform_config.offload {
+            if offload {
                 let tun_tcp_offloads = libc::TUN_F_CSUM | libc::TUN_F_TSO4 | libc::TUN_F_TSO6;
                 let tun_udp_offloads = libc::TUN_F_USO4 | libc::TUN_F_USO6;
                 if let Err(err) = tunsetoffload(tun_fd.inner, tun_tcp_offloads as _) {
@@ -87,6 +89,7 @@ impl Device {
 
             let device = Device {
                 tun: Tun::new(tun_fd),
+                vnet_hdr: offload,
             };
             configure(&device, config)?;
             if let Some(tx_queue_len) = config.platform_config.tx_queue_len {
@@ -100,7 +103,7 @@ impl Device {
         }
     }
     pub(crate) fn from_tun(tun: Tun) -> Self {
-        Self { tun }
+        Self { tun, vnet_hdr: false }
     }
     pub fn set_tx_queue_len(&self, tx_queue_len: u32) -> Result<()> {
         unsafe {
@@ -152,6 +155,40 @@ impl Device {
                 Ok(())
             }
         }
+    }
+    /// Recv a packet from tun device
+    /// transfer_buffer is used to assist in reading data The size needs to be 10+65535
+    pub fn recv_multiple(&self, transfer_buffer: &mut [u8], bufs: &mut [IoSliceMut<'_>], size: &mut [usize]) -> io::Result<usize> {
+        if self.vnet_hdr{
+            let mut head = [0u8; VIRTIO_NET_HDR_LEN];
+            let bufs = &mut [IoSliceMut::new(&mut head), IoSliceMut::new(transfer_buffer)];
+            let mut len = self.tun.recv_vectored(bufs)?;
+            if len < VIRTIO_NET_HDR_LEN{
+                return Err(io::Error::new(io::ErrorKind::Other,"too short"));
+            }
+            len -= VIRTIO_NET_HDR_LEN;
+            let hdr = crate::platform::linux::offload::decode(&head)?;
+
+            self.handle_virtio_read(hdr,&mut transfer_buffer[..len],bufs,size)?;
+            todo!()
+        }else{
+            self.tun.recv(&mut bufs[0])
+        }
+    }
+    fn handle_virtio_read(&self, hdr:VirtioNetHdr, buf: &mut [u8], bufs: &mut [IoSliceMut<'_>], size: &mut [usize]) -> io::Result<usize> {
+        if hdr.gso_type == VIRTIO_NET_HDR_GSO_NONE  {
+            if hdr.flags& VIRTIO_NET_HDR_F_NEEDS_CSUM != 0 {
+                // This means CHECKSUM_PARTIAL in skb context. We are responsible
+                // for computing the checksum starting at hdr.csumStart and placing
+                // at hdr.csumOffset.
+                gso_none_checksum(buf,hdr.csum_start,hdr.csum_offset);
+            }
+            let len = buf.len();
+            size[0] = len;
+            bufs[0][..len].copy_from_slice(buf);
+            return Ok(1)
+        }
+        todo!()
     }
 }
 impl Device {
@@ -231,8 +268,8 @@ impl Device {
                                     addr.address,
                                     0,
                                 ))
-                                .addr6
-                                .sin6_addr;
+                                    .addr6
+                                    .sin6_addr;
                                 if let Err(e) = siocdifaddr_in6(ctl.as_raw_fd(), &ifrv6) {
                                     log::error!("{e:?}");
                                 }
