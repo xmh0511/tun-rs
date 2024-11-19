@@ -29,6 +29,10 @@ pub const VIRTIO_NET_HDR_GSO_UDP_L4: u8 = 5;
 const IPV4_SRC_ADDR_OFFSET: usize = 12;
 const IPV6_SRC_ADDR_OFFSET: usize = 8;
 const MAX_UINT16: usize = 1 << 16 - 1;
+const COALESCE_PREPEND: isize = -1;
+const COALESCE_UNAVAILABLE: isize = 0;
+const COALESCE_APPEND: isize = 1;
+const UDP_HEADER_LEN: usize = 8;
 pub const VIRTIO_NET_HDR_LEN: usize = std::mem::size_of::<VirtioNetHdr>();
 pub fn decode(buf: &[u8]) -> io::Result<VirtioNetHdr> {
     if buf.len() < VIRTIO_NET_HDR_LEN {
@@ -47,6 +51,198 @@ pub fn encode(hdr: &VirtioNetHdr, buf: &mut [u8]) -> io::Result<()> {
         Ok(())
     }
 }
+/// udpFlowKey represents the key for a UDP flow.
+#[derive(Debug, Clone, Copy)]
+struct UdpFlowKey {
+    src_addr: [u8; 16], // srcAddr
+    dst_addr: [u8; 16], // dstAddr
+    src_port: u16,      // srcPort
+    dst_port: u16,      // dstPort
+    is_v6: bool,        // isV6
+}
+
+/// udpGROItem represents bookkeeping data for a UDP packet during the lifetime
+/// of a GRO evaluation across a vector of packets.
+#[derive(Debug, Clone, Copy)]
+struct UdpGROItem {
+    key: UdpFlowKey,           // udpFlowKey
+    bufs_index: u16,           // the index into the original bufs slice
+    num_merged: u16,           // the number of packets merged into this item
+    gso_size: u16,             // payload size
+    iph_len: u8,               // ip header len
+    c_sum_known_invalid: bool, // UDP header checksum validity; a false value DOES NOT imply valid, just unknown.
+}
+/// tcpFlowKey represents the key for a TCP flow.
+struct TcpFlowKey {
+    src_addr: [u8; 16], // source address
+    dst_addr: [u8; 16], // destination address
+    src_port: u16,      // source port
+    dst_port: u16,      // destination port
+    rx_ack: u32,        // varying ack values should not be coalesced. Treat them as separate flows.
+    is_v6: bool,        // is IPv6
+}
+
+/// tcpGROItem represents bookkeeping data for a TCP packet during the lifetime
+/// of a GRO evaluation across a vector of packets.
+struct TcpGROItem {
+    key: TcpFlowKey,
+    sent_seq: u32,   // the sequence number
+    bufs_index: u16, // the index into the original bufs slice
+    num_merged: u16, // the number of packets merged into this item
+    gso_size: u16,   // payload size
+    iph_len: u8,     // ip header len
+    tcph_len: u8,    // tcp header len
+    psh_set: bool,   // psh flag is set
+}
+
+/// ipHeadersCanCoalesce returns true if the IP headers found in pktA and pktB
+/// meet all requirements to be merged as part of a GRO operation, otherwise it
+/// returns false.
+fn ip_headers_can_coalesce(pkt_a: &[u8], pkt_b: &[u8]) -> bool {
+    if pkt_a.len() < 9 || pkt_b.len() < 9 {
+        return false;
+    }
+
+    if pkt_a[0] >> 4 == 6 {
+        if pkt_a[0] != pkt_b[0] || pkt_a[1] >> 4 != pkt_b[1] >> 4 {
+            // cannot coalesce with unequal Traffic class values
+            return false;
+        }
+        if pkt_a[7] != pkt_b[7] {
+            // cannot coalesce with unequal Hop limit values
+            return false;
+        }
+    } else {
+        if pkt_a[1] != pkt_b[1] {
+            // cannot coalesce with unequal ToS values
+            return false;
+        }
+        if pkt_a[6] >> 5 != pkt_b[6] >> 5 {
+            // cannot coalesce with unequal DF or reserved bits. MF is checked
+            // further up the stack.
+            return false;
+        }
+        if pkt_a[8] != pkt_b[8] {
+            // cannot coalesce with unequal TTL values
+            return false;
+        }
+    }
+
+    true
+}
+/// udpPacketsCanCoalesce evaluates if pkt can be coalesced with the packet
+/// described by item. iphLen and gsoSize describe pkt. bufs is the vector of
+/// packets involved in the current GRO evaluation. bufsOffset is the offset at
+/// which packet data begins within bufs.
+fn udp_packets_can_coalesce(
+    pkt: &[u8],
+    iph_len: u8,
+    gso_size: u16,
+    item: UdpGROItem,
+    bufs: &[&[u8]],
+    bufs_offset: usize,
+) -> isize {
+    let pkt_target = &bufs[item.bufs_index as usize][bufs_offset..];
+    if !ip_headers_can_coalesce(pkt, pkt_target) {
+        return COALESCE_UNAVAILABLE;
+    }
+    if (pkt_target[(iph_len as usize + UDP_HEADER_LEN)..].len()) % (item.gso_size as usize) != 0 {
+        // A smaller than gsoSize packet has been appended previously.
+        // Nothing can come after a smaller packet on the end.
+        return COALESCE_UNAVAILABLE;
+    }
+    if gso_size > item.gso_size {
+        // We cannot have a larger packet following a smaller one.
+        return COALESCE_UNAVAILABLE;
+    }
+    COALESCE_APPEND
+}
+/// tcpPacketsCanCoalesce evaluates if pkt can be coalesced with the packet
+/// described by item. This function makes considerations that match the kernel's
+/// GRO self tests, which can be found in tools/testing/selftests/net/gro.c.
+fn tcp_packets_can_coalesce(
+    pkt: &[u8],
+    iph_len: u8,
+    tcph_len: u8,
+    seq: u32,
+    psh_set: bool,
+    gso_size: u16,
+    item: &TcpGROItem,
+    bufs: &[Vec<u8>],
+    bufs_offset: usize,
+) -> isize {
+    let pkt_target = &bufs[item.bufs_index as usize][bufs_offset..];
+
+    if tcph_len != item.tcph_len {
+        // cannot coalesce with unequal tcp options len
+        return COALESCE_UNAVAILABLE;
+    }
+
+    if tcph_len > 20 {
+        if &pkt[iph_len as usize + 20..iph_len as usize + tcph_len as usize]
+            != &pkt_target[item.iph_len as usize + 20..item.iph_len as usize + tcph_len as usize]
+        {
+            // cannot coalesce with unequal tcp options
+            return COALESCE_UNAVAILABLE;
+        }
+    }
+
+    if !ip_headers_can_coalesce(pkt, pkt_target) {
+        return COALESCE_UNAVAILABLE;
+    }
+
+    // seq adjacency
+    let mut lhs_len = item.gso_size as usize;
+    lhs_len += (item.num_merged as usize) * (item.gso_size as usize);
+
+    if seq == item.sent_seq + lhs_len as u32 {
+        // pkt aligns following item from a seq num perspective
+        if item.psh_set {
+            // We cannot append to a segment that has the PSH flag set, PSH
+            // can only be set on the final segment in a reassembled group.
+            return COALESCE_UNAVAILABLE;
+        }
+
+        if pkt_target[iph_len as usize + tcph_len as usize..].len() % item.gso_size as usize != 0 {
+            // A smaller than gsoSize packet has been appended previously.
+            // Nothing can come after a smaller packet on the end.
+            return COALESCE_UNAVAILABLE;
+        }
+
+        if gso_size > item.gso_size {
+            // We cannot have a larger packet following a smaller one.
+            return COALESCE_UNAVAILABLE;
+        }
+
+        return COALESCE_APPEND;
+    } else if seq + gso_size as u32 == item.sent_seq {
+        // pkt aligns in front of item from a seq num perspective
+        if psh_set {
+            // We cannot prepend with a segment that has the PSH flag set, PSH
+            // can only be set on the final segment in a reassembled group.
+            return COALESCE_UNAVAILABLE;
+        }
+
+        if gso_size < item.gso_size {
+            // We cannot have a larger packet following a smaller one.
+            return COALESCE_UNAVAILABLE;
+        }
+
+        if gso_size > item.gso_size && item.num_merged > 0 {
+            // There's at least one previous merge, and we're larger than all
+            // previous. This would put multiple smaller packets on the end.
+            return COALESCE_UNAVAILABLE;
+        }
+
+        return COALESCE_PREPEND;
+    }
+
+    return COALESCE_UNAVAILABLE;
+}
+
+/// gsoSplit splits packets from in into outBuffs, writing the size of each
+/// element into sizes. It returns the number of buffers populated, and/or an
+/// error.
 pub fn gso_split(
     input: &mut [u8],
     hdr: VirtioNetHdr,
