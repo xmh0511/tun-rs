@@ -61,10 +61,13 @@ impl Device {
             let queues_num = 1;
             let iff_no_pi = IFF_NO_PI as c_short;
             let iff_multi_queue = IFF_MULTI_QUEUE as c_short;
+            let iff_vnet_hdr = libc::IFF_VNET_HDR as c_short;
             let packet_information = config.platform_config.packet_information;
+            let offload = config.platform_config.offload;
             req.ifr_ifru.ifru_flags = device_type
                 | if packet_information { 0 } else { iff_no_pi }
-                | if queues_num > 1 { iff_multi_queue } else { 0 };
+                | if queues_num > 1 { iff_multi_queue } else { 0 }
+                | if offload { iff_vnet_hdr } else { 0 };
 
             let fd = libc::open(b"/dev/net/tun\0".as_ptr() as *const _, O_RDWR);
             let tun_fd = Fd::new(fd, true)?;
@@ -72,8 +75,7 @@ impl Device {
                 return Err(io::Error::from(err).into());
             }
             if config.platform_config.offload {
-                let offload_flags =
-                    libc::TUN_F_CSUM | libc::TUN_F_TSO4 | libc::TUN_F_TSO6 | libc::TUN_F_UFO;
+                let offload_flags = libc::TUN_F_CSUM | libc::TUN_F_TSO4 | libc::TUN_F_TSO6;
                 if let Err(err) = tunsetoffload(tun_fd.inner, offload_flags as _) {
                     return Err(Error::UnsupportedOffload(err as _));
                 }
