@@ -169,6 +169,9 @@ impl Device {
             }
         }
     }
+    /// send multiple fragmented data packets.
+    /// GROTable can be reused, as it is used to assist in data merging.
+    /// Offset is the starting position of the data. Need to meet offset>10.
     pub fn send_multiple(
         &self,
         gro_table: &mut GROTable,
@@ -247,6 +250,10 @@ impl Device {
             ))
         }
     }
+    /// https://github.com/WireGuard/wireguard-go/blob/12269c2761734b15625017d8565745096325392f/tun/tun_linux.go#L375
+    /// handleVirtioRead splits in into bufs, leaving offset bytes at the front of
+    /// each buffer. It mutates sizes to reflect the size of each element of bufs,
+    /// and returns the number of packets read.
     fn handle_virtio_read(
         &self,
         mut hdr: VirtioNetHdr,

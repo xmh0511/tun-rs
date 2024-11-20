@@ -1349,7 +1349,7 @@ impl GROTable {
             udp_gro_table: UdpGROTable::new(),
         }
     }
-    pub fn reset(&mut self) {
+    pub(crate) fn reset(&mut self) {
         self.to_write.clear();
         self.tcp_gro_table.reset();
         self.udp_gro_table.reset();
