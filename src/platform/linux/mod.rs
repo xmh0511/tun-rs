@@ -2,7 +2,7 @@ pub mod sys;
 
 mod checksum;
 mod device;
-mod offload;
+pub(crate) mod offload;
 pub use offload::GROTable;
 
 pub use self::device::Device;

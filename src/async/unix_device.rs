@@ -1,3 +1,4 @@
+use std::io;
 use std::io::IoSlice;
 #[cfg(any(
     target_os = "linux",
@@ -9,10 +10,12 @@ use std::io::IoSlice;
 ))]
 use std::os::fd::{FromRawFd, RawFd};
 
-use crate::platform::Device;
+use crate::platform::{Device, GROTable};
 use crate::AbstractDevice;
 
+use crate::platform::offload::{handle_gro, VirtioNetHdr, VIRTIO_NET_HDR_LEN};
 use crate::r#async::async_device::AsyncFd;
+use bytes::BytesMut;
 #[allow(unused_imports)]
 use std::net::IpAddr;
 
@@ -29,7 +32,7 @@ impl FromRawFd for AsyncDevice {
 
 impl AsyncDevice {
     /// Create a new `AsyncDevice` wrapping around a `Device`.
-    pub fn new(device: Device) -> std::io::Result<AsyncDevice> {
+    pub fn new(device: Device) -> io::Result<AsyncDevice> {
         Ok(AsyncDevice {
             inner: AsyncFd::new(device)?,
         })
@@ -38,29 +41,118 @@ impl AsyncDevice {
     /// # Safety
     /// This method is safe if the provided fd is valid
     /// Construct a AsyncDevice from an existing file descriptor
-    pub unsafe fn from_fd(fd: RawFd) -> std::io::Result<AsyncDevice> {
+    pub unsafe fn from_fd(fd: RawFd) -> io::Result<AsyncDevice> {
         AsyncDevice::new(Device::from_fd(fd)?)
     }
 
     /// Recv a packet from tun device
-    pub async fn recv(&self, buf: &mut [u8]) -> std::io::Result<usize> {
+    pub async fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
         self.inner.recv(buf).await
     }
-    pub fn try_recv(&self, buf: &mut [u8]) -> std::io::Result<usize> {
+    pub fn try_recv(&self, buf: &mut [u8]) -> io::Result<usize> {
         self.inner.get_ref().recv(buf)
     }
 
     /// Send a packet to tun device
-    pub async fn send(&self, buf: &[u8]) -> std::io::Result<usize> {
+    pub async fn send(&self, buf: &[u8]) -> io::Result<usize> {
         self.inner.send(buf).await
     }
-    pub fn try_send(&self, buf: &[u8]) -> std::io::Result<usize> {
+    pub fn try_send(&self, buf: &[u8]) -> io::Result<usize> {
         self.inner.get_ref().send(buf)
     }
-    pub async fn send_vectored(&self, bufs: &[IoSlice<'_>]) -> std::io::Result<usize> {
+    pub async fn send_vectored(&self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
         self.inner.send_vectored(bufs).await
     }
 }
+
+impl AsyncDevice {
+    /// Recv a packet from tun device.
+    /// If offload is enabled. This method can be used to obtain processed data.
+    ///
+    /// original_buffer is used to store raw data, including the VirtioNetHdr and the unsplit IP packet. The recommended size is 10 + 65535.
+    /// bufs and sizes are used to store the segmented IP packets
+    ///
+    /// # Panics
+    /// If the length of bufs and size is insufficient, it will cause a panic
+    #[cfg(target_os = "linux")]
+    pub async fn recv_multiple(
+        &self,
+        original_buffer: &mut [u8],
+        bufs: &mut [&mut [u8]],
+        sizes: &mut [usize],
+    ) -> io::Result<usize> {
+        let tun = self.inner.get_ref();
+        if tun.vnet_hdr {
+            let len = self.recv(original_buffer).await?;
+            if len <= VIRTIO_NET_HDR_LEN {
+                Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    format!(
+                        "length of packet ({len}) <= VIRTIO_NET_HDR_LEN ({VIRTIO_NET_HDR_LEN})",
+                    ),
+                ))?
+            }
+            let hdr = VirtioNetHdr::decode(&original_buffer[..VIRTIO_NET_HDR_LEN])?;
+            tun.handle_virtio_read(
+                hdr,
+                &mut original_buffer[VIRTIO_NET_HDR_LEN..len],
+                bufs,
+                sizes,
+            )
+        } else {
+            // you can use device.recv()
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "offload not enabled",
+            ))
+        }
+    }
+    /// send multiple fragmented data packets.
+    /// GROTable can be reused, as it is used to assist in data merging.
+    /// Offset is the starting position of the data. Need to meet offset>10.
+    #[cfg(target_os = "linux")]
+    pub async fn send_multiple(
+        &self,
+        gro_table: &mut GROTable,
+        bufs: &mut [BytesMut],
+        offset: usize,
+    ) -> io::Result<usize> {
+        let tun = self.inner.get_ref();
+        gro_table.reset();
+        if !tun.vnet_hdr {
+            // you can use device.send()
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "offload not enabled",
+            ))?
+        }
+        handle_gro(
+            bufs,
+            offset,
+            &mut gro_table.tcp_gro_table,
+            &mut gro_table.udp_gro_table,
+            tun.udp_gso,
+            &mut gro_table.to_write,
+        )?;
+        let mut total = 0;
+        for buf_idx in &gro_table.to_write {
+            match self.send(&bufs[*buf_idx][offset..]).await {
+                Ok(n) => {
+                    total += n;
+                }
+                Err(e) => {
+                    if let Some(code) = e.raw_os_error() {
+                        if libc::EBADFD == code {
+                            Err(e)?
+                        }
+                    }
+                }
+            }
+        }
+        Ok(total)
+    }
+}
+
 impl AsyncDevice {
     #[cfg(target_os = "linux")]
     pub fn tx_queue_len(&self) -> crate::Result<u32> {
@@ -71,6 +163,7 @@ impl AsyncDevice {
         self.inner.get_ref().set_tx_queue_len(tx_queue_len)
     }
 }
+
 impl AbstractDevice for AsyncDevice {
     #[cfg(any(
         target_os = "windows",

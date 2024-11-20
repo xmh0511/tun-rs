@@ -33,8 +33,8 @@ const OVERWRITE_SIZE: usize = mem::size_of::<libc::__c_anonymous_ifr_ifru>();
 /// A TUN device using the TUN/TAP Linux driver.
 pub struct Device {
     pub(crate) tun: Tun,
-    vnet_hdr: bool,
-    udp_gso: bool,
+    pub(crate) vnet_hdr: bool,
+    pub(crate) udp_gso: bool,
 }
 
 impl Device {
@@ -226,7 +226,7 @@ impl Device {
         sizes: &mut [usize],
     ) -> io::Result<usize> {
         if self.vnet_hdr {
-            let len = self.tun.recv(original_buffer)?;
+            let len = self.recv(original_buffer)?;
             if len <= VIRTIO_NET_HDR_LEN {
                 Err(io::Error::new(
                     io::ErrorKind::Other,
@@ -254,7 +254,7 @@ impl Device {
     /// handleVirtioRead splits in into bufs, leaving offset bytes at the front of
     /// each buffer. It mutates sizes to reflect the size of each element of bufs,
     /// and returns the number of packets read.
-    fn handle_virtio_read(
+    pub(crate) fn handle_virtio_read(
         &self,
         mut hdr: VirtioNetHdr,
         input: &mut [u8],
