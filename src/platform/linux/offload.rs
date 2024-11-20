@@ -1,10 +1,10 @@
 use crate::platform::linux::checksum::{checksum, pseudo_header_checksum_no_fold};
 use byteorder::{BigEndian, ByteOrder};
+use bytes::BytesMut;
 use libc::IPPROTO_TCP;
+use nix::NixPath;
 use std::collections::HashMap;
 use std::io;
-use bytes::BytesMut;
-use nix::NixPath;
 
 const TCP_FLAGS_OFFSET: usize = 13;
 
@@ -128,10 +128,10 @@ impl TcpGROTable {
         tcph_offset: usize,
         tcph_len: usize,
         bufs_index: usize,
-    ) -> Option<Vec<TcpGROItem>> {
+    ) -> Option<&mut Vec<TcpGROItem>> {
         let key = TcpFlowKey::new(pkt, src_addr_offset, dst_addr_offset, tcph_offset);
-        if let Some(items) = self.items_by_flow.get(&key) {
-            return Some(items.clone());
+        if self.items_by_flow.contains_key(&key) {
+            return self.items_by_flow.get_mut(&key);
         }
         // Insert the new item into the table
         self.insert(
@@ -261,11 +261,18 @@ impl UdpGROTable {
         bufs_index: usize,
     ) -> Option<&mut Vec<UdpGROItem>> {
         let key = UdpFlowKey::new(pkt, src_addr_offset, dst_addr_offset, udph_offset);
-        if self.items_by_flow.contains_key(&key){
+        if self.items_by_flow.contains_key(&key) {
             self.items_by_flow.get_mut(&key)
-        }else{
+        } else {
             // If the flow does not exist, insert a new entry.
-            self.insert(pkt, src_addr_offset, dst_addr_offset, udph_offset, bufs_index, false);
+            self.insert(
+                pkt,
+                src_addr_offset,
+                dst_addr_offset,
+                udph_offset,
+                bufs_index,
+                false,
+            );
             None
         }
     }
@@ -371,7 +378,7 @@ fn udp_gro(
     table: &mut UdpGROTable,
     is_v6: bool,
 ) -> GroResult {
-    let pkt = &bufs[pkt_i][offset..];
+    let pkt = unsafe { &*(&bufs[pkt_i][offset..] as *const [u8]) };
     if pkt.len() > u16::MAX as usize {
         // A valid IPv4 or IPv6 packet will never exceed this.
         return GroResult::Noop;
@@ -380,8 +387,7 @@ fn udp_gro(
     let mut iph_len = ((pkt[0] & 0x0F) * 4) as usize;
     if is_v6 {
         iph_len = 40;
-        let ipv6_payload_len =
-            u16::from_be_bytes([pkt[4], pkt[5]]) as usize;
+        let ipv6_payload_len = u16::from_be_bytes([pkt[4], pkt[5]]) as usize;
         if ipv6_payload_len != pkt.len() - iph_len {
             return GroResult::Noop;
         }
@@ -422,20 +428,20 @@ fn udp_gro(
         pkt_i,
     );
 
-  let items = if let Some(items)  = items{
-       items
-    }else{
-       return GroResult::TableInsert;
-   };
+    let items = if let Some(items) = items {
+        items
+    } else {
+        return GroResult::TableInsert;
+    };
 
     // Only check the last item to prevent reordering packets for a flow.
     let items_len = items.len();
-    let item = &mut items[items_len-1];
+    let item = &mut items[items_len - 1];
     let can = udp_packets_can_coalesce(pkt, iph_len as u8, gso_size, item, bufs, offset);
     let mut pkt_csum_known_invalid = false;
 
     if can == CanCoalesce::CoalesceAppend {
-        match coalesce_udp_packets(pkt_i, item, bufs, offset, is_v6) {
+        match coalesce_udp_packets(pkt, item, bufs, offset, is_v6) {
             CoalesceResult::Success => {
                 // 前面是引用，这里不需要再更新
                 // table.update_at(*item, items_len - 1);
@@ -565,7 +571,7 @@ fn tcp_gro(
         // unordered packets, where pkt may land anywhere in items from a
         // sequence number perspective, however once an item is inserted into
         // the table it is never compared across other items later.
-        let mut item = items[i].clone();
+        let mut item = &mut items[i];
         let can = tcp_packets_can_coalesce(
             pkt,
             iph_len as u8,
@@ -587,12 +593,13 @@ fn tcp_gro(
 
                 match result {
                     CoalesceResult::Success => {
-                        table.update_at(item, i);
+                        // table.update_at(item, i);
                         return GroResult::Coalesced;
                     }
                     CoalesceResult::ItemInvalidCSum => {
                         // delete the item with an invalid csum
-                        table.delete_at(item.key, i);
+                        // table.delete_at(item.key, i);
+                        items.remove(i);
                     }
                     CoalesceResult::PktInvalidCSum => {
                         // no point in inserting an item that we can't coalesce
@@ -605,7 +612,14 @@ fn tcp_gro(
     }
 
     // failed to coalesce with any other packets; store the item in the flow
-    table.insert(pkt, src_addr_offset, src_addr_offset + addr_len, iph_len, tcph_len, pkt_i);
+    table.insert(
+        pkt,
+        src_addr_offset,
+        src_addr_offset + addr_len,
+        iph_len,
+        tcph_len,
+        pkt_i,
+    );
     GroResult::TableInsert
 }
 /// coalesceResult represents the result of attempting to coalesce two TCP
@@ -620,19 +634,17 @@ enum CoalesceResult {
 /// coalesceUDPPackets attempts to coalesce pkt with the packet described by
 /// item, and returns the outcome.
 fn coalesce_udp_packets(
-    pkt_i: usize,
+    pkt: &[u8],
     item: &mut UdpGROItem,
     bufs: &mut [BytesMut],
     bufs_offset: usize,
     is_v6: bool,
 ) -> CoalesceResult {
-    let pkt = &bufs[pkt_i][bufs_offset..];
-    let pkt_len = pkt.len();
     let buf = &bufs[item.bufs_index as usize];
     let pkt_head = &buf[bufs_offset..]; // the packet that will end up at the front
     let pkt_head_len = pkt_head.len();
     let headers_len = item.iph_len as usize + UDP_H_LEN;
-    let coalesced_len = buf[bufs_offset..].len() + pkt_len - headers_len;
+    let coalesced_len = buf[bufs_offset..].len() + pkt.len() - headers_len;
     if buf.capacity() < bufs_offset * 2 + coalesced_len {
         // We don't want to allocate a new underlying array if capacity is
         // too small.
@@ -642,11 +654,11 @@ fn coalesce_udp_packets(
     if item.num_merged == 0 {
         if item.c_sum_known_invalid
             || !checksum_valid(
-            &buf[bufs_offset..],
-            item.iph_len,
-            libc::IPPROTO_UDP as _,
-            is_v6,
-        )
+                &buf[bufs_offset..],
+                item.iph_len,
+                libc::IPPROTO_UDP as _,
+                is_v6,
+            )
         {
             return CoalesceResult::ItemInvalidCSum;
         }
@@ -657,14 +669,10 @@ fn coalesce_udp_packets(
     }
     //
     let extend_by = pkt.len() - headers_len;
-    let src = pkt[headers_len..].as_ptr();
 
     let buf = &mut bufs[item.bufs_index as usize];
     buf.resize(buf.len() + extend_by, 0);
-    let dest = buf[bufs_offset + pkt_head_len..].as_mut_ptr();
-    unsafe {
-        std::ptr::copy_nonoverlapping(src, dest, extend_by);
-    }
+    buf[bufs_offset + pkt_head_len..].copy_from_slice(&pkt[headers_len..]);
     item.num_merged += 1;
     CoalesceResult::Success
 }
@@ -761,7 +769,6 @@ fn coalesce_tcp_packets(
     // CoalesceResult::Success
     todo!()
 }
-
 
 /// ipHeadersCanCoalesce returns true if the IP headers found in pktA and pktB
 /// meet all requirements to be merged as part of a GRO operation, otherwise it
