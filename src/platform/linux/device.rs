@@ -322,8 +322,8 @@ impl Device {
                 Err(io::Error::new(io::ErrorKind::Other, "packet is too short"))?
             }
 
-            let tcp_h_len = input[hdr.csum_start as usize + 12] as u16 >> 4 * 4;
-            if tcp_h_len < 20 || tcp_h_len > 60 {
+            let tcp_h_len = ((input[hdr.csum_start as usize + 12] as u16) >> 4) * 4;
+            if !(20..=60).contains(&tcp_h_len) {
                 // A TCP header must be between 20 and 60 bytes in length.
                 Err(io::Error::new(
                     io::ErrorKind::Other,
@@ -360,7 +360,7 @@ impl Device {
                 ),
             ))?
         }
-        return gso_split(input, hdr, bufs, sizes, ip_version == 6);
+        gso_split(input, hdr, bufs, sizes, ip_version == 6)
     }
 }
 
