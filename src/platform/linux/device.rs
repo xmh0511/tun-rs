@@ -1,24 +1,11 @@
-use crate::getifaddrs::{self, Interface};
-use libc::{
-    self, c_char, c_short, ifreq, in6_ifreq, AF_INET, AF_INET6, ARPHRD_ETHER, IFF_MULTI_QUEUE,
-    IFF_NO_PI, IFF_RUNNING, IFF_TAP, IFF_TUN, IFF_UP, IFNAMSIZ, O_RDWR, SOCK_DGRAM,
-};
-use mac_address::mac_address_by_name;
-use std::io::IoSliceMut;
-use std::{
-    ffi::CString,
-    io, mem,
-    net::{IpAddr, Ipv4Addr},
-    os::unix::io::{AsRawFd, RawFd},
-    ptr,
-};
-
 use crate::configuration::configure;
+use crate::getifaddrs::{self, Interface};
 use crate::platform::linux::offload::{
-    gso_none_checksum, gso_split, VirtioNetHdr, VIRTIO_NET_HDR_F_NEEDS_CSUM,
+    gso_none_checksum, gso_split, handle_gro, VirtioNetHdr, VIRTIO_NET_HDR_F_NEEDS_CSUM,
     VIRTIO_NET_HDR_GSO_NONE, VIRTIO_NET_HDR_GSO_TCPV4, VIRTIO_NET_HDR_GSO_TCPV6,
     VIRTIO_NET_HDR_GSO_UDP_L4, VIRTIO_NET_HDR_LEN,
 };
+use crate::platform::GROTable;
 use crate::{
     configuration::{Configuration, Layer},
     device::{AbstractDevice, ETHER_ADDR_LEN},
@@ -27,13 +14,27 @@ use crate::{
     platform::posix::{ipaddr_to_sockaddr, sockaddr_union, Fd, Tun},
     IntoAddress,
 };
+use bytes::BytesMut;
+use libc::{
+    self, c_char, c_short, ifreq, in6_ifreq, AF_INET, AF_INET6, ARPHRD_ETHER, IFF_MULTI_QUEUE,
+    IFF_NO_PI, IFF_RUNNING, IFF_TAP, IFF_TUN, IFF_UP, IFNAMSIZ, O_RDWR, SOCK_DGRAM,
+};
+use mac_address::mac_address_by_name;
+use std::{
+    ffi::CString,
+    io, mem,
+    net::{IpAddr, Ipv4Addr},
+    os::unix::io::{AsRawFd, RawFd},
+    ptr,
+};
 
-const OVERWRITE_SIZE: usize = std::mem::size_of::<libc::__c_anonymous_ifr_ifru>();
+const OVERWRITE_SIZE: usize = mem::size_of::<libc::__c_anonymous_ifr_ifru>();
 
 /// A TUN device using the TUN/TAP Linux driver.
 pub struct Device {
     pub(crate) tun: Tun,
     vnet_hdr: bool,
+    udp_gso: bool,
 }
 
 impl Device {
@@ -80,7 +81,7 @@ impl Device {
             if let Err(err) = tunsetiff(tun_fd.inner, &mut req as *mut _ as *mut _) {
                 return Err(io::Error::from(err).into());
             }
-            if offload {
+            let (vnet_hdr, udp_gso) = if offload {
                 let tun_tcp_offloads = libc::TUN_F_CSUM | libc::TUN_F_TSO4 | libc::TUN_F_TSO6;
                 let tun_udp_offloads = libc::TUN_F_USO4 | libc::TUN_F_USO6;
                 if let Err(err) = tunsetoffload(tun_fd.inner, tun_tcp_offloads as _) {
@@ -88,12 +89,16 @@ impl Device {
                 }
                 // tunUDPOffloads were added in Linux v6.2. We do not return an
                 // error if they are unsupported at runtime.
-                _ = tunsetoffload(tun_fd.inner, (tun_tcp_offloads | tun_udp_offloads) as _)
-            }
+                let rs = tunsetoffload(tun_fd.inner, (tun_tcp_offloads | tun_udp_offloads) as _);
+                (true, rs.is_ok())
+            } else {
+                (false, false)
+            };
 
             let device = Device {
                 tun: Tun::new(tun_fd),
-                vnet_hdr: offload,
+                vnet_hdr,
+                udp_gso,
             };
             configure(&device, config)?;
             if let Some(tx_queue_len) = config.platform_config.tx_queue_len {
@@ -110,6 +115,7 @@ impl Device {
         Self {
             tun,
             vnet_hdr: false,
+            udp_gso: false,
         }
     }
     pub fn set_tx_queue_len(&self, tx_queue_len: u32) -> Result<()> {
@@ -163,7 +169,45 @@ impl Device {
             }
         }
     }
-    pub fn send_multiple(&self, bufs: &[&[u8]]) {}
+    pub fn send_multiple(
+        &self,
+        gro_table: &mut GROTable,
+        bufs: &mut [BytesMut],
+        offset: usize,
+    ) -> io::Result<usize> {
+        gro_table.reset();
+        if !self.vnet_hdr {
+            // you can use device.send()
+            Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "offload not enabled",
+            ))?
+        }
+        handle_gro(
+            bufs,
+            offset,
+            &mut gro_table.tcp_gro_table,
+            &mut gro_table.udp_gro_table,
+            self.udp_gso,
+            &mut gro_table.to_write,
+        )?;
+        let mut total = 0;
+        for buf_idx in &gro_table.to_write {
+            match self.send(&bufs[*buf_idx][offset..]) {
+                Ok(n) => {
+                    total += n;
+                }
+                Err(e) => {
+                    if let Some(code) = e.raw_os_error() {
+                        if libc::EBADFD == code {
+                            Err(e)?
+                        }
+                    }
+                }
+            }
+        }
+        Ok(total)
+    }
     /// Recv a packet from tun device.
     /// If offload is enabled. This method can be used to obtain processed data.
     ///
@@ -188,8 +232,7 @@ impl Device {
                     ),
                 ))?
             }
-            let hdr =
-                crate::platform::linux::offload::decode(&original_buffer[..VIRTIO_NET_HDR_LEN])?;
+            let hdr = VirtioNetHdr::decode(&original_buffer[..VIRTIO_NET_HDR_LEN])?;
             self.handle_virtio_read(
                 hdr,
                 &mut original_buffer[VIRTIO_NET_HDR_LEN..len],

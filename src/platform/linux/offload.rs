@@ -1,8 +1,7 @@
 use crate::platform::linux::checksum::{checksum, pseudo_header_checksum_no_fold};
 use byteorder::{BigEndian, ByteOrder};
 use bytes::BytesMut;
-use libc::IPPROTO_TCP;
-use nix::NixPath;
+use libc::{IPPROTO_TCP, IPPROTO_UDP};
 use std::collections::HashMap;
 use std::io;
 
@@ -18,7 +17,6 @@ pub const VIRTIO_NET_HDR_GSO_TCPV6: u8 = 4;
 pub const VIRTIO_NET_HDR_GSO_UDP_L4: u8 = 5;
 const IPV4_SRC_ADDR_OFFSET: usize = 12;
 const IPV6_SRC_ADDR_OFFSET: usize = 8;
-const MAX_UINT16: usize = 1 << 16 - 1;
 const UDP_HEADER_LEN: usize = 8;
 const IDEAL_BATCH_SIZE: usize = 128;
 const IPV4_FLAG_MORE_FRAGMENTS: u8 = 0x20;
@@ -29,7 +27,7 @@ const UDP_H_LEN: usize = 8;
 ///  virtioNetHdr is defined in the kernel in include/uapi/linux/virtio_net.h. The
 /// kernel symbol is virtio_net_hdr.
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct VirtioNetHdr {
     pub flags: u8,
     pub gso_type: u8,
@@ -38,23 +36,23 @@ pub struct VirtioNetHdr {
     pub csum_start: u16,
     pub csum_offset: u16,
 }
-
-pub fn decode(buf: &[u8]) -> io::Result<VirtioNetHdr> {
-    if buf.len() < VIRTIO_NET_HDR_LEN {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "too short"));
+impl VirtioNetHdr {
+    pub fn decode(buf: &[u8]) -> io::Result<VirtioNetHdr> {
+        if buf.len() < VIRTIO_NET_HDR_LEN {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "too short"));
+        }
+        let hdr: &VirtioNetHdr = unsafe { &*(buf.as_ptr() as *const VirtioNetHdr) };
+        Ok(*hdr)
     }
-    let hdr: &VirtioNetHdr = unsafe { &*(buf.as_ptr() as *const VirtioNetHdr) };
-    Ok(*hdr)
-}
-
-pub fn encode(hdr: &VirtioNetHdr, buf: &mut [u8]) -> io::Result<()> {
-    if buf.len() < VIRTIO_NET_HDR_LEN {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "too short"));
-    }
-    unsafe {
-        let hdr_ptr = hdr as *const VirtioNetHdr as *const u8;
-        std::ptr::copy_nonoverlapping(hdr_ptr, buf.as_mut_ptr(), VIRTIO_NET_HDR_LEN);
-        Ok(())
+    pub fn encode(&self, buf: &mut [u8]) -> io::Result<()> {
+        if buf.len() < VIRTIO_NET_HDR_LEN {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "too short"));
+        }
+        unsafe {
+            let hdr_ptr = self as *const VirtioNetHdr as *const u8;
+            std::ptr::copy_nonoverlapping(hdr_ptr, buf.as_mut_ptr(), VIRTIO_NET_HDR_LEN);
+            Ok(())
+        }
     }
 }
 
@@ -64,7 +62,7 @@ pub const VIRTIO_NET_HDR_LEN: usize = std::mem::size_of::<VirtioNetHdr>();
 
 /// tcpFlowKey represents the key for a TCP flow.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-struct TcpFlowKey {
+pub struct TcpFlowKey {
     src_addr: [u8; 16],
     dst_addr: [u8; 16],
     src_port: u16,
@@ -74,7 +72,7 @@ struct TcpFlowKey {
 }
 
 /// tcpGROTable holds flow and coalescing information for the purposes of TCP GRO.
-struct TcpGROTable {
+pub struct TcpGROTable {
     items_by_flow: HashMap<TcpFlowKey, Vec<TcpGROItem>>,
     items_pool: Vec<Vec<TcpGROItem>>,
 }
@@ -172,23 +170,12 @@ impl TcpGROTable {
             .or_insert_with(|| self.items_pool.pop().unwrap_or_else(Vec::new));
         items.push(item);
     }
-    fn update_at(&mut self, item: TcpGROItem, i: usize) {
-        if let Some(items) = self.items_by_flow.get_mut(&item.key) {
-            items[i] = item;
-        }
-    }
-    fn delete_at(&mut self, key: TcpFlowKey, i: usize) {
-        if let Some(mut items) = self.items_by_flow.remove(&key) {
-            items.remove(i);
-            self.items_by_flow.insert(key, items);
-        }
-    }
 }
 
 /// tcpGROItem represents bookkeeping data for a TCP packet during the lifetime
 /// of a GRO evaluation across a vector of packets.
 #[derive(Debug, Clone, Copy)]
-struct TcpGROItem {
+pub struct TcpGROItem {
     key: TcpFlowKey,
     sent_seq: u32,   // the sequence number
     bufs_index: u16, // the index into the original bufs slice
@@ -200,10 +187,6 @@ struct TcpGROItem {
 }
 
 impl TcpGROTable {
-    fn new_items(&mut self) -> Vec<TcpGROItem> {
-        let items = self.items_pool.pop().unwrap_or_else(Vec::new);
-        items
-    }
     fn reset(&mut self) {
         for (_key, mut items) in self.items_by_flow.drain() {
             items.clear();
@@ -214,7 +197,7 @@ impl TcpGROTable {
 
 /// udpFlowKey represents the key for a UDP flow.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-struct UdpFlowKey {
+pub struct UdpFlowKey {
     src_addr: [u8; 16], // srcAddr
     dst_addr: [u8; 16], // dstAddr
     src_port: u16,      // srcPort
@@ -225,7 +208,7 @@ struct UdpFlowKey {
 /// udpGROItem represents bookkeeping data for a UDP packet during the lifetime
 /// of a GRO evaluation across a vector of packets.
 #[derive(Debug, Clone, Copy)]
-struct UdpGROItem {
+pub struct UdpGROItem {
     key: UdpFlowKey,           // udpFlowKey
     bufs_index: u16,           // the index into the original bufs slice
     num_merged: u16,           // the number of packets merged into this item
@@ -247,6 +230,12 @@ impl UdpGROTable {
         UdpGROTable {
             items_by_flow: HashMap::with_capacity(IDEAL_BATCH_SIZE),
             items_pool,
+        }
+    }
+    fn reset(&mut self) {
+        for (_key, mut items) in self.items_by_flow.drain() {
+            items.clear();
+            self.items_pool.push(items);
         }
     }
     /// Looks up a flow for the provided packet and metadata.
@@ -300,11 +289,6 @@ impl UdpGROTable {
             .entry(key)
             .or_insert_with(|| self.items_pool.pop().unwrap_or_else(Vec::new));
         items.push(item);
-    }
-    fn update_at(&mut self, item: UdpGROItem, i: usize) {
-        if let Some(items) = self.items_by_flow.get_mut(&item.key) {
-            items[i] = item;
-        }
     }
 }
 
@@ -364,6 +348,205 @@ pub fn packet_is_gro_candidate(b: &[u8], can_udp_gro: bool) -> GroCandidateType 
         }
     }
     GroCandidateType::NotGROCandidate
+}
+/// applyTCPCoalesceAccounting updates bufs to account for coalescing based on the
+/// metadata found in table.
+pub fn apply_tcp_coalesce_accounting(
+    bufs: &mut [BytesMut],
+    offset: usize,
+    table: &TcpGROTable,
+) -> io::Result<()> {
+    for items in table.items_by_flow.values() {
+        for item in items {
+            if item.num_merged > 0 {
+                let mut hdr = VirtioNetHdr {
+                    flags: VIRTIO_NET_HDR_F_NEEDS_CSUM,
+                    hdr_len: (item.iph_len + item.tcph_len) as u16,
+                    gso_size: item.gso_size,
+                    csum_start: item.iph_len as u16,
+                    csum_offset: 16,
+                    gso_type: 0, // Will be set later
+                };
+                let buf = &mut bufs[item.bufs_index as usize];
+                let pkt = &mut buf[offset..];
+                let pkt_len = pkt.len();
+
+                // Calculate the pseudo header checksum and place it at the TCP
+                // checksum offset. Downstream checksum offloading will combine
+                // this with computation of the tcp header and payload checksum.
+                let addr_len = if item.key.is_v6 { 16 } else { 4 };
+                let addr_offset = if item.key.is_v6 {
+                    IPV6_SRC_ADDR_OFFSET
+                } else {
+                    IPV4_SRC_ADDR_OFFSET
+                };
+
+                let src_addr_at = offset + addr_offset;
+                let src_addr =
+                    unsafe { &*(&pkt[src_addr_at..src_addr_at + addr_len] as *const [u8]) };
+                let dst_addr = unsafe {
+                    &*(&pkt[src_addr_at + addr_len..src_addr_at + addr_len * 2] as *const [u8])
+                };
+                // Recalculate the total len (IPv4) or payload len (IPv6).
+                // Recalculate the (IPv4) header checksum.
+                if item.key.is_v6 {
+                    hdr.gso_type = VIRTIO_NET_HDR_GSO_TCPV6;
+                    BigEndian::write_u16(&mut pkt[4..6], pkt_len as u16 - item.iph_len as u16);
+                } else {
+                    hdr.gso_type = VIRTIO_NET_HDR_GSO_TCPV4;
+                    pkt[10] = 0;
+                    pkt[11] = 0;
+                    BigEndian::write_u16(&mut pkt[2..4], pkt_len as u16);
+                    let iph_csum = !checksum(&pkt[..item.iph_len as usize], 0);
+                    BigEndian::write_u16(&mut pkt[10..12], iph_csum);
+                }
+
+                hdr.encode(&mut buf[offset - VIRTIO_NET_HDR_LEN..])?;
+
+                let pkt = &mut buf[offset..];
+
+                let psum = pseudo_header_checksum_no_fold(
+                    IPPROTO_TCP as _,
+                    src_addr,
+                    dst_addr,
+                    pkt_len as u16 - item.iph_len as u16,
+                );
+                let tcp_csum = checksum(&[], psum);
+                BigEndian::write_u16(
+                    &mut pkt[(hdr.csum_start + hdr.csum_offset) as usize..],
+                    tcp_csum,
+                );
+            } else {
+                let hdr = VirtioNetHdr::default();
+                hdr.encode(&mut bufs[item.bufs_index as usize][offset - VIRTIO_NET_HDR_LEN..])?;
+            }
+        }
+    }
+    Ok(())
+}
+pub fn apply_udp_coalesce_accounting(
+    bufs: &mut [BytesMut],
+    offset: usize,
+    table: &UdpGROTable,
+) -> io::Result<()> {
+    for items in table.items_by_flow.values() {
+        for item in items {
+            if item.num_merged > 0 {
+                let hdr = VirtioNetHdr {
+                    flags: VIRTIO_NET_HDR_F_NEEDS_CSUM, // this turns into CHECKSUM_PARTIAL in the skb
+                    hdr_len: item.iph_len as u16 + UDP_H_LEN as u16,
+                    gso_size: item.gso_size,
+                    csum_start: item.iph_len as u16,
+                    csum_offset: 6,
+                    gso_type: VIRTIO_NET_HDR_GSO_UDP_L4,
+                };
+
+                let buf = &mut bufs[item.bufs_index as usize];
+                let pkt = &mut buf[offset..];
+                let pkt_len = pkt.len();
+
+                // Calculate the pseudo header checksum and place it at the UDP
+                // checksum offset. Downstream checksum offloading will combine
+                // this with computation of the udp header and payload checksum.
+                let (addr_len, addr_offset) = if item.key.is_v6 {
+                    (16, IPV6_SRC_ADDR_OFFSET)
+                } else {
+                    (4, IPV4_SRC_ADDR_OFFSET)
+                };
+
+                let src_addr_at = offset + addr_offset;
+                let src_addr =
+                    unsafe { &*(&pkt[src_addr_at..(src_addr_at + addr_len)] as *const [u8]) };
+                let dst_addr = unsafe {
+                    &*(&pkt[(src_addr_at + addr_len)..(src_addr_at + addr_len * 2)]
+                        as *const [u8])
+                };
+
+                // Recalculate the total len (IPv4) or payload len (IPv6).
+                // Recalculate the (IPv4) header checksum.
+                if item.key.is_v6 {
+                    BigEndian::write_u16(&mut pkt[4..6], pkt_len as u16 - item.iph_len as u16);
+                // set new IPv6 header payload len
+                } else {
+                    pkt[10] = 0;
+                    pkt[11] = 0;
+                    BigEndian::write_u16(&mut pkt[2..4], pkt_len as u16); // set new total length
+                    let iph_csum = !checksum(&pkt[..item.iph_len as usize], 0);
+                    BigEndian::write_u16(&mut pkt[10..12], iph_csum); // set IPv4 header checksum field
+                }
+
+                hdr.encode(&mut buf[offset - VIRTIO_NET_HDR_LEN..])?;
+                let pkt = &mut buf[offset..];
+                // Recalculate the UDP len field value
+                BigEndian::write_u16(
+                    &mut pkt[(item.iph_len as usize + 4)..(item.iph_len as usize + 6)],
+                    pkt_len as u16 - item.iph_len as u16,
+                );
+
+                let psum = pseudo_header_checksum_no_fold(
+                    IPPROTO_UDP as _,
+                    src_addr,
+                    dst_addr,
+                    pkt_len as u16 - item.iph_len as u16,
+                );
+
+                let udp_csum = checksum(&[], psum);
+                BigEndian::write_u16(
+                    &mut pkt[(hdr.csum_start + hdr.csum_offset) as usize..],
+                    udp_csum,
+                );
+            } else {
+                let hdr = VirtioNetHdr::default();
+                hdr.encode(&mut bufs[item.bufs_index as usize][offset - VIRTIO_NET_HDR_LEN..])?;
+            }
+        }
+    }
+    Ok(())
+}
+pub fn handle_gro(
+    bufs: &mut [BytesMut],
+    offset: usize,
+    tcp_table: &mut TcpGROTable,
+    udp_table: &mut UdpGROTable,
+    can_udp_gro: bool,
+    to_write: &mut Vec<usize>,
+) -> io::Result<()> {
+    let bufs_len = bufs.len();
+    for i in 0..bufs_len {
+        if offset < VIRTIO_NET_HDR_LEN || offset > bufs[i].len() - 1 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "invalid offset",
+            ));
+        }
+
+        let result = match packet_is_gro_candidate(&bufs[i][offset..], can_udp_gro) {
+            GroCandidateType::Tcp4GROCandidate => tcp_gro(bufs, offset, i, tcp_table, false),
+            GroCandidateType::Tcp6GROCandidate => tcp_gro(bufs, offset, i, tcp_table, true),
+            GroCandidateType::Udp4GROCandidate => udp_gro(bufs, offset, i, udp_table, false),
+            GroCandidateType::Udp6GROCandidate => udp_gro(bufs, offset, i, udp_table, true),
+            GroCandidateType::NotGROCandidate => GroResult::Noop,
+        };
+
+        match result {
+            GroResult::Noop => {
+                let hdr = VirtioNetHdr::default();
+                hdr.encode(&mut bufs[i][offset - VIRTIO_NET_HDR_LEN..offset])?;
+                // Fallthrough intended
+                to_write.push(i);
+            }
+            GroResult::TableInsert => {
+                to_write.push(i);
+            }
+            _ => {}
+        }
+    }
+
+    let err_tcp = apply_tcp_coalesce_accounting(bufs, offset, tcp_table);
+    let err_udp = apply_udp_coalesce_accounting(bufs, offset, udp_table);
+    err_tcp?;
+    err_udp?;
+    Ok(())
 }
 #[derive(PartialEq, Eq)]
 enum GroResult {
@@ -653,18 +836,13 @@ fn coalesce_udp_packets(
 
     if item.num_merged == 0 {
         if item.c_sum_known_invalid
-            || !checksum_valid(
-                &buf[bufs_offset..],
-                item.iph_len,
-                libc::IPPROTO_UDP as _,
-                is_v6,
-            )
+            || !checksum_valid(&buf[bufs_offset..], item.iph_len, IPPROTO_UDP as _, is_v6)
         {
             return CoalesceResult::ItemInvalidCSum;
         }
     }
 
-    if !checksum_valid(pkt, item.iph_len, libc::IPPROTO_UDP as _, is_v6) {
+    if !checksum_valid(pkt, item.iph_len, IPPROTO_UDP as _, is_v6) {
         return CoalesceResult::PktInvalidCSum;
     }
     bufs[item.bufs_index as usize].extend_from_slice(&pkt[headers_len..]);
@@ -687,7 +865,7 @@ fn coalesce_tcp_packets(
     bufs_offset: usize,
     is_v6: bool,
 ) -> CoalesceResult {
-    let mut pkt_head: &[u8]; // the packet that will end up at the front
+    let pkt_head: &[u8]; // the packet that will end up at the front
     let headers_len = (item.iph_len + item.tcph_len) as usize;
     let coalesced_len =
         bufs[item.bufs_index as usize][bufs_offset..].len() + pkt.len() - headers_len;
@@ -939,14 +1117,14 @@ pub fn gso_split(
     input[transport_csum_at] = 0;
     input[transport_csum_at + 1] = 0; // clear TCP/UDP checksum
 
-    let (mut first_tcp_seq_num, protocol) =
+    let (first_tcp_seq_num, protocol) =
         if hdr.gso_type == VIRTIO_NET_HDR_GSO_TCPV4 || hdr.gso_type == VIRTIO_NET_HDR_GSO_TCPV6 {
             (
                 BigEndian::read_u32(&input[hdr.csum_start as usize + 4..]),
                 IPPROTO_TCP,
             )
         } else {
-            (0, libc::IPPROTO_UDP)
+            (0, IPPROTO_UDP)
         };
 
     let mut next_segment_data_at = hdr.hdr_len as usize;
@@ -1059,4 +1237,24 @@ pub fn gso_none_checksum(in_buf: &mut [u8], csum_start: u16, csum_offset: u16) {
     in_buf[csum_at + 1] = 0;
     let computed_checksum = checksum(&in_buf[csum_start as usize..], initial as u64);
     BigEndian::write_u16(&mut in_buf[csum_at..], !computed_checksum);
+}
+
+pub struct GROTable {
+    pub(crate) to_write: Vec<usize>,
+    pub(crate) tcp_gro_table: TcpGROTable,
+    pub(crate) udp_gro_table: UdpGROTable,
+}
+impl GROTable {
+    pub fn new() -> GROTable {
+        GROTable {
+            to_write: Vec::with_capacity(IDEAL_BATCH_SIZE),
+            tcp_gro_table: TcpGROTable::new(),
+            udp_gro_table: UdpGROTable::new(),
+        }
+    }
+    pub fn reset(&mut self) {
+        self.to_write.clear();
+        self.tcp_gro_table.reset();
+        self.udp_gro_table.reset();
+    }
 }
