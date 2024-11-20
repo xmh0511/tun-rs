@@ -478,7 +478,7 @@ fn tcp_gro(
     table: &mut TcpGROTable,
     is_v6: bool,
 ) -> GroResult {
-    let pkt = &bufs[pkt_i][offset..];
+    let pkt = unsafe { &*(&bufs[pkt_i][offset..] as *const [u8]) };
     if pkt.len() > u16::MAX as usize {
         // A valid IPv4 or IPv6 packet will never exceed this.
         return GroResult::Noop;
@@ -667,12 +667,7 @@ fn coalesce_udp_packets(
     if !checksum_valid(pkt, item.iph_len, libc::IPPROTO_UDP as _, is_v6) {
         return CoalesceResult::PktInvalidCSum;
     }
-    //
-    let extend_by = pkt.len() - headers_len;
-
-    let buf = &mut bufs[item.bufs_index as usize];
-    buf.resize(buf.len() + extend_by, 0);
-    buf[bufs_offset + pkt_head_len..].copy_from_slice(&pkt[headers_len..]);
+    bufs[item.bufs_index as usize].extend_from_slice(&pkt[headers_len..]);
     item.num_merged += 1;
     CoalesceResult::Success
 }
@@ -688,86 +683,84 @@ fn coalesce_tcp_packets(
     seq: u32,
     psh_set: bool,
     item: &mut TcpGROItem,
-    bufs: &[BytesMut],
+    bufs: &mut [BytesMut],
     bufs_offset: usize,
     is_v6: bool,
 ) -> CoalesceResult {
-    // let mut pkt_head: &[u8]; // the packet that will end up at the front
-    // let headers_len = (item.iph_len + item.tcph_len) as usize;
-    // let coalesced_len =
-    //     bufs[item.bufs_index as usize][bufs_offset..].len() + pkt.len() - headers_len;
-    //
-    // if mode == CanCoalesce::CoalescePrepend {
-    //     pkt_head = pkt;
-    //     if pkt.capacity() - bufs_offset < coalesced_len {
-    //         // We don't want to allocate a new underlying array if capacity is
-    //         // too small.
-    //         return CoalesceResult::InsufficientCap;
-    //     }
-    //     if psh_set {
-    //         return CoalesceResult::PSHEnding;
-    //     }
-    //     if item.num_merged == 0
-    //         && !checksum_valid(
-    //         &bufs[item.bufs_index as usize][bufs_offset..],
-    //         item.iph_len,
-    //          IPPROTO_TCP,
-    //         is_v6,
-    //     )
-    //     {
-    //         return CoalesceResult::ItemInvalidCSum;
-    //     }
-    //     if !checksum_valid(pkt, item.iph_len,  IPPROTO_TCP as _, is_v6) {
-    //         return CoalesceResult::PktInvalidCSum;
-    //     }
-    //     item.sent_seq = seq;
-    //     let extend_by = coalesced_len - pkt_head.len();
-    //     bufs[pkt_bufs_index].extend(vec![0; extend_by]);
-    //     bufs[pkt_bufs_index][bufs_offset + pkt.len()..]
-    //         .copy_from_slice(&bufs[item.bufs_index as usize][bufs_offset + headers_len..]);
-    //
-    //     // Flip the slice headers in bufs as part of prepend. The index of item
-    //     // is already being tracked for writing.
-    //     std::mem::swap(&mut bufs[item.bufs_index as usize], &mut bufs[pkt_bufs_index]);
-    // } else {
-    //     pkt_head = &bufs[item.bufs_index as usize][bufs_offset..];
-    //     if pkt_head.capacity() - bufs_offset < coalesced_len {
-    //         // We don't want to allocate a new underlying array if capacity is
-    //         // too small.
-    //         return CoalesceResult::InsufficientCap;
-    //     }
-    //     if item.num_merged == 0
-    //         && !checksum_valid(
-    //         &bufs[item.bufs_index as usize][bufs_offset..],
-    //         item.iph_len,
-    //         IPPROTO_TCP as _,
-    //         is_v6,
-    //     )
-    //     {
-    //         return CoalesceResult::ItemInvalidCSum;
-    //     }
-    //     if !checksum_valid(pkt, item.iph_len,  IPPROTO_TCP as _, is_v6) {
-    //         return CoalesceResult::PktInvalidCSum;
-    //     }
-    //     if psh_set {
-    //         // We are appending a segment with PSH set.
-    //         item.psh_set = psh_set;
-    //         bufs[item.bufs_index as usize][bufs_offset + item.iph_len as usize + TCP_FLAGS_OFFSET] |=
-    //             TCP_FLAG_PSH;
-    //     }
-    //     let extend_by = pkt.len() - headers_len;
-    //     bufs[item.bufs_index as usize].extend(vec![0; extend_by]);
-    //     bufs[item.bufs_index as usize][bufs_offset + pkt_head.len()..]
-    //         .copy_from_slice(&pkt[headers_len..]);
-    // }
-    //
-    // if gso_size > item.gso_size {
-    //     item.gso_size = gso_size;
-    // }
-    //
-    // item.num_merged += 1;
-    // CoalesceResult::Success
-    todo!()
+    let mut pkt_head: &[u8]; // the packet that will end up at the front
+    let headers_len = (item.iph_len + item.tcph_len) as usize;
+    let coalesced_len =
+        bufs[item.bufs_index as usize][bufs_offset..].len() + pkt.len() - headers_len;
+    // Copy data
+    if mode == CanCoalesce::CoalescePrepend {
+        pkt_head = pkt;
+        if bufs[pkt_bufs_index].capacity() < 2 * bufs_offset + coalesced_len {
+            // We don't want to allocate a new underlying array if capacity is
+            // too small.
+            return CoalesceResult::InsufficientCap;
+        }
+        if psh_set {
+            return CoalesceResult::PSHEnding;
+        }
+        if item.num_merged == 0
+            && !checksum_valid(
+                &bufs[item.bufs_index as usize][bufs_offset..],
+                item.iph_len,
+                IPPROTO_TCP as _,
+                is_v6,
+            )
+        {
+            return CoalesceResult::ItemInvalidCSum;
+        }
+        if !checksum_valid(pkt, item.iph_len, IPPROTO_TCP as _, is_v6) {
+            return CoalesceResult::PktInvalidCSum;
+        }
+        item.sent_seq = seq;
+        let extend_by = coalesced_len - pkt_head.len();
+        bufs[pkt_bufs_index].resize(bufs[pkt_bufs_index].len() + extend_by, 0);
+        let src = bufs[item.bufs_index as usize][bufs_offset + headers_len..].as_ptr();
+        let dst = bufs[pkt_bufs_index][bufs_offset + pkt.len()..].as_mut_ptr();
+        unsafe {
+            std::ptr::copy_nonoverlapping(src, dst, extend_by);
+        }
+        // Flip the slice headers in bufs as part of prepend. The index of item
+        // is already being tracked for writing.
+        bufs.swap(item.bufs_index as usize, pkt_bufs_index);
+    } else {
+        pkt_head = &bufs[item.bufs_index as usize][bufs_offset..];
+        if bufs[item.bufs_index as usize].capacity() < 2 * bufs_offset + coalesced_len {
+            // We don't want to allocate a new underlying array if capacity is
+            // too small.
+            return CoalesceResult::InsufficientCap;
+        }
+        if item.num_merged == 0
+            && !checksum_valid(
+                &bufs[item.bufs_index as usize][bufs_offset..],
+                item.iph_len,
+                IPPROTO_TCP as _,
+                is_v6,
+            )
+        {
+            return CoalesceResult::ItemInvalidCSum;
+        }
+        if !checksum_valid(pkt, item.iph_len, IPPROTO_TCP as _, is_v6) {
+            return CoalesceResult::PktInvalidCSum;
+        }
+        if psh_set {
+            // We are appending a segment with PSH set.
+            item.psh_set = psh_set;
+            bufs[item.bufs_index as usize]
+                [bufs_offset + item.iph_len as usize + TCP_FLAGS_OFFSET] |= TCP_FLAG_PSH;
+        }
+        bufs[item.bufs_index as usize].extend_from_slice(&pkt[headers_len..]);
+    }
+
+    if gso_size > item.gso_size {
+        item.gso_size = gso_size;
+    }
+
+    item.num_merged += 1;
+    CoalesceResult::Success
 }
 
 /// ipHeadersCanCoalesce returns true if the IP headers found in pktA and pktB
