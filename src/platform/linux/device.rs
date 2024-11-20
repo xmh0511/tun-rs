@@ -215,17 +215,19 @@ impl Device {
     /// If offload is enabled. This method can be used to obtain processed data.
     ///
     /// original_buffer is used to store raw data, including the VirtioNetHdr and the unsplit IP packet. The recommended size is 10 + 65535.
-    /// bufs and sizes are used to store the segmented IP packets
-    ///
-    /// # Panics
-    /// If the length of bufs and size is insufficient, it will cause a panic
+    /// bufs and sizes are used to store the segmented IP packets. bufs.len == sizes.len > 65535/MTU
+    /// offset: Starting position
     pub fn recv_multiple(
         &self,
         original_buffer: &mut [u8],
         bufs: &mut [&mut [u8]],
         sizes: &mut [usize],
+        offset: usize,
     ) -> io::Result<usize> {
         if self.vnet_hdr {
+            if bufs.is_empty() || bufs.len() != sizes.len() {
+                return Err(io::Error::new(io::ErrorKind::Other, "bufs error"));
+            }
             let len = self.recv(original_buffer)?;
             if len <= VIRTIO_NET_HDR_LEN {
                 Err(io::Error::new(
@@ -241,6 +243,7 @@ impl Device {
                 &mut original_buffer[VIRTIO_NET_HDR_LEN..len],
                 bufs,
                 sizes,
+                offset,
             )
         } else {
             // you can use device.recv()
@@ -260,6 +263,7 @@ impl Device {
         input: &mut [u8],
         bufs: &mut [&mut [u8]],
         sizes: &mut [usize],
+        offset: usize,
     ) -> io::Result<usize> {
         let len = input.len();
         if hdr.gso_type == VIRTIO_NET_HDR_GSO_NONE {
@@ -269,7 +273,7 @@ impl Device {
                 // at hdr.csumOffset.
                 gso_none_checksum(input, hdr.csum_start, hdr.csum_offset);
             }
-            if bufs[0].len() < len {
+            if bufs[0][offset..].len() < len {
                 Err(io::Error::new(
                     io::ErrorKind::Other,
                     format!(
@@ -279,7 +283,7 @@ impl Device {
                 ))?
             }
             sizes[0] = len;
-            bufs[0][..len].copy_from_slice(input);
+            bufs[0][offset..offset + len].copy_from_slice(input);
             return Ok(1);
         }
         if hdr.gso_type != VIRTIO_NET_HDR_GSO_TCPV4
@@ -367,7 +371,7 @@ impl Device {
                 ),
             ))?
         }
-        gso_split(input, hdr, bufs, sizes, ip_version == 6)
+        gso_split(input, hdr, bufs, sizes, offset, ip_version == 6)
     }
 }
 

@@ -70,19 +70,21 @@ impl AsyncDevice {
     /// If offload is enabled. This method can be used to obtain processed data.
     ///
     /// original_buffer is used to store raw data, including the VirtioNetHdr and the unsplit IP packet. The recommended size is 10 + 65535.
-    /// bufs and sizes are used to store the segmented IP packets
-    ///
-    /// # Panics
-    /// If the length of bufs and size is insufficient, it will cause a panic
+    /// bufs and sizes are used to store the segmented IP packets. bufs.len == sizes.len > 65535/MTU
+    /// offset: Starting position
     #[cfg(target_os = "linux")]
     pub async fn recv_multiple(
         &self,
         original_buffer: &mut [u8],
         bufs: &mut [&mut [u8]],
         sizes: &mut [usize],
+        offset: usize,
     ) -> io::Result<usize> {
         let tun = self.inner.get_ref();
         if tun.vnet_hdr {
+            if bufs.is_empty() || bufs.len() != sizes.len() {
+                return Err(io::Error::new(io::ErrorKind::Other, "bufs error"));
+            }
             let len = self.recv(original_buffer).await?;
             if len <= VIRTIO_NET_HDR_LEN {
                 Err(io::Error::new(
@@ -98,6 +100,7 @@ impl AsyncDevice {
                 &mut original_buffer[VIRTIO_NET_HDR_LEN..len],
                 bufs,
                 sizes,
+                offset,
             )
         } else {
             // you can use device.recv()

@@ -1214,6 +1214,7 @@ pub fn gso_split(
     hdr: VirtioNetHdr,
     out_bufs: &mut [&mut [u8]],
     sizes: &mut [usize],
+    out_offset: usize,
     is_v6: bool,
 ) -> io::Result<usize> {
     let iph_len = hdr.csum_start as usize;
@@ -1255,7 +1256,7 @@ pub fn gso_split(
         let total_len = hdr.hdr_len as usize + segment_data_len;
 
         sizes[i] = total_len;
-        let out = &mut out_bufs[i];
+        let out = &mut out_bufs[i][out_offset..];
 
         out[..iph_len].copy_from_slice(&input[..iph_len]);
 
