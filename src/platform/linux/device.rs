@@ -163,6 +163,7 @@ impl Device {
             }
         }
     }
+    pub fn send_multiple(&self, bufs: &[&[u8]]) {}
     /// Recv a packet from tun device.
     /// If offload is enabled. This method can be used to obtain processed data.
     ///
