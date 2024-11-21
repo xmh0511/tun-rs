@@ -185,7 +185,7 @@ impl Device {
     pub fn send_multiple(
         &self,
         gro_table: &mut GROTable,
-        bufs: &mut [BytesMut],
+        bufs: &mut [&mut BytesMut],
         mut offset: usize,
     ) -> io::Result<usize> {
         gro_table.reset();

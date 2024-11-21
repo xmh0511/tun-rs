@@ -3,9 +3,9 @@ pub mod sys;
 mod checksum;
 mod device;
 pub(crate) mod offload;
-pub use offload::GROTable;
-
 pub use self::device::Device;
+pub use offload::GROTable;
+pub use offload::VIRTIO_NET_HDR_LEN;
 use std::os::fd::RawFd;
 
 use crate::configuration::Configuration;

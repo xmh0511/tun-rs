@@ -424,15 +424,15 @@ fn ip_headers_can_coalesce(pkt_a: &[u8], pkt_b: &[u8]) -> bool {
 /// described by item. iphLen and gsoSize describe pkt. bufs is the vector of
 /// packets involved in the current GRO evaluation. bufsOffset is the offset at
 /// which packet data begins within bufs.
-fn udp_packets_can_coalesce(
+fn udp_packets_can_coalesce<B: AsRef<[u8]>>(
     pkt: &[u8],
     iph_len: u8,
     gso_size: u16,
     item: &UdpGROItem,
-    bufs: &[BytesMut],
+    bufs: &[B],
     bufs_offset: usize,
 ) -> CanCoalesce {
-    let pkt_target = &bufs[item.bufs_index as usize][bufs_offset..];
+    let pkt_target = &bufs[item.bufs_index as usize].as_ref()[bufs_offset..];
     if !ip_headers_can_coalesce(pkt, pkt_target) {
         return CanCoalesce::Unavailable;
     }
@@ -452,7 +452,7 @@ fn udp_packets_can_coalesce(
 /// described by item. This function makes considerations that match the kernel's
 /// GRO self tests, which can be found in tools/testing/selftests/net/gro.c.
 #[allow(clippy::too_many_arguments)]
-fn tcp_packets_can_coalesce(
+fn tcp_packets_can_coalesce<B: AsRef<[u8]>>(
     pkt: &[u8],
     iph_len: u8,
     tcph_len: u8,
@@ -460,10 +460,10 @@ fn tcp_packets_can_coalesce(
     psh_set: bool,
     gso_size: u16,
     item: &TcpGROItem,
-    bufs: &[BytesMut],
+    bufs: &[B],
     bufs_offset: usize,
 ) -> CanCoalesce {
-    let pkt_target = &bufs[item.bufs_index as usize][bufs_offset..];
+    let pkt_target = &bufs[item.bufs_index as usize].as_ref()[bufs_offset..];
 
     if tcph_len != item.tcph_len {
         // cannot coalesce with unequal tcp options len
@@ -565,7 +565,7 @@ enum CoalesceResult {
 fn coalesce_udp_packets(
     pkt: &[u8],
     item: &mut UdpGROItem,
-    bufs: &mut [BytesMut],
+    bufs: &mut [&mut BytesMut],
     bufs_offset: usize,
     is_v6: bool,
 ) -> CoalesceResult {
@@ -607,7 +607,7 @@ fn coalesce_tcp_packets(
     seq: u32,
     psh_set: bool,
     item: &mut TcpGROItem,
-    bufs: &mut [BytesMut],
+    bufs: &mut [&mut BytesMut],
     bufs_offset: usize,
     is_v6: bool,
 ) -> CoalesceResult {
@@ -710,7 +710,7 @@ enum GroResult {
 /// inserted into table, and groResultCoalesced when the evaluated packet was
 /// coalesced with another packet in table.
 fn tcp_gro(
-    bufs: &mut [BytesMut],
+    bufs: &mut [&mut BytesMut],
     offset: usize,
     pkt_i: usize,
     table: &mut TcpGROTable,
@@ -862,7 +862,7 @@ fn tcp_gro(
 /// applyTCPCoalesceAccounting updates bufs to account for coalescing based on the
 /// metadata found in table.
 pub fn apply_tcp_coalesce_accounting(
-    bufs: &mut [BytesMut],
+    bufs: &mut [&mut BytesMut],
     offset: usize,
     table: &TcpGROTable,
 ) -> io::Result<()> {
@@ -938,7 +938,7 @@ pub fn apply_tcp_coalesce_accounting(
 // applyUDPCoalesceAccounting updates bufs to account for coalescing based on the
 // metadata found in table.
 pub fn apply_udp_coalesce_accounting(
-    bufs: &mut [BytesMut],
+    bufs: &mut [&mut BytesMut],
     offset: usize,
     table: &UdpGROTable,
 ) -> io::Result<()> {
@@ -1058,7 +1058,7 @@ const UDP_H_LEN: usize = 8;
 /// inserted into table, and groResultCoalesced when the evaluated packet was
 /// coalesced with another packet in table.
 fn udp_gro(
-    bufs: &mut [BytesMut],
+    bufs: &mut [&mut BytesMut],
     offset: usize,
     pkt_i: usize,
     table: &mut UdpGROTable,
@@ -1161,7 +1161,7 @@ fn udp_gro(
 /// and recycle them across vectors of packets. canUDPGRO indicates if UDP GRO is
 /// supported.
 pub fn handle_gro(
-    bufs: &mut [BytesMut],
+    bufs: &mut [&mut BytesMut],
     offset: usize,
     tcp_table: &mut TcpGROTable,
     udp_table: &mut UdpGROTable,
