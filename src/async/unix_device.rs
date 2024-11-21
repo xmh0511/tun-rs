@@ -80,11 +80,11 @@ impl AsyncDevice {
         sizes: &mut [usize],
         offset: usize,
     ) -> io::Result<usize> {
+        if bufs.is_empty() || bufs.len() != sizes.len() {
+            return Err(io::Error::new(io::ErrorKind::Other, "bufs error"));
+        }
         let tun = self.inner.get_ref();
         if tun.vnet_hdr {
-            if bufs.is_empty() || bufs.len() != sizes.len() {
-                return Err(io::Error::new(io::ErrorKind::Other, "bufs error"));
-            }
             let len = self.recv(original_buffer).await?;
             if len <= VIRTIO_NET_HDR_LEN {
                 Err(io::Error::new(
@@ -103,11 +103,9 @@ impl AsyncDevice {
                 offset,
             )
         } else {
-            // you can use device.recv()
-            Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "offload not enabled",
-            ))
+            let len = self.recv(bufs[0]).await?;
+            sizes[0] = len;
+            Ok(1)
         }
     }
     /// send multiple fragmented data packets.
@@ -118,25 +116,26 @@ impl AsyncDevice {
         &self,
         gro_table: &mut GROTable,
         bufs: &mut [BytesMut],
-        offset: usize,
+        mut offset: usize,
     ) -> io::Result<usize> {
-        let tun = self.inner.get_ref();
         gro_table.reset();
-        if !tun.vnet_hdr {
-            // you can use device.send()
-            Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "offload not enabled",
-            ))?
+        let tun = self.inner.get_ref();
+        if tun.vnet_hdr {
+            handle_gro(
+                bufs,
+                offset,
+                &mut gro_table.tcp_gro_table,
+                &mut gro_table.udp_gro_table,
+                tun.udp_gso,
+                &mut gro_table.to_write,
+            )?;
+            offset -= VIRTIO_NET_HDR_LEN;
+        } else {
+            for i in 0..bufs.len() {
+                gro_table.to_write.push(i);
+            }
         }
-        handle_gro(
-            bufs,
-            offset,
-            &mut gro_table.tcp_gro_table,
-            &mut gro_table.udp_gro_table,
-            tun.udp_gso,
-            &mut gro_table.to_write,
-        )?;
+
         let mut total = 0;
         let mut err = Ok(());
         for buf_idx in &gro_table.to_write {
@@ -147,10 +146,10 @@ impl AsyncDevice {
                 Err(e) => {
                     if let Some(code) = e.raw_os_error() {
                         if libc::EBADFD == code {
-                            return Err(e)
+                            return Err(e);
                         }
                     }
-                    err = Err(e);
+                    err = Err(e)
                 }
             }
         }

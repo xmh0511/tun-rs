@@ -91,7 +91,8 @@ impl Device {
                 } else {
                     // tunUDPOffloads were added in Linux v6.2. We do not return an
                     // error if they are unsupported at runtime.
-                    let rs = tunsetoffload(tun_fd.inner, (tun_tcp_offloads | tun_udp_offloads) as _);
+                    let rs =
+                        tunsetoffload(tun_fd.inner, (tun_tcp_offloads | tun_udp_offloads) as _);
                     (true, rs.is_ok())
                 }
             } else {
@@ -185,25 +186,27 @@ impl Device {
         &self,
         gro_table: &mut GROTable,
         bufs: &mut [BytesMut],
-        offset: usize,
+        mut offset: usize,
     ) -> io::Result<usize> {
         gro_table.reset();
-        if !self.vnet_hdr {
-            // you can use device.send()
-            Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "offload not enabled",
-            ))?
+        if self.vnet_hdr {
+            handle_gro(
+                bufs,
+                offset,
+                &mut gro_table.tcp_gro_table,
+                &mut gro_table.udp_gro_table,
+                self.udp_gso,
+                &mut gro_table.to_write,
+            )?;
+            offset -= VIRTIO_NET_HDR_LEN;
+        } else {
+            for i in 0..bufs.len() {
+                gro_table.to_write.push(i);
+            }
         }
-        handle_gro(
-            bufs,
-            offset,
-            &mut gro_table.tcp_gro_table,
-            &mut gro_table.udp_gro_table,
-            self.udp_gso,
-            &mut gro_table.to_write,
-        )?;
+
         let mut total = 0;
+        let mut err = Ok(());
         for buf_idx in &gro_table.to_write {
             match self.send(&bufs[*buf_idx][offset..]) {
                 Ok(n) => {
@@ -212,12 +215,14 @@ impl Device {
                 Err(e) => {
                     if let Some(code) = e.raw_os_error() {
                         if libc::EBADFD == code {
-                            Err(e)?
+                            return Err(e);
                         }
                     }
+                    err = Err(e)
                 }
             }
         }
+        err?;
         Ok(total)
     }
     /// Recv a packet from tun device.
@@ -233,10 +238,10 @@ impl Device {
         sizes: &mut [usize],
         offset: usize,
     ) -> io::Result<usize> {
+        if bufs.is_empty() || bufs.len() != sizes.len() {
+            return Err(io::Error::new(io::ErrorKind::Other, "bufs error"));
+        }
         if self.vnet_hdr {
-            if bufs.is_empty() || bufs.len() != sizes.len() {
-                return Err(io::Error::new(io::ErrorKind::Other, "bufs error"));
-            }
             let len = self.recv(original_buffer)?;
             if len <= VIRTIO_NET_HDR_LEN {
                 Err(io::Error::new(
@@ -255,11 +260,9 @@ impl Device {
                 offset,
             )
         } else {
-            // you can use device.recv()
-            Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "offload not enabled",
-            ))
+            let len = self.recv(bufs[0])?;
+            sizes[0] = len;
+            Ok(1)
         }
     }
     /// https://github.com/WireGuard/wireguard-go/blob/12269c2761734b15625017d8565745096325392f/tun/tun_linux.go#L375
@@ -461,8 +464,8 @@ impl Device {
                                     addr.address,
                                     0,
                                 ))
-                                    .addr6
-                                    .sin6_addr;
+                                .addr6
+                                .sin6_addr;
                                 if let Err(e) = siocdifaddr_in6(ctl.as_raw_fd(), &ifrv6) {
                                     log::error!("{e:?}");
                                 }
