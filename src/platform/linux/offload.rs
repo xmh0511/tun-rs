@@ -121,9 +121,8 @@ impl TcpFlowKey {
         };
 
         let addr_size = dst_addr_offset - src_addr_offset;
-        key.src_addr
-            .copy_from_slice(&pkt[src_addr_offset..dst_addr_offset]);
-        key.dst_addr
+        key.src_addr[..addr_size].copy_from_slice(&pkt[src_addr_offset..dst_addr_offset]);
+        key.dst_addr[..addr_size]
             .copy_from_slice(&pkt[dst_addr_offset..dst_addr_offset + addr_size]);
         key.src_port = BigEndian::read_u16(&pkt[tcph_offset..]);
         key.dst_port = BigEndian::read_u16(&pkt[tcph_offset + 2..]);
@@ -279,9 +278,8 @@ impl UdpFlowKey {
             is_v6: false,
         };
         let addr_size = dst_addr_offset - src_addr_offset;
-        key.src_addr
-            .copy_from_slice(&pkt[src_addr_offset..dst_addr_offset]);
-        key.dst_addr
+        key.src_addr[..addr_size].copy_from_slice(&pkt[src_addr_offset..dst_addr_offset]);
+        key.dst_addr[..addr_size]
             .copy_from_slice(&pkt[dst_addr_offset..dst_addr_offset + addr_size]);
         key.src_port = BigEndian::read_u16(&pkt[udph_offset..]);
         key.dst_port = BigEndian::read_u16(&pkt[udph_offset + 2..]);
