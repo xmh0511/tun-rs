@@ -138,6 +138,7 @@ impl AsyncDevice {
             &mut gro_table.to_write,
         )?;
         let mut total = 0;
+        let mut err = Ok(());
         for buf_idx in &gro_table.to_write {
             match self.send(&bufs[*buf_idx][offset..]).await {
                 Ok(n) => {
@@ -146,12 +147,14 @@ impl AsyncDevice {
                 Err(e) => {
                     if let Some(code) = e.raw_os_error() {
                         if libc::EBADFD == code {
-                            Err(e)?
+                            return Err(e)
                         }
                     }
+                    err = Err(e);
                 }
             }
         }
+        err?;
         Ok(total)
     }
 }
@@ -164,6 +167,14 @@ impl AsyncDevice {
     #[cfg(target_os = "linux")]
     pub fn set_tx_queue_len(&self, tx_queue_len: u32) -> crate::Result<()> {
         self.inner.get_ref().set_tx_queue_len(tx_queue_len)
+    }
+    #[cfg(target_os = "linux")]
+    pub fn udp_gso(&self) -> bool {
+        self.inner.get_ref().udp_gso()
+    }
+    #[cfg(target_os = "linux")]
+    pub fn tcp_gso(&self) -> bool {
+        self.inner.get_ref().tcp_gso()
     }
 }
 

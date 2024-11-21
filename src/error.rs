@@ -20,8 +20,6 @@ pub enum Error {
 
     #[error("unsupported network layer of operation")]
     UnsupportedLayer,
-    #[error("unsupported offload: {0}")]
-    UnsupportedOffload(i32),
 
     #[error("out of range integral type conversion attempted")]
     TryFromIntError,

@@ -81,16 +81,19 @@ impl Device {
             if let Err(err) = tunsetiff(tun_fd.inner, &mut req as *mut _ as *mut _) {
                 return Err(io::Error::from(err).into());
             }
-            let (vnet_hdr, udp_gso) = if offload {
+            let (vnet_hdr, udp_gso) = if offload && libc::IFF_VNET_HDR != 0 {
+                // tunTCPOffloads were added in Linux v2.6. We require their support if IFF_VNET_HDR is set.
                 let tun_tcp_offloads = libc::TUN_F_CSUM | libc::TUN_F_TSO4 | libc::TUN_F_TSO6;
                 let tun_udp_offloads = libc::TUN_F_USO4 | libc::TUN_F_USO6;
                 if let Err(err) = tunsetoffload(tun_fd.inner, tun_tcp_offloads as _) {
-                    return Err(Error::UnsupportedOffload(err as _));
+                    log::warn!("unsupported offload: {err:?}");
+                    (false, false)
+                } else {
+                    // tunUDPOffloads were added in Linux v6.2. We do not return an
+                    // error if they are unsupported at runtime.
+                    let rs = tunsetoffload(tun_fd.inner, (tun_tcp_offloads | tun_udp_offloads) as _);
+                    (true, rs.is_ok())
                 }
-                // tunUDPOffloads were added in Linux v6.2. We do not return an
-                // error if they are unsupported at runtime.
-                let rs = tunsetoffload(tun_fd.inner, (tun_tcp_offloads | tun_udp_offloads) as _);
-                (true, rs.is_ok())
             } else {
                 (false, false)
             };
@@ -117,6 +120,12 @@ impl Device {
             vnet_hdr: false,
             udp_gso: false,
         }
+    }
+    pub fn udp_gso(&self) -> bool {
+        self.udp_gso
+    }
+    pub fn tcp_gso(&self) -> bool {
+        self.vnet_hdr
     }
     pub fn set_tx_queue_len(&self, tx_queue_len: u32) -> Result<()> {
         unsafe {
@@ -452,8 +461,8 @@ impl Device {
                                     addr.address,
                                     0,
                                 ))
-                                .addr6
-                                .sin6_addr;
+                                    .addr6
+                                    .sin6_addr;
                                 if let Err(e) = siocdifaddr_in6(ctl.as_raw_fd(), &ifrv6) {
                                     log::error!("{e:?}");
                                 }
