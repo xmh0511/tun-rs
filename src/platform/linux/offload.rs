@@ -424,7 +424,7 @@ fn ip_headers_can_coalesce(pkt_a: &[u8], pkt_b: &[u8]) -> bool {
 /// described by item. iphLen and gsoSize describe pkt. bufs is the vector of
 /// packets involved in the current GRO evaluation. bufsOffset is the offset at
 /// which packet data begins within bufs.
-fn udp_packets_can_coalesce<B: AsRef<[u8]>>(
+fn udp_packets_can_coalesce<B: AsMutRefBytesMut>(
     pkt: &[u8],
     iph_len: u8,
     gso_size: u16,
@@ -452,7 +452,7 @@ fn udp_packets_can_coalesce<B: AsRef<[u8]>>(
 /// described by item. This function makes considerations that match the kernel's
 /// GRO self tests, which can be found in tools/testing/selftests/net/gro.c.
 #[allow(clippy::too_many_arguments)]
-fn tcp_packets_can_coalesce<B: AsRef<[u8]>>(
+fn tcp_packets_can_coalesce<B: AsMutRefBytesMut>(
     pkt: &[u8],
     iph_len: u8,
     tcph_len: u8,
@@ -562,14 +562,14 @@ enum CoalesceResult {
 
 /// coalesceUDPPackets attempts to coalesce pkt with the packet described by
 /// item, and returns the outcome.
-fn coalesce_udp_packets(
+fn coalesce_udp_packets<B: AsMutRefBytesMut>(
     pkt: &[u8],
     item: &mut UdpGROItem,
-    bufs: &mut [&mut BytesMut],
+    bufs: &mut [B],
     bufs_offset: usize,
     is_v6: bool,
 ) -> CoalesceResult {
-    let buf = &bufs[item.bufs_index as usize];
+    let buf = bufs[item.bufs_index as usize].as_ref();
     // let pkt_head = &buf[bufs_offset..]; // the packet that will end up at the front
     let headers_len = item.iph_len as usize + UDP_H_LEN;
     let coalesced_len = buf[bufs_offset..].len() + pkt.len() - headers_len;
@@ -589,7 +589,9 @@ fn coalesce_udp_packets(
     if !checksum_valid(pkt, item.iph_len, IPPROTO_UDP as _, is_v6) {
         return CoalesceResult::PktInvalidCSum;
     }
-    bufs[item.bufs_index as usize].extend_from_slice(&pkt[headers_len..]);
+    bufs[item.bufs_index as usize]
+        .as_mut()
+        .extend_from_slice(&pkt[headers_len..]);
     item.num_merged += 1;
     CoalesceResult::Success
 }
@@ -599,7 +601,7 @@ fn coalesce_udp_packets(
 /// event of a prepend as item's bufs index is already being tracked for writing
 /// to a Device.
 #[allow(clippy::too_many_arguments)]
-fn coalesce_tcp_packets(
+fn coalesce_tcp_packets<B: AsMutRefBytesMut>(
     mode: CanCoalesce,
     pkt: &[u8],
     pkt_bufs_index: usize,
@@ -607,18 +609,18 @@ fn coalesce_tcp_packets(
     seq: u32,
     psh_set: bool,
     item: &mut TcpGROItem,
-    bufs: &mut [&mut BytesMut],
+    bufs: &mut [B],
     bufs_offset: usize,
     is_v6: bool,
 ) -> CoalesceResult {
     let pkt_head: &[u8]; // the packet that will end up at the front
     let headers_len = (item.iph_len + item.tcph_len) as usize;
     let coalesced_len =
-        bufs[item.bufs_index as usize][bufs_offset..].len() + pkt.len() - headers_len;
+        bufs[item.bufs_index as usize].as_ref()[bufs_offset..].len() + pkt.len() - headers_len;
     // Copy data
     if mode == CanCoalesce::Prepend {
         pkt_head = pkt;
-        if bufs[pkt_bufs_index].capacity() < 2 * bufs_offset + coalesced_len {
+        if bufs[pkt_bufs_index].as_ref().capacity() < 2 * bufs_offset + coalesced_len {
             // We don't want to allocate a new underlying array if capacity is
             // too small.
             return CoalesceResult::InsufficientCap;
@@ -628,7 +630,7 @@ fn coalesce_tcp_packets(
         }
         if item.num_merged == 0
             && !checksum_valid(
-                &bufs[item.bufs_index as usize][bufs_offset..],
+                &bufs[item.bufs_index as usize].as_ref()[bufs_offset..],
                 item.iph_len,
                 IPPROTO_TCP as _,
                 is_v6,
@@ -641,9 +643,10 @@ fn coalesce_tcp_packets(
         }
         item.sent_seq = seq;
         let extend_by = coalesced_len - pkt_head.len();
-        bufs[pkt_bufs_index].resize(bufs[pkt_bufs_index].len() + extend_by, 0);
-        let src = bufs[item.bufs_index as usize][bufs_offset + headers_len..].as_ptr();
-        let dst = bufs[pkt_bufs_index][bufs_offset + pkt.len()..].as_mut_ptr();
+        let len = bufs[pkt_bufs_index].as_ref().len();
+        bufs[pkt_bufs_index].as_mut().resize(len + extend_by, 0);
+        let src = bufs[item.bufs_index as usize].as_ref()[bufs_offset + headers_len..].as_ptr();
+        let dst = bufs[pkt_bufs_index].as_mut()[bufs_offset + pkt.len()..].as_mut_ptr();
         unsafe {
             std::ptr::copy_nonoverlapping(src, dst, extend_by);
         }
@@ -652,14 +655,14 @@ fn coalesce_tcp_packets(
         bufs.swap(item.bufs_index as usize, pkt_bufs_index);
     } else {
         // pkt_head = &bufs[item.bufs_index as usize][bufs_offset..];
-        if bufs[item.bufs_index as usize].capacity() < 2 * bufs_offset + coalesced_len {
+        if bufs[item.bufs_index as usize].as_ref().capacity() < 2 * bufs_offset + coalesced_len {
             // We don't want to allocate a new underlying array if capacity is
             // too small.
             return CoalesceResult::InsufficientCap;
         }
         if item.num_merged == 0
             && !checksum_valid(
-                &bufs[item.bufs_index as usize][bufs_offset..],
+                &bufs[item.bufs_index as usize].as_ref()[bufs_offset..],
                 item.iph_len,
                 IPPROTO_TCP as _,
                 is_v6,
@@ -673,14 +676,16 @@ fn coalesce_tcp_packets(
         if psh_set {
             // We are appending a segment with PSH set.
             item.psh_set = psh_set;
-            bufs[item.bufs_index as usize]
+            bufs[item.bufs_index as usize].as_mut()
                 [bufs_offset + item.iph_len as usize + TCP_FLAGS_OFFSET] |= TCP_FLAG_PSH;
         }
         // https://github.com/WireGuard/wireguard-go/blob/12269c2761734b15625017d8565745096325392f/tun/offload_linux.go#L495
         // extendBy := len(pkt) - int(headersLen)
         // 		bufs[item.bufsIndex] = append(bufs[item.bufsIndex], make([]byte, extendBy)...)
         // 		copy(bufs[item.bufsIndex][bufsOffset+len(pktHead):], pkt[headersLen:])
-        bufs[item.bufs_index as usize].extend_from_slice(&pkt[headers_len..]);
+        bufs[item.bufs_index as usize]
+            .as_mut()
+            .extend_from_slice(&pkt[headers_len..]);
     }
 
     if gso_size > item.gso_size {
@@ -709,14 +714,14 @@ enum GroResult {
 /// action was taken, groResultTableInsert when the evaluated packet was
 /// inserted into table, and groResultCoalesced when the evaluated packet was
 /// coalesced with another packet in table.
-fn tcp_gro(
-    bufs: &mut [&mut BytesMut],
+fn tcp_gro<B: AsMutRefBytesMut>(
+    bufs: &mut [B],
     offset: usize,
     pkt_i: usize,
     table: &mut TcpGROTable,
     is_v6: bool,
 ) -> GroResult {
-    let pkt = unsafe { &*(&bufs[pkt_i][offset..] as *const [u8]) };
+    let pkt = unsafe { &*(&bufs[pkt_i].as_ref()[offset..] as *const [u8]) };
     if pkt.len() > u16::MAX as usize {
         // A valid IPv4 or IPv6 packet will never exceed this.
         return GroResult::Noop;
@@ -861,8 +866,8 @@ fn tcp_gro(
 
 /// applyTCPCoalesceAccounting updates bufs to account for coalescing based on the
 /// metadata found in table.
-pub fn apply_tcp_coalesce_accounting(
-    bufs: &mut [&mut BytesMut],
+pub fn apply_tcp_coalesce_accounting<B: AsMutRefBytesMut>(
+    bufs: &mut [B],
     offset: usize,
     table: &TcpGROTable,
 ) -> io::Result<()> {
@@ -877,7 +882,7 @@ pub fn apply_tcp_coalesce_accounting(
                     csum_offset: 16,
                     gso_type: 0, // Will be set later
                 };
-                let buf = &mut bufs[item.bufs_index as usize];
+                let buf = bufs[item.bufs_index as usize].as_mut();
                 let pkt = &mut buf[offset..];
                 let pkt_len = pkt.len();
 
@@ -928,7 +933,9 @@ pub fn apply_tcp_coalesce_accounting(
                 );
             } else {
                 let hdr = VirtioNetHdr::default();
-                hdr.encode(&mut bufs[item.bufs_index as usize][offset - VIRTIO_NET_HDR_LEN..])?;
+                hdr.encode(
+                    &mut bufs[item.bufs_index as usize].as_mut()[offset - VIRTIO_NET_HDR_LEN..],
+                )?;
             }
         }
     }
@@ -937,8 +944,8 @@ pub fn apply_tcp_coalesce_accounting(
 
 // applyUDPCoalesceAccounting updates bufs to account for coalescing based on the
 // metadata found in table.
-pub fn apply_udp_coalesce_accounting(
-    bufs: &mut [&mut BytesMut],
+pub fn apply_udp_coalesce_accounting<B: AsMutRefBytesMut>(
+    bufs: &mut [B],
     offset: usize,
     table: &UdpGROTable,
 ) -> io::Result<()> {
@@ -954,7 +961,7 @@ pub fn apply_udp_coalesce_accounting(
                     gso_type: VIRTIO_NET_HDR_GSO_UDP_L4,
                 };
 
-                let buf = &mut bufs[item.bufs_index as usize];
+                let buf = bufs[item.bufs_index as usize].as_mut();
                 let pkt = &mut buf[offset..];
                 let pkt_len = pkt.len();
 
@@ -1010,7 +1017,9 @@ pub fn apply_udp_coalesce_accounting(
                 );
             } else {
                 let hdr = VirtioNetHdr::default();
-                hdr.encode(&mut bufs[item.bufs_index as usize][offset - VIRTIO_NET_HDR_LEN..])?;
+                hdr.encode(
+                    &mut bufs[item.bufs_index as usize].as_mut()[offset - VIRTIO_NET_HDR_LEN..],
+                )?;
             }
         }
     }
@@ -1057,14 +1066,14 @@ const UDP_H_LEN: usize = 8;
 /// action was taken, groResultTableInsert when the evaluated packet was
 /// inserted into table, and groResultCoalesced when the evaluated packet was
 /// coalesced with another packet in table.
-fn udp_gro(
-    bufs: &mut [&mut BytesMut],
+fn udp_gro<B: AsMutRefBytesMut>(
+    bufs: &mut [B],
     offset: usize,
     pkt_i: usize,
     table: &mut UdpGROTable,
     is_v6: bool,
 ) -> GroResult {
-    let pkt = unsafe { &*(&bufs[pkt_i][offset..] as *const [u8]) };
+    let pkt = unsafe { &*(&bufs[pkt_i].as_ref()[offset..] as *const [u8]) };
     if pkt.len() > u16::MAX as usize {
         // A valid IPv4 or IPv6 packet will never exceed this.
         return GroResult::Noop;
@@ -1142,7 +1151,7 @@ fn udp_gro(
             _ => {}
         }
     }
-    let pkt = &bufs[pkt_i][offset..];
+    let pkt = &bufs[pkt_i].as_ref()[offset..];
     // Failed to coalesce; store the packet in the flow.
     table.insert(
         pkt,
@@ -1160,8 +1169,8 @@ fn udp_gro(
 /// empty (but non-nil), and are passed in to save allocs as the caller may reset
 /// and recycle them across vectors of packets. canUDPGRO indicates if UDP GRO is
 /// supported.
-pub fn handle_gro(
-    bufs: &mut [&mut BytesMut],
+pub fn handle_gro<B: AsMutRefBytesMut>(
+    bufs: &mut [B],
     offset: usize,
     tcp_table: &mut TcpGROTable,
     udp_table: &mut UdpGROTable,
@@ -1170,14 +1179,14 @@ pub fn handle_gro(
 ) -> io::Result<()> {
     let bufs_len = bufs.len();
     for i in 0..bufs_len {
-        if offset < VIRTIO_NET_HDR_LEN || offset > bufs[i].len() - 1 {
+        if offset < VIRTIO_NET_HDR_LEN || offset > bufs[i].as_ref().len() - 1 {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "invalid offset",
             ));
         }
 
-        let result = match packet_is_gro_candidate(&bufs[i][offset..], can_udp_gro) {
+        let result = match packet_is_gro_candidate(&bufs[i].as_ref()[offset..], can_udp_gro) {
             GroCandidateType::Tcp4GRO => tcp_gro(bufs, offset, i, tcp_table, false),
             GroCandidateType::Tcp6GRO => tcp_gro(bufs, offset, i, tcp_table, true),
             GroCandidateType::Udp4GRO => udp_gro(bufs, offset, i, udp_table, false),
@@ -1188,7 +1197,7 @@ pub fn handle_gro(
         match result {
             GroResult::Noop => {
                 let hdr = VirtioNetHdr::default();
-                hdr.encode(&mut bufs[i][offset - VIRTIO_NET_HDR_LEN..offset])?;
+                hdr.encode(&mut bufs[i].as_mut()[offset - VIRTIO_NET_HDR_LEN..offset])?;
                 // Fallthrough intended
                 to_write.push(i);
             }
@@ -1355,5 +1364,32 @@ impl GROTable {
         self.to_write.clear();
         self.tcp_gro_table.reset();
         self.udp_gro_table.reset();
+    }
+}
+
+pub trait AsMutRefBytesMut {
+    fn as_mut(&mut self) -> &mut BytesMut;
+    fn as_ref(&self) -> &BytesMut;
+}
+
+impl AsMutRefBytesMut for BytesMut {
+    #[inline]
+    fn as_mut(&mut self) -> &mut BytesMut {
+        self
+    }
+    #[inline]
+    fn as_ref(&self) -> &BytesMut {
+        self
+    }
+}
+
+impl AsMutRefBytesMut for &mut BytesMut {
+    #[inline]
+    fn as_mut(&mut self) -> &mut BytesMut {
+        self
+    }
+    #[inline]
+    fn as_ref(&self) -> &BytesMut {
+        self
     }
 }

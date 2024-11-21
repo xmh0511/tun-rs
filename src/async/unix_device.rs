@@ -5,8 +5,6 @@ use crate::platform::Device;
 use crate::platform::GROTable;
 use crate::r#async::async_device::AsyncFd;
 use crate::AbstractDevice;
-#[cfg(target_os = "linux")]
-use bytes::BytesMut;
 use std::io;
 use std::io::IoSlice;
 #[allow(unused_imports)]
@@ -114,10 +112,10 @@ impl AsyncDevice {
     /// GROTable can be reused, as it is used to assist in data merging.
     /// Offset is the starting position of the data. Need to meet offset>10.
     #[cfg(target_os = "linux")]
-    pub async fn send_multiple(
+    pub async fn send_multiple<B: crate::platform::AsMutRefBytesMut>(
         &self,
         gro_table: &mut GROTable,
-        bufs: &mut [&mut BytesMut],
+        bufs: &mut [B],
         mut offset: usize,
     ) -> io::Result<usize> {
         gro_table.reset();
@@ -141,7 +139,7 @@ impl AsyncDevice {
         let mut total = 0;
         let mut err = Ok(());
         for buf_idx in &gro_table.to_write {
-            match self.send(&bufs[*buf_idx][offset..]).await {
+            match self.send(&bufs[*buf_idx].as_ref()[offset..]).await {
                 Ok(n) => {
                     total += n;
                 }

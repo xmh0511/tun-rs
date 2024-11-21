@@ -5,7 +5,7 @@ use crate::platform::linux::offload::{
     VIRTIO_NET_HDR_GSO_NONE, VIRTIO_NET_HDR_GSO_TCPV4, VIRTIO_NET_HDR_GSO_TCPV6,
     VIRTIO_NET_HDR_GSO_UDP_L4, VIRTIO_NET_HDR_LEN,
 };
-use crate::platform::GROTable;
+use crate::platform::{AsMutRefBytesMut, GROTable};
 use crate::{
     configuration::{Configuration, Layer},
     device::{AbstractDevice, ETHER_ADDR_LEN},
@@ -14,7 +14,6 @@ use crate::{
     platform::posix::{ipaddr_to_sockaddr, sockaddr_union, Fd, Tun},
     IntoAddress,
 };
-use bytes::BytesMut;
 use libc::{
     self, c_char, c_short, ifreq, in6_ifreq, AF_INET, AF_INET6, ARPHRD_ETHER, IFF_MULTI_QUEUE,
     IFF_NO_PI, IFF_RUNNING, IFF_TAP, IFF_TUN, IFF_UP, IFNAMSIZ, O_RDWR, SOCK_DGRAM,
@@ -182,10 +181,10 @@ impl Device {
     /// send multiple fragmented data packets.
     /// GROTable can be reused, as it is used to assist in data merging.
     /// Offset is the starting position of the data. Need to meet offset>10.
-    pub fn send_multiple(
+    pub fn send_multiple<B: AsMutRefBytesMut>(
         &self,
         gro_table: &mut GROTable,
-        bufs: &mut [&mut BytesMut],
+        bufs: &mut [B],
         mut offset: usize,
     ) -> io::Result<usize> {
         gro_table.reset();
@@ -208,7 +207,7 @@ impl Device {
         let mut total = 0;
         let mut err = Ok(());
         for buf_idx in &gro_table.to_write {
-            match self.send(&bufs[*buf_idx][offset..]) {
+            match self.send(&bufs[*buf_idx].as_ref()[offset..]) {
                 Ok(n) => {
                     total += n;
                 }
