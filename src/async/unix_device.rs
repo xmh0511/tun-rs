@@ -75,10 +75,10 @@ impl AsyncDevice {
     /// bufs and sizes are used to store the segmented IP packets. bufs.len == sizes.len > 65535/MTU
     /// offset: Starting position
     #[cfg(target_os = "linux")]
-    pub async fn recv_multiple(
+    pub async fn recv_multiple<B: AsRef<[u8]> + AsMut<[u8]>>(
         &self,
         original_buffer: &mut [u8],
-        bufs: &mut [&mut [u8]],
+        bufs: &mut [B],
         sizes: &mut [usize],
         offset: usize,
     ) -> io::Result<usize> {
@@ -105,7 +105,7 @@ impl AsyncDevice {
                 offset,
             )
         } else {
-            let len = self.recv(bufs[0]).await?;
+            let len = self.recv(bufs[0].as_mut()).await?;
             sizes[0] = len;
             Ok(1)
         }

@@ -1209,10 +1209,10 @@ pub fn handle_gro(
 /// gsoSplit splits packets from in into outBuffs, writing the size of each
 /// element into sizes. It returns the number of buffers populated, and/or an
 /// error.
-pub fn gso_split(
+pub fn gso_split<B: AsRef<[u8]> + AsMut<[u8]>>(
     input: &mut [u8],
     hdr: VirtioNetHdr,
-    out_bufs: &mut [&mut [u8]],
+    out_bufs: &mut [B],
     sizes: &mut [usize],
     out_offset: usize,
     is_v6: bool,
@@ -1256,7 +1256,7 @@ pub fn gso_split(
         let total_len = hdr.hdr_len as usize + segment_data_len;
 
         sizes[i] = total_len;
-        let out = &mut out_bufs[i][out_offset..];
+        let out = &mut out_bufs[i].as_mut()[out_offset..];
 
         out[..iph_len].copy_from_slice(&input[..iph_len]);
 
@@ -1297,6 +1297,7 @@ pub fn gso_split(
         }
 
         out[hdr.hdr_len as usize..total_len]
+            .as_mut()
             .copy_from_slice(&input[next_segment_data_at..next_segment_end]);
 
         let transport_header_len = (hdr.hdr_len - hdr.csum_start) as usize;

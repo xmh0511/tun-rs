@@ -44,8 +44,6 @@ async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
     let mut original_buffer = vec![0; VIRTIO_NET_HDR_LEN + 65535];
     let num = 65535 / 1500 + 1;
     let mut bufs = vec![vec![0u8; 1500]; num];
-    let mut slices: Vec<&mut [u8]> = bufs.iter_mut().map(|inner| &mut inner[..]).collect();
-    let bufs: &mut [&mut [u8]] = &mut slices;
     let mut sizes = vec![0; num];
     let mut gro_table = GROTable::default();
     loop {
@@ -54,7 +52,7 @@ async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
                 println!("Quit...");
                 break;
             }
-            num = dev.recv_multiple(&mut original_buffer,bufs,&mut sizes,0) => {
+            num = dev.recv_multiple(&mut original_buffer,&mut bufs,&mut sizes,0) => {
                 let num = num?;
                 for i in 0..num  {
                     match ip::Packet::new(&bufs[i][..sizes[i]]) {
