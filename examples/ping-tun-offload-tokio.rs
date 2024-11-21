@@ -1,7 +1,9 @@
+#[allow(unused_imports)]
 use bytes::BytesMut;
 #[allow(unused_imports)]
 use packet::{builder::Builder, icmp, ip, Packet};
 use tokio::sync::mpsc::Receiver;
+#[cfg(target_os = "linux")]
 use tun_rs::platform::{GROTable, VIRTIO_NET_HDR_LEN};
 #[allow(unused_imports)]
 use tun_rs::{self, AbstractDevice, BoxError, Configuration};

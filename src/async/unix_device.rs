@@ -1,5 +1,16 @@
+#[cfg(target_os = "linux")]
+use crate::platform::offload::{handle_gro, VirtioNetHdr, VIRTIO_NET_HDR_LEN};
+use crate::platform::Device;
+#[cfg(target_os = "linux")]
+use crate::platform::GROTable;
+use crate::r#async::async_device::AsyncFd;
+use crate::AbstractDevice;
+#[cfg(target_os = "linux")]
+use bytes::BytesMut;
 use std::io;
 use std::io::IoSlice;
+#[allow(unused_imports)]
+use std::net::IpAddr;
 #[cfg(any(
     target_os = "linux",
     target_os = "macos",
@@ -9,15 +20,6 @@ use std::io::IoSlice;
     target_os = "android"
 ))]
 use std::os::fd::{FromRawFd, RawFd};
-
-use crate::platform::{Device, GROTable};
-use crate::AbstractDevice;
-
-use crate::platform::offload::{handle_gro, VirtioNetHdr, VIRTIO_NET_HDR_LEN};
-use crate::r#async::async_device::AsyncFd;
-use bytes::BytesMut;
-#[allow(unused_imports)]
-use std::net::IpAddr;
 
 /// An async TUN device wrapper around a TUN device.
 pub struct AsyncDevice {
