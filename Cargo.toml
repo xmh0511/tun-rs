@@ -1,6 +1,6 @@
 [package]
 name = "tun-rs"
-version = "1.4.5"
+version = "1.4.6"
 edition = "2021"
 authors = ["xmh0511, vnt-dev"]
 license = "Apache-2.0"
