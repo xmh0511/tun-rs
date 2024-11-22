@@ -112,7 +112,7 @@ impl AsyncDevice {
     /// GROTable can be reused, as it is used to assist in data merging.
     /// Offset is the starting position of the data. Need to meet offset>10.
     #[cfg(target_os = "linux")]
-    pub async fn send_multiple<B: crate::platform::AsMutRefBytesMut>(
+    pub async fn send_multiple<B: crate::platform::ExpandBuffer>(
         &self,
         gro_table: &mut GROTable,
         bufs: &mut [B],

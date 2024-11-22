@@ -5,7 +5,7 @@ use crate::platform::linux::offload::{
     VIRTIO_NET_HDR_GSO_NONE, VIRTIO_NET_HDR_GSO_TCPV4, VIRTIO_NET_HDR_GSO_TCPV6,
     VIRTIO_NET_HDR_GSO_UDP_L4, VIRTIO_NET_HDR_LEN,
 };
-use crate::platform::{AsMutRefBytesMut, GROTable};
+use crate::platform::{ExpandBuffer, GROTable};
 use crate::{
     configuration::{Configuration, Layer},
     device::{AbstractDevice, ETHER_ADDR_LEN},
@@ -181,7 +181,7 @@ impl Device {
     /// send multiple fragmented data packets.
     /// GROTable can be reused, as it is used to assist in data merging.
     /// Offset is the starting position of the data. Need to meet offset>10.
-    pub fn send_multiple<B: AsMutRefBytesMut>(
+    pub fn send_multiple<B: ExpandBuffer>(
         &self,
         gro_table: &mut GROTable,
         bufs: &mut [B],
