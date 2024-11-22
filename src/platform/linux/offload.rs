@@ -1273,8 +1273,7 @@ pub fn gso_split<B: AsRef<[u8]> + AsMut<[u8]>>(
             // updating the total len field, and recalculating the header
             // checksum.
             if i > 0 {
-                let mut id = BigEndian::read_u16(&out[4..]);
-                id += i as u16;
+                let id = BigEndian::read_u16(&out[4..]).wrapping_add(i as u16);
                 BigEndian::write_u16(&mut out[4..6], id);
             }
             BigEndian::write_u16(&mut out[2..4], total_len as u16);
