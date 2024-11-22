@@ -14,7 +14,8 @@ pub const VIRTIO_NET_HDR_GSO_TCPV6: u8 = 4;
 pub const VIRTIO_NET_HDR_GSO_UDP_L4: u8 = 5;
 
 /// https://github.com/WireGuard/wireguard-go/blob/master/conn/conn.go#L19
-const IDEAL_BATCH_SIZE: usize = 128;
+/// maximum number of packets handled per read and write
+pub const IDEAL_BATCH_SIZE: usize = 128;
 
 const TCP_FLAGS_OFFSET: usize = 13;
 

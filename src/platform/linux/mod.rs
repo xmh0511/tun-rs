@@ -6,6 +6,7 @@ pub(crate) mod offload;
 pub use device::Device;
 pub use offload::AsMutRefBytesMut;
 pub use offload::GROTable;
+pub use offload::IDEAL_BATCH_SIZE;
 pub use offload::VIRTIO_NET_HDR_LEN;
 use std::os::fd::RawFd;
 
