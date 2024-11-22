@@ -55,8 +55,17 @@ impl VirtioNetHdr {
         if buf.len() < VIRTIO_NET_HDR_LEN {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "too short"));
         }
-        let hdr: &VirtioNetHdr = unsafe { &*(buf.as_ptr() as *const VirtioNetHdr) };
-        Ok(*hdr)
+        let mut hdr = std::mem::MaybeUninit::<VirtioNetHdr>::uninit();
+        unsafe {
+            // Safety:
+            // hdr is written by `buf`, both pointers satisfy the alignment requirement of `u8`
+            std::ptr::copy_nonoverlapping(
+                buf.as_ptr(),
+                hdr.as_mut_ptr() as *mut _,
+                std::mem::size_of::<VirtioNetHdr>(),
+            );
+            Ok(hdr.assume_init())
+        }
     }
     pub fn encode(&self, buf: &mut [u8]) -> io::Result<()> {
         if buf.len() < VIRTIO_NET_HDR_LEN {
