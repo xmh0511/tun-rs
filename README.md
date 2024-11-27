@@ -7,7 +7,7 @@ Tun/Tap interfaces
 This crate allows the creation and usage of Tun/Tap interfaces(**supporting both Ipv4 and ipv6**), aiming to make this cross-platform.
 
 ## Features:
-1. Supporting TUN and TAP(macOS only support TUN)
+1. Supporting TUN and TAP(macOS only supports TUN)
 2. Supporting both IPv4 and IPv6
 3. Supporting Synchronous and Asynchronous API
 4. Supporting Tokio and async-std asynchronous runtimes
