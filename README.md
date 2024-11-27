@@ -1,13 +1,15 @@
-Tun/Tap interfaces 
+Tun/Tap interfaces
 ==============
 [![Crates.io](https://img.shields.io/crates/v/tun-rs.svg)](https://crates.io/crates/tun-rs)
 ![tun-rs](https://docs.rs/tun-rs/badge.svg)
 ![Apache-2.0](https://img.shields.io/github/license/xmh0511/tun-rs?style=flat)
 
-This crate allows the creation and usage of Tun/Tap interfaces(**supporting both Ipv4 and ipv6**), aiming to make this cross-platform.
+This crate allows the creation and usage of Tun/Tap interfaces(**supporting both Ipv4 and ipv6**), aiming to make this
+cross-platform.
 
 ## Features:
-1. Supporting TUN and TAP(macOS only supports TUN)
+
+1. Supporting TUN and TAP
 2. Supporting both IPv4 and IPv6
 3. Supporting Synchronous and Asynchronous API
 4. Supporting Tokio and async-std asynchronous runtimes
@@ -18,12 +20,14 @@ This crate allows the creation and usage of Tun/Tap interfaces(**supporting both
 
 ## Supported Platforms
 
-- [x] Windows
-- [x] Linux
-- [x] macOS
-- [x] FreeBSD
-- [x] Android
-- [x] iOS
+| Platform | TUN | TAP |
+|----------|-----|-----|
+| Windows  | ✅   | ✅   |
+| Linux    | ✅   | ✅   |
+| macOS    | ✅   | ⬜   |
+| FreeBSD  | ✅   | ✅   |
+| Android  | ✅   | ⬜   |
+| iOS      | ✅   | ⬜   |
 
 Usage
 -----
@@ -34,7 +38,8 @@ First, add the following to your `Cargo.toml`:
 tun_rs = "1"
 ```
 
-If you want to use the TUN interface with asynchronous runtimes, you need to enable the `async`(aliased as `async_tokio`), or `async_std` feature:
+If you want to use the TUN interface with asynchronous runtimes, you need to enable the `async`(aliased
+as `async_tokio`), or `async_std` feature:
 
 ```toml
 [dependencies]
@@ -60,10 +65,10 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
     let dev = tun_rs::create(&config)?;
     // let shared = Arc::new(dev);
     dev.add_address_v6(
-	  "CDCD:910A:2222:5498:8475:1111:3900:2024"
-           .parse::<IpAddr>()
-           .unwrap(),
-              64
+        "CDCD:910A:2222:5498:8475:1111:3900:2024"
+            .parse::<IpAddr>()
+            .unwrap(),
+        64
     )?;
     //dev_t.remove_network_address(vec![(ip,prefix)])?;
     let mut buf = [0; 4096];
@@ -75,7 +80,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
 }
 ```
 
-An example of asynchronously reading packets from an interface  
+An example of asynchronously reading packets from an interface
 
 ````rust
 #[tokio::main]
@@ -89,8 +94,8 @@ async fn main(mut quit: Receiver<()>) -> Result<(), BoxError> {
 
     let dev = Arc::new(tun_rs::create_as_async(&config)?);
     // ignore the head 4bytes packet information for calling `recv` and `send` on macOS
-    #[cfg(target_os="macos")]
-    dev.set_ignore_packet_info(true);  
+    #[cfg(target_os = "macos")]
+    dev.set_ignore_packet_info(true);
 
     let mut buf = vec![0; 1500];
     loop {
@@ -103,18 +108,17 @@ async fn main(mut quit: Receiver<()>) -> Result<(), BoxError> {
 ````
 
 **Offload** is supported on the Linux platform, enable it via the config
+
 ````rust
 #[cfg(target_os = "linux")]
 config
-    .platform_config(|config| {
-       config.offload(true);
-    });
+.platform_config( | config| {
+config.offload(true);
+});
 ````
+
 1. [Synchronous example](https://github.com/xmh0511/tun-rs/blob/main/examples/read-offload.rs)
 2. [Asynchronous example](https://github.com/xmh0511/tun-rs/blob/main/examples/ping-tun-offload-tokio.rs)
-
-
-
 
 Linux
 -----
@@ -123,7 +127,8 @@ interfaces.
 
 macOS & FreeBSD
 -----
-`tun-rs` will automatically set up a route according to the provided configuration, which does a similar thing like this:
+`tun-rs` will automatically set up a route according to the provided configuration, which does a similar thing like
+this:
 > sudo route -n add -net 10.0.0.0/24 10.0.0.1
 
 
@@ -132,6 +137,7 @@ iOS
 You can pass the file descriptor of the TUN device to `tun-rs` to create the interface.
 
 Here is an example to create the TUN device on iOS and pass the `fd` to `tun-rs`:
+
 ```swift
 // Swift
 class PacketTunnelProvider: NEPacketTunnelProvider {
@@ -154,10 +160,10 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
 pub extern "C" fn start_tun(fd: std::os::raw::c_int) {
     let mut rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async {
-		// This is safe if the provided fd is valid
-        let tun = unsafe{tun_rs::AsyncDevice::from_raw_fd(fd)};
-        let mut buf = [0u8;1500];
-        while let Ok(packet) = tun.recv(& mut buf).await {
+        // This is safe if the provided fd is valid
+        let tun = unsafe { tun_rs::AsyncDevice::from_raw_fd(fd) };
+        let mut buf = [0u8; 1500];
+        while let Ok(packet) = tun.recv(&mut buf).await {
             ...
         }
     });
@@ -166,9 +172,13 @@ pub extern "C" fn start_tun(fd: std::os::raw::c_int) {
 
 Windows
 -----
+
 #### Tun:
-You need to copy the [wintun.dll](https://wintun.net/) file which matches your architecture to 
+
+You need to copy the [wintun.dll](https://wintun.net/) file which matches your architecture to
 the same directory as your executable and run your program as administrator.
 
 #### Tap:
-When using the tap network interface, you need to manually install [tap-windows](https://build.openvpn.net/downloads/releases/) that matches your architecture.
+
+When using the tap network interface, you need to manually
+install [tap-windows](https://build.openvpn.net/downloads/releases/) that matches your architecture.
