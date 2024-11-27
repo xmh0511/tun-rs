@@ -14,6 +14,7 @@ This crate allows the creation and usage of Tun/Tap interfaces(**supporting both
 5. All platforms have consistent IP packets(macOS's 4-byte head information can be eliminated)
 6. Experimentally supporting shutdown for Synchronous version
 7. Supporting Offload on the Linux platform
+8. Having a consistent behavior of setting up routes when creating a device
 
 ## Supported Platforms
 
