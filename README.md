@@ -11,9 +11,9 @@ This crate allows the creation and usage of Tun/Tap interfaces(**supporting both
 2. Supporting both IPv4 and IPv6
 3. Supporting Synchronous and Asynchronous API
 4. Supporting Tokio and async-std asynchronous runtimes
-5. All platforms have consistent IP packets(macOS's 4-byte head information can be eliminated).
+5. All platforms have consistent IP packets(macOS's 4-byte head information can be eliminated)
 6. Experimentally supporting shutdown for Synchronous version
-7. Supporting Offload on the Linux platform.
+7. Supporting Offload on the Linux platform
 
 ## Supported Platforms
 
