@@ -28,6 +28,7 @@ fn main_entry(_quit: Receiver<()>) -> Result<(), BoxError> {
 fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     #[allow(unused_imports)]
     use std::net::IpAddr;
+    use tun_rs::platform::{IDEAL_BATCH_SIZE, VIRTIO_NET_HDR_LEN};
 
     let mut config = tun_rs::Configuration::default();
 
@@ -43,13 +44,11 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     let dev = Arc::new(tun_rs::create(&config)?);
     println!("if_index = {:?}", dev.if_index());
     let _join = std::thread::spawn(move || {
-        let mut buf = [0; 10 + 65535];
-        let mut bufs = vec![vec![0u8; 1500]; 65535 / 1500 + 1];
-        let mut sizes = vec![0; 65535 / 1500 + 1];
-        let mut slices: Vec<&mut [u8]> = bufs.iter_mut().map(|inner| &mut inner[..]).collect();
-        let bufs: &mut [&mut [u8]] = &mut slices;
+        let mut original_buffer = [0; VIRTIO_NET_HDR_LEN + 65535];
+        let mut bufs = vec![vec![0u8; 1500]; IDEAL_BATCH_SIZE];
+        let mut sizes = vec![0; IDEAL_BATCH_SIZE];
         loop {
-            let amount = dev.recv_multiple(&mut buf, bufs, &mut sizes, 0)?;
+            let amount = dev.recv_multiple(&mut original_buffer, &mut bufs, &mut sizes, 0)?;
             for i in 0..amount {
                 let len = sizes[i];
                 println!("index={i},len={len},data={:?}", &bufs[i][0..len]);

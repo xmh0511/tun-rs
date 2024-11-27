@@ -4,7 +4,7 @@ use bytes::BytesMut;
 use packet::{builder::Builder, icmp, ip, Packet};
 use tokio::sync::mpsc::Receiver;
 #[cfg(target_os = "linux")]
-use tun_rs::platform::{GROTable, VIRTIO_NET_HDR_LEN};
+use tun_rs::platform::{GROTable, IDEAL_BATCH_SIZE, VIRTIO_NET_HDR_LEN};
 #[allow(unused_imports)]
 use tun_rs::{self, AbstractDevice, BoxError, Configuration};
 
@@ -42,9 +42,8 @@ async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
     println!("TCP-GSO:{},UDP-GSO:{}", dev.tcp_gso(), dev.udp_gso());
 
     let mut original_buffer = vec![0; VIRTIO_NET_HDR_LEN + 65535];
-    let num = 65535 / 1500 + 1;
-    let mut bufs = vec![vec![0u8; 1500]; num];
-    let mut sizes = vec![0; num];
+    let mut bufs = vec![vec![0u8; 1500]; IDEAL_BATCH_SIZE];
+    let mut sizes = vec![0; IDEAL_BATCH_SIZE];
     let mut gro_table = GROTable::default();
     loop {
         tokio::select! {
