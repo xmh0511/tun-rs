@@ -4,8 +4,26 @@ Tun/Tap interfaces
 ![tun-rs](https://docs.rs/tun-rs/badge.svg)
 ![Apache-2.0](https://img.shields.io/github/license/xmh0511/tun-rs?style=flat)
 
-This crate allows the creation and usage of Tun/Tap interfaces(**supporting both Ipv4 and ipv6**), the aim is to make this cross-platform.
+This crate allows the creation and usage of Tun/Tap interfaces(**supporting both Ipv4 and ipv6**), aiming to make this cross-platform.
 
+## Features:
+1. Supporting TUN and TAP(macOS only supports TUN)
+2. Supporting both IPv4 and IPv6
+3. Supporting Synchronous and Asynchronous API
+4. Supporting Tokio and async-std asynchronous runtimes
+5. All platforms have consistent IP packets(macOS's 4-byte head information can be eliminated)
+6. Experimentally supporting shutdown for Synchronous version
+7. Supporting Offload on the Linux platform
+8. Having a consistent behavior of setting up routes when creating a device
+
+## Supported Platforms
+
+- [x] Windows
+- [x] Linux
+- [x] macOS
+- [x] FreeBSD
+- [x] Android
+- [x] iOS
 
 Usage
 -----
@@ -84,16 +102,18 @@ async fn main(mut quit: Receiver<()>) -> Result<(), BoxError> {
 }
 ````
 
-Platforms
-=========
-## Supported Platforms
+**Offload** is supported on the Linux platform, enable it via the config
+````rust
+#[cfg(target_os = "linux")]
+config
+    .platform_config(|config| {
+       config.offload(true);
+    });
+````
+1. [Synchronous example](https://github.com/xmh0511/tun-rs/blob/main/examples/read-offload.rs)
+2. [Asynchronous example](https://github.com/xmh0511/tun-rs/blob/main/examples/ping-tun-offload-tokio.rs)
 
-- [x] Windows
-- [x] Linux
-- [x] macOS
-- [x] FreeBSD
-- [x] Android
-- [x] iOS
+
 
 
 Linux
@@ -151,4 +171,4 @@ You need to copy the [wintun.dll](https://wintun.net/) file which matches your a
 the same directory as your executable and run your program as administrator.
 
 #### Tap:
-You need to manually install [tap-windows](https://build.openvpn.net/downloads/releases/) that matches your architecture when using tap network interface.
+When using the tap network interface, you need to manually install [tap-windows](https://build.openvpn.net/downloads/releases/) that matches your architecture.
