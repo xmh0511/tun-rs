@@ -6,6 +6,23 @@ Tun/Tap interfaces
 
 This crate allows the creation and usage of Tun/Tap interfaces(**supporting both Ipv4 and ipv6**), aiming to make this cross-platform.
 
+## Features:
+1. Supporting TUN and TAP(macOS only support TUN)
+2. Supporting both IPv4 and IPv6
+3. Supporting Synchronous and Asynchronous API
+4. Supporting Tokio and async-std asynchronous runtimes
+5. All platforms have consistent IP packets(macOS's 4-byte head information can be eliminated).
+6. Experimentally supporting shutdown for Synchronous version
+7. Supporting Offload on the Linux platform.
+
+## Supported Platforms
+
+- [x] Windows
+- [x] Linux
+- [x] macOS
+- [x] FreeBSD
+- [x] Android
+- [x] iOS
 
 Usage
 -----
@@ -95,16 +112,7 @@ config
 1. [Synchronous example](https://github.com/xmh0511/tun-rs/blob/main/examples/read-offload.rs)
 2. [Asynchronous example](https://github.com/xmh0511/tun-rs/blob/main/examples/ping-tun-offload-tokio.rs)
 
-Platforms
-=========
-## Supported Platforms
 
-- [x] Windows
-- [x] Linux
-- [x] macOS
-- [x] FreeBSD
-- [x] Android
-- [x] iOS
 
 
 Linux
@@ -162,4 +170,4 @@ You need to copy the [wintun.dll](https://wintun.net/) file which matches your a
 the same directory as your executable and run your program as administrator.
 
 #### Tap:
-You need to manually install [tap-windows](https://build.openvpn.net/downloads/releases/) that matches your architecture when using tap network interface.
+When using the tap network interface, you need to manually install [tap-windows](https://build.openvpn.net/downloads/releases/) that matches your architecture.
