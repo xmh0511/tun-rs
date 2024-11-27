@@ -4,7 +4,7 @@ Tun/Tap interfaces
 ![tun-rs](https://docs.rs/tun-rs/badge.svg)
 ![Apache-2.0](https://img.shields.io/github/license/xmh0511/tun-rs?style=flat)
 
-This crate allows the creation and usage of Tun/Tap interfaces(**supporting both Ipv4 and ipv6**), the aim is to make this cross-platform.
+This crate allows the creation and usage of Tun/Tap interfaces(**supporting both Ipv4 and ipv6**), aiming to make this cross-platform.
 
 
 Usage
@@ -83,6 +83,17 @@ async fn main(mut quit: Receiver<()>) -> Result<(), BoxError> {
     Ok(())
 }
 ````
+
+**Offload** is supported on the Linux platform, enable it via the config
+````rust
+#[cfg(target_os = "linux")]
+config
+    .platform_config(|config| {
+       config.offload(true);
+    });
+````
+1. [Synchronous example](https://github.com/xmh0511/tun-rs/blob/main/examples/read-offload.rs)
+2. [Asynchronous example](https://github.com/xmh0511/tun-rs/blob/main/examples/ping-tun-offload-tokio.rs)
 
 Platforms
 =========
