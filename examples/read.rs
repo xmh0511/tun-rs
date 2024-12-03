@@ -46,6 +46,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
             ("CDCD:910A:2222:5498:8475:1111:3900:2020", 64),
             ("10.0.0.2", 24u8),
         ])
+        .name("tun66")
         //.destination((10, 0, 0, 1))
         .up();
 

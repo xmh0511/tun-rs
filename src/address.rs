@@ -58,7 +58,7 @@ impl IntoAddress for str {
     }
 }
 
-impl<'a> IntoAddress for &'a str {
+impl IntoAddress for &str {
     fn into_address(&self) -> Result<IpAddr> {
         (*self).into_address()
     }
@@ -70,7 +70,7 @@ impl IntoAddress for String {
     }
 }
 
-impl<'a> IntoAddress for &'a String {
+impl IntoAddress for &String {
     fn into_address(&self) -> Result<IpAddr> {
         self.as_str().into_address()
     }
@@ -82,7 +82,7 @@ impl IntoAddress for Ipv4Addr {
     }
 }
 
-impl<'a> IntoAddress for &'a Ipv4Addr {
+impl IntoAddress for &Ipv4Addr {
     fn into_address(&self) -> Result<IpAddr> {
         (*self).into_address()
     }
@@ -98,7 +98,7 @@ impl IntoAddress for IpAddr {
     }
 }
 
-impl<'a> IntoAddress for &'a IpAddr {
+impl IntoAddress for &IpAddr {
     fn into_address(&self) -> Result<IpAddr> {
         (*self).into_address()
     }
@@ -110,7 +110,7 @@ impl IntoAddress for SocketAddrV4 {
     }
 }
 
-impl<'a> IntoAddress for &'a SocketAddrV4 {
+impl IntoAddress for &SocketAddrV4 {
     fn into_address(&self) -> Result<IpAddr> {
         (*self).into_address()
     }
@@ -126,7 +126,7 @@ impl IntoAddress for SocketAddr {
     }
 }
 
-impl<'a> IntoAddress for &'a SocketAddr {
+impl IntoAddress for &SocketAddr {
     fn into_address(&self) -> Result<IpAddr> {
         (*self).into_address()
     }

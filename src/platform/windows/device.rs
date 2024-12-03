@@ -6,10 +6,10 @@ use wintun::{load_from_path, Packet, Session};
 use crate::configuration::{configure, Configuration};
 use crate::device::{AbstractDevice, ETHER_ADDR_LEN};
 use crate::error::Result;
-use crate::getifaddrs::Interface;
 use crate::platform::windows::netsh;
 use crate::platform::windows::tap::TapDevice;
 use crate::{IntoAddress, Layer};
+use getifaddrs::Interface;
 use std::net::IpAddr;
 
 pub enum Driver {
@@ -247,7 +247,7 @@ impl Device {
         )
     }
     pub fn get_all_adapter_address(&self) -> Result<Vec<Interface>, crate::Error> {
-        crate::getifaddrs::windows::get_adapters_addresses()
+        Ok(getifaddrs::getifaddrs()?.collect())
     }
 }
 

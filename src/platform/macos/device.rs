@@ -13,8 +13,8 @@ use crate::{
 
 //const OVERWRITE_SIZE: usize = std::mem::size_of::<libc::__c_anonymous_ifr_ifru>();
 
-use crate::getifaddrs::{self, Interface};
 use crate::platform::Tun;
+use getifaddrs::{self, Interface};
 use libc::{
     self, c_char, c_short, c_uint, c_void, sockaddr, socklen_t, AF_INET, AF_INET6, AF_SYSTEM,
     AF_SYS_CONTROL, IFF_RUNNING, IFF_UP, IFNAMSIZ, PF_SYSTEM, SOCK_DGRAM, SYSPROTO_CONTROL,
@@ -154,7 +154,7 @@ impl Device {
         let addr_ = addr.address;
         let netmask = addr.netmask?;
         let dest = addr
-            .dest_addr
+            .associated_address
             .unwrap_or(self.calc_dest_addr(addr_, netmask).ok()?);
         Some(Route {
             addr: addr_,

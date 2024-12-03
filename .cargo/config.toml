@@ -16,5 +16,5 @@ protocol = "sparse"
 [target.'cfg(unix)']
 runner = 'sudo -E'
 
-[target.'cfg(windows)']
-runner = "powershell -Command Start-Process -Verb runAs -FilePath"
+# [target.'cfg(windows)']
+# runner = "powershell -Command Start-Process -Verb runAs -FilePath"
