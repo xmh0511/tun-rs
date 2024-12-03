@@ -149,7 +149,7 @@ impl Device {
         let device = if layer == Layer::L3 {
             let wintun_file = &config.platform_config.wintun_file;
             let wintun = unsafe { load_from_path(wintun_file)? };
-
+            let mut attempts = 0;
             let adapter = loop {
                 let default_name = format!("tun{count}");
                 let name = config.name.as_deref().unwrap_or(&default_name);
@@ -167,7 +167,17 @@ impl Device {
                         if guid.is_none() {
                             guid.replace(hash_name(name));
                         }
-                        break wintun::Adapter::create(&wintun, name, name, guid)?;
+                        match wintun::Adapter::create(&wintun, name, name, guid) {
+                            Ok(adapter) => break adapter,
+                            Err(e) => {
+                                if attempts > 3 {
+                                    Err(e)?
+                                } else {
+                                    count += 1;
+                                    attempts += 1;
+                                }
+                            }
+                        }
                     }
                 }
             };
