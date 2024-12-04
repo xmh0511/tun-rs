@@ -1,6 +1,6 @@
 [package]
 name = "tun-rs"
-version = "1.4.9"
+version = "1.5.0"
 edition = "2021"
 authors = ["xmh0511, vnt-dev"]
 license = "Apache-2.0"
@@ -55,7 +55,7 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_LibraryLoader",
     "Win32_NetworkManagement_IpHelper",
 ] }
-wintun = { version = "0.7", features = ["panic_on_unsent_packets"], package = "wintun-bindings" }
+wintun = { version = "0.7.19", features = ["panic_on_unsent_packets"], package = "wintun-bindings" }
 libloading = "0.8"
 
 
