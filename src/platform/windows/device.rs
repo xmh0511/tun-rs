@@ -440,67 +440,30 @@ pub struct Tun {
 }
 
 impl Tun {
-    pub fn get_session(&self) -> Arc<Session> {
-        self.session.clone()
+    pub fn get_session(&self) -> &Session {
+        &self.session
     }
-    fn read_by_ref(&self, mut buf: &mut [u8]) -> io::Result<usize> {
-        match self.session.receive_blocking() {
-            Ok(pkt) => match io::copy(&mut pkt.bytes(), &mut buf) {
-                Ok(n) => Ok(n as usize),
-                Err(e) => Err(e),
-            },
-            Err(e) => Err(io::Error::new(io::ErrorKind::ConnectionAborted, e)),
-        }
+    fn read_by_ref(&self, buf: &mut [u8]) -> io::Result<usize> {
+        self.session.recv(buf)
     }
-    fn try_read_by_ref(&self, mut buf: &mut [u8]) -> io::Result<usize> {
-        match self.session.try_receive() {
-            Ok(Some(pkt)) => match io::copy(&mut pkt.bytes(), &mut buf) {
-                Ok(n) => Ok(n as usize),
-                Err(e) => Err(e),
-            },
-            Ok(None) => Err(io::Error::from(io::ErrorKind::WouldBlock)),
-            Err(e) => Err(io::Error::new(io::ErrorKind::ConnectionAborted, e)),
-        }
+    fn try_read_by_ref(&self, buf: &mut [u8]) -> io::Result<usize> {
+        self.session.try_recv(buf)
     }
-    fn write_by_ref(&self, mut buf: &[u8]) -> io::Result<usize> {
-        let size = buf.len();
-        match self.session.allocate_send_packet(size as u16) {
-            Err(e) => match e {
-                // if (GetLastError() != ERROR_BUFFER_OVERFLOW) // Silently drop packets if the ring is full
-                wintun::Error::Io(io_err) => Err(io_err),
-                e => Err(io::Error::new(io::ErrorKind::Other, format!("{}", e))),
-            },
-            Ok(mut packet) => match io::copy(&mut buf, &mut packet.bytes_mut()) {
-                Ok(s) => {
-                    self.session.send_packet(packet);
-                    Ok(s as usize)
+    fn write_by_ref(&self, buf: &[u8]) -> io::Result<usize> {
+        self.session.send(buf)
+    }
+    fn try_write_by_ref(&self, buf: &[u8]) -> io::Result<usize> {
+        match self.session.send(buf) {
+            Err(e) => {
+                if e.raw_os_error().unwrap_or(0)
+                    == windows_sys::Win32::Foundation::ERROR_BUFFER_OVERFLOW as i32
+                {
+                    Err(io::Error::from(io::ErrorKind::WouldBlock))
+                } else {
+                    Err(e)
                 }
-                Err(e) => Err(e),
-            },
-        }
-    }
-    fn try_write_by_ref(&self, mut buf: &[u8]) -> io::Result<usize> {
-        let size = buf.len();
-        match self.session.allocate_send_packet(size as u16) {
-            Err(e) => match e {
-                wintun::Error::Io(io_err) => {
-                    if io_err.raw_os_error().unwrap_or(0)
-                        == windows_sys::Win32::Foundation::ERROR_BUFFER_OVERFLOW as i32
-                    {
-                        Err(io::Error::from(io::ErrorKind::WouldBlock))
-                    } else {
-                        Err(io_err)
-                    }
-                }
-                e => Err(io::Error::new(io::ErrorKind::Other, format!("{}", e))),
-            },
-            Ok(mut packet) => match io::copy(&mut buf, &mut packet.bytes_mut()) {
-                Ok(s) => {
-                    self.session.send_packet(packet);
-                    Ok(s as usize)
-                }
-                Err(e) => Err(e),
-            },
+            }
+            Ok(len) => Ok(len),
         }
     }
 }
