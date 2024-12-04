@@ -440,8 +440,8 @@ pub struct Tun {
 }
 
 impl Tun {
-    pub fn get_session(&self) -> &Session {
-        &self.session
+    pub fn get_session(&self) -> Arc<Session> {
+        self.session.clone()
     }
     fn read_by_ref(&self, buf: &mut [u8]) -> io::Result<usize> {
         self.session.recv(buf)
