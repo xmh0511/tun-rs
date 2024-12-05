@@ -75,6 +75,7 @@ impl Device {
                 | if queues_num > 1 { iff_multi_queue } else { 0 }
                 | if offload { iff_vnet_hdr } else { 0 };
 
+            #[allow(clippy::manual_c_str_literals)]
             let fd = libc::open(b"/dev/net/tun\0".as_ptr() as *const _, O_RDWR);
             let tun_fd = Fd::new(fd, true)?;
             if let Err(err) = tunsetiff(tun_fd.inner, &mut req as *mut _ as *mut _) {
