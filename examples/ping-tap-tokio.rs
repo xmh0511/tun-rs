@@ -131,8 +131,8 @@ pub fn arp(packet: &mut ether::Packet<&mut Vec<u8>>) -> Result<bool, BoxError> {
     Ok(true)
 }
 
-/// 地址解析协议，由IP地址找到MAC地址
-/// https://www.ietf.org/rfc/rfc6747.txt
+// 地址解析协议，由IP地址找到MAC地址
+// https://www.ietf.org/rfc/rfc6747.txt
 /*
   0      2       4         5          6      8      10  (字节)
  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+

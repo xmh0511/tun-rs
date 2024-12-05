@@ -18,13 +18,13 @@ async fn main() -> Result<(), BoxError> {
 async fn main_entry() -> Result<(), BoxError> {
     unimplemented!()
 }
+
 #[cfg(any(
     target_os = "windows",
     target_os = "linux",
     target_os = "macos",
     target_os = "freebsd",
 ))]
-
 async fn main_entry() -> Result<(), BoxError> {
     let mut config = tun_rs::Configuration::default();
 
