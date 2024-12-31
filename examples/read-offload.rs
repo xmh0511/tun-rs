@@ -35,6 +35,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     config
         .address_with_prefix("10.0.0.2", 24u8)
         .platform_config(|config| {
+            // After enabling the offload, you need to use recv_multiple and send_multiple to read and write data.
             config.offload(true);
         })
         .mtu(1500)

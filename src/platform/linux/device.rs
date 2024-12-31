@@ -181,7 +181,7 @@ impl Device {
     }
     /// send multiple fragmented data packets.
     /// GROTable can be reused, as it is used to assist in data merging.
-    /// Offset is the starting position of the data. Need to meet offset>10.
+    /// Offset is the starting position of the data. Need to meet offset>=10.
     pub fn send_multiple<B: ExpandBuffer>(
         &self,
         gro_table: &mut GROTable,
