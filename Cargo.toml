@@ -38,7 +38,7 @@ nix = { version = "0.29", features = ["ioctl"] }
 encoding_rs = "0.8.34"
 
 scopeguard = "1.2.0"
-winreg = "0.52.0"
+winreg = "0.53.0"
 c2rust-bitfields = "0.19"
 windows-sys = { version = "0.59", features = [
     "Win32_Devices_DeviceAndDriverInstallation",
