@@ -28,10 +28,11 @@ async fn main_entry(_quit: Receiver<()>) -> Result<(), BoxError> {
     target_os = "freebsd",
 ))]
 async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
+    log::info!("starting");
     let mut config = Configuration::default();
 
     config
-        .address_with_prefix((10, 0, 0, 9), 24)
+        .address_with_prefix((10, 0, 0, 39), 24)
         // will add 0.0.0.0 to interface on windows platform, which route all traffic here
         //.destination((10, 0, 0, 1))
         .up();
@@ -42,6 +43,7 @@ async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
     });
 
     let dev = tun_rs::create_as_async(&config)?;
+    log::info!("Successfully created tun {:?}", dev.name());
     #[cfg(target_os = "macos")]
     dev.set_ignore_packet_info(true);
 
@@ -50,7 +52,7 @@ async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
     loop {
         tokio::select! {
             _ = quit.recv() => {
-                println!("Quit...");
+                log::info!("Quit...");
                 break;
             }
             len = dev.recv(&mut buf) => {
@@ -59,7 +61,7 @@ async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
                     Ok(ip::Packet::V4(pkt)) => {
                         if let Ok(icmp) = icmp::Packet::new(pkt.payload()) {
                             if let Ok(icmp) = icmp.echo() {
-                                println!("{:?} - {:?}", icmp.sequence(), pkt.destination());
+                                log::info!("{:?} - {:?}", icmp.sequence(), pkt.destination());
                                 let reply = ip::v4::Builder::default()
                                     .id(0x42)?
                                     .ttl(64)?
@@ -76,7 +78,7 @@ async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
                             }
                         }
                     }
-                    Err(err) => println!("Received an invalid packet: {:?}", err),
+                    Err(err) => log::info!("Received an invalid packet: {:?}", err),
                     _ => {}
                 }
             }

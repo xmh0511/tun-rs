@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::io;
 use std::sync::Arc;
 
@@ -8,8 +9,9 @@ use crate::device::{AbstractDevice, ETHER_ADDR_LEN};
 use crate::error::Result;
 use crate::platform::windows::netsh;
 use crate::platform::windows::tap::TapDevice;
-use crate::{IntoAddress, Layer};
+use crate::{Error, IntoAddress, Layer};
 use getifaddrs::Interface;
+use network_interface::NetworkInterfaceConfig;
 use std::net::IpAddr;
 
 pub enum Driver {
@@ -147,37 +149,39 @@ impl Device {
         let mut count = 0;
 
         let device = if layer == Layer::L3 {
+            let interfaces = network_interface::NetworkInterface::show().map_err(|e| {
+                Error::String(format!(
+                    "Failed to retrieve the network interface list. {e:?}"
+                ))
+            })?;
+            let interfaces: HashSet<String> = interfaces.into_iter().map(|v| v.name).collect();
             let wintun_file = &config.platform_config.wintun_file;
             let wintun = unsafe { load_from_path(wintun_file)? };
             let mut attempts = 0;
             let adapter = loop {
                 let default_name = format!("tun{count}");
+                count += 1;
                 let name = config.name.as_deref().unwrap_or(&default_name);
 
-                match wintun::Adapter::open(&wintun, name) {
-                    Ok(a) => {
-                        if config.name.is_none() {
-                            count += 1;
-                            continue;
-                        }
-                        break a;
+                if interfaces.contains(name) {
+                    if config.name.is_none() {
+                        continue;
                     }
-                    Err(_e) => {
-                        let mut guid = config.platform_config.device_guid;
-                        if guid.is_none() {
-                            guid.replace(hash_name(name));
+                    Err(Error::String(format!(
+                        "The network adapter [{name}] already exists."
+                    )))?
+                }
+                let mut guid = config.platform_config.device_guid;
+                if guid.is_none() {
+                    guid.replace(hash_name(name));
+                }
+                match wintun::Adapter::create(&wintun, name, name, guid) {
+                    Ok(adapter) => break adapter,
+                    Err(e) => {
+                        if attempts > 3 {
+                            Err(e)?
                         }
-                        match wintun::Adapter::create(&wintun, name, name, guid) {
-                            Ok(adapter) => break adapter,
-                            Err(e) => {
-                                if attempts > 3 {
-                                    Err(e)?
-                                } else {
-                                    count += 1;
-                                    attempts += 1;
-                                }
-                            }
-                        }
+                        attempts += 1;
                     }
                 }
             };

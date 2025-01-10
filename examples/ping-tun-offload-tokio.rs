@@ -32,6 +32,7 @@ async fn main_entry(mut quit: Receiver<()>) -> Result<(), BoxError> {
     config
         .address_with_prefix((10, 0, 0, 9), 24)
         .platform_config(|config| {
+            // After enabling the offload, you need to use recv_multiple and send_multiple to read and write data.
             config.offload(true);
         })
         .mtu(1500)

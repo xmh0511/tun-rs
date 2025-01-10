@@ -126,6 +126,19 @@ impl Configuration {
         target_os = "macos",
         target_os = "freebsd"
     ))]
+    pub fn address_with_netmask<A: IntoAddress>(&mut self, value: A, netmask: A) -> &mut Self {
+        let address = value.into_address().unwrap();
+        let netmask = netmask.into_address().unwrap();
+        let prefix = ipnet::ip_mask_to_prefix(netmask).unwrap();
+        self.address_with_prefix(address, prefix)
+    }
+    /// Set the address.
+    #[cfg(any(
+        target_os = "windows",
+        target_os = "linux",
+        target_os = "macos",
+        target_os = "freebsd"
+    ))]
     pub fn address_with_prefix_multi<A: IntoAddress>(&mut self, values: &[(A, u8)]) -> &mut Self {
         let mut address_mask_v4 = None;
         let mut address_mask_v6 = Vec::new();
@@ -255,9 +268,7 @@ pub(crate) fn configure<D: AbstractDevice>(
         target_os = "freebsd",
         target_os = "windows"
     ))]
-    if let Some(enabled) = config.enabled {
-        device.enabled(enabled)?;
-    }
+    device.enabled(config.enabled.unwrap_or(true))?;
     _ = device;
     _ = config;
     Ok(())
