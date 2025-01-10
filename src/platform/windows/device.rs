@@ -160,11 +160,11 @@ impl Device {
             let mut attempts = 0;
             let adapter = loop {
                 let default_name = format!("tun{count}");
+                count += 1;
                 let name = config.name.as_deref().unwrap_or(&default_name);
 
                 if interfaces.contains(name) {
                     if config.name.is_none() {
-                        count += 1;
                         continue;
                     }
                     Err(Error::String(format!(
@@ -180,10 +180,8 @@ impl Device {
                     Err(e) => {
                         if attempts > 3 {
                             Err(e)?
-                        } else {
-                            count += 1;
-                            attempts += 1;
                         }
+                        attempts += 1;
                     }
                 }
             };
