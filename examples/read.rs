@@ -1,12 +1,13 @@
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::sync::mpsc::Receiver;
 #[allow(unused_imports)]
 use std::sync::Arc;
-#[allow(unused_imports)]
-use tun_rs::{AbstractDevice, BoxError};
-
+use tun_rs::DeviceBuilder;
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
 #[allow(unused_imports)]
 use tun_rs::Layer;
+#[allow(unused_imports)]
+use tun_rs::{AbstractDevice, BoxError};
 
 fn main() -> Result<(), BoxError> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("trace")).init();
@@ -36,21 +37,17 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     #[allow(unused_imports)]
     use std::net::IpAddr;
 
-    let mut config = tun_rs::Configuration::default();
+    let dev = Arc::new(
+        DeviceBuilder::new()
+            .name("utun6")
+            .ipv4((Ipv4Addr::new(10, 0, 0, 2), 24, None))
+            .ipv6(vec![(
+                "CDCD:910A:2222:5498:8475:1111:3900:2020".parse().unwrap(),
+                64,
+            )])
+            .build_sync()?,
+    );
 
-    // #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
-    // config.layer(Layer::L2);
-
-    config
-        .address_with_prefix_multi(&[
-            ("CDCD:910A:2222:5498:8475:1111:3900:2020", 64),
-            ("10.0.0.2", 24u8),
-        ])
-        .name("tun66")
-        //.destination((10, 0, 0, 1))
-        .up();
-
-    let dev = Arc::new(tun_rs::create(&config)?);
     println!("if_index = {:?}", dev.if_index());
     let dev_t = dev.clone();
     let _join = std::thread::spawn(move || {
@@ -62,36 +59,5 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
         #[allow(unreachable_code)]
         Ok::<(), BoxError>(())
     });
-    //dev_t.set_network_address((10, 0, 0, 88), (255, 255, 255, 0), None)?;
-    // dev_t.set_network_address(
-    //     "CDCD:910A:2222:5498:8475:1111:3900:2024"
-    //         .parse::<IpAddr>()
-    //         .unwrap(),
-    //     "ffff:ffff:ffff:ffff::".parse::<IpAddr>().unwrap(),
-    //     None,
-    // )?;
-    dev_t.add_address_v6(
-        "CDCD:910A:2222:5498:8475:1111:3900:2024"
-            .parse::<IpAddr>()
-            .unwrap(),
-        64,
-    )?;
-    // dev_t.add_address_v6(
-    //     "CDCD:910A:2222:5498:8475:1111:3900:2020"
-    //         .parse::<IpAddr>()
-    //         .unwrap(),
-    //     64,
-    // )?;
-    std::thread::sleep(std::time::Duration::from_secs(6));
-    dev_t.remove_network_address(vec![(
-        "CDCD:910A:2222:5498:8475:1111:3900:2024"
-            .parse::<IpAddr>()
-            .unwrap(),
-        64,
-    )])?;
-    quit.recv().expect("Quit error.");
-    println!("recv quit!!!!!");
-    println!("{:#?}", dev_t.addresses()?);
-    dev_t.enabled(false)?;
     Ok(())
 }

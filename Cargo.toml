@@ -87,31 +87,3 @@ experimental = []
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
-[[example]]
-name = "read-async-tokio"
-required-features = ["async_tokio"]
-
-[[example]]
-name = "read-async-std"
-required-features = ["async_std"]
-
-
-[[example]]
-name = "ping-tun-tokio"
-required-features = ["async_tokio"]
-
-[[example]]
-name = "ping-tun-async-std"
-required-features = ["async_std"]
-
-[[example]]
-name = "ping-tap-tokio"
-required-features = ["async_tokio"]
-
-[[example]]
-name = "ping-tap-async-std"
-required-features = ["async_std"]
-
-[[example]]
-name = "ping-tun-offload-tokio"
-required-features = ["async_tokio"]
