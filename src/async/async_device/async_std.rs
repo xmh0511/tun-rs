@@ -11,6 +11,18 @@ impl AsyncFd {
     pub fn into_device(self) -> io::Result<Device> {
         self.0.into_inner()
     }
+    pub async fn readable(&self) -> io::Result<()> {
+        self.0.readable().await
+    }
+    pub fn poll_readable<'a>(&'a self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        self.0.poll_readable(cx)
+    }
+    pub async fn writable(&self) -> io::Result<()> {
+        self.0.writable().await
+    }
+    pub fn poll_writable<'a>(&'a self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        self.0.poll_writable(cx)
+    }
     pub async fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
         self.0.read_with(|device| device.recv(buf)).await
     }

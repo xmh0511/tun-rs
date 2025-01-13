@@ -17,6 +17,7 @@ use std::os::fd::IntoRawFd;
     target_os = "android"
 ))]
 use std::os::fd::{FromRawFd, RawFd};
+use std::task::{Context, Poll};
 
 /// An async TUN device wrapper around a TUN device.
 pub struct AsyncDevice {
@@ -51,7 +52,18 @@ impl AsyncDevice {
     pub fn into_fd(self) -> io::Result<RawFd> {
         Ok(self.inner.into_device()?.into_raw_fd())
     }
-
+    pub async fn readable(&self) -> io::Result<()> {
+        self.inner.readable().await
+    }
+    pub fn poll_readable<'a>(&'a self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        self.inner.poll_readable(cx)
+    }
+    pub async fn writable(&self) -> io::Result<()> {
+        self.inner.writable().await
+    }
+    pub fn poll_writable<'a>(&'a self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        self.inner.poll_writable(cx)
+    }
     /// Recv a packet from tun device
     pub async fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
         self.inner.recv(buf).await

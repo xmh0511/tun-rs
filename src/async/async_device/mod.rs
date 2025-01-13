@@ -23,6 +23,24 @@ impl AsyncFd {
     pub fn into_device(self) -> std::io::Result<crate::platform::Device> {
         unreachable!()
     }
+    pub async fn readable(&self) -> std::io::Result<()> {
+        unreachable!()
+    }
+    pub fn poll_readable<'a>(
+        &'a self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        unreachable!()
+    }
+    pub async fn writable(&self) -> std::io::Result<()> {
+        unreachable!()
+    }
+    pub fn poll_writable<'a>(
+        &'a self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        unreachable!()
+    }
     pub async fn recv(&self, _buf: &mut [u8]) -> std::io::Result<usize> {
         unreachable!()
     }
