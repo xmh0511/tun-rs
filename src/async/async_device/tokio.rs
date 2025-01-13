@@ -13,6 +13,9 @@ impl AsyncFd {
         device.set_nonblock()?;
         Ok(Self(TokioAsyncFd::new(device)?))
     }
+    pub fn into_device(self) -> io::Result<Device> {
+        Ok(self.0.into_inner())
+    }
     pub async fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
         self.0
             .async_io(Interest::READABLE.add(Interest::ERROR), |device| {

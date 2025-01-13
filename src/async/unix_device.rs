@@ -8,6 +8,7 @@ use std::io;
 use std::io::IoSlice;
 #[allow(unused_imports)]
 use std::net::IpAddr;
+use std::os::fd::IntoRawFd;
 #[cfg(any(
     target_os = "linux",
     target_os = "macos",
@@ -27,6 +28,11 @@ impl FromRawFd for AsyncDevice {
         AsyncDevice::from_fd(fd).unwrap()
     }
 }
+impl IntoRawFd for AsyncDevice {
+    fn into_raw_fd(self) -> RawFd {
+        self.into_fd().unwrap()
+    }
+}
 
 impl AsyncDevice {
     /// Create a new `AsyncDevice` wrapping around a `Device`.
@@ -41,6 +47,9 @@ impl AsyncDevice {
     /// Construct a AsyncDevice from an existing file descriptor
     pub unsafe fn from_fd(fd: RawFd) -> io::Result<AsyncDevice> {
         AsyncDevice::new(Device::from_fd(fd)?)
+    }
+    pub fn into_fd(self) -> io::Result<RawFd> {
+        Ok(self.inner.into_device()?.into_raw_fd())
     }
 
     /// Recv a packet from tun device

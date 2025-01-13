@@ -20,6 +20,9 @@ impl AsyncFd {
     pub fn new(_device: crate::platform::Device) -> std::io::Result<Self> {
         unreachable!()
     }
+    pub fn into_device(self) -> std::io::Result<crate::platform::Device> {
+        unreachable!()
+    }
     pub async fn recv(&self, _buf: &mut [u8]) -> std::io::Result<usize> {
         unreachable!()
     }

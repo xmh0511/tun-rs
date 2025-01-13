@@ -8,6 +8,9 @@ impl AsyncFd {
     pub fn new(device: Device) -> io::Result<Self> {
         Ok(Self(Async::new(device)?))
     }
+    pub fn into_device(self) -> io::Result<Device> {
+        self.0.into_inner()
+    }
     pub async fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
         self.0.read_with(|device| device.recv(buf)).await
     }
