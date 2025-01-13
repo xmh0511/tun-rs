@@ -50,7 +50,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
             //     "CDCD:910A:2222:5498:8475:1111:3900:2021".parse().unwrap(),
             //     "FFFF:FFFF:FFFF:FFFF:0000:0000:0000:0000".parse::<Ipv6Addr>().unwrap(),
             // )
-            // .ipv6_tup(vec![( "CDCD:910A:2222:5498:8475:1111:3900:2022".parse().unwrap(),64),
+            // .ipv6_tuple(vec![( "CDCD:910A:2222:5498:8475:1111:3900:2022".parse().unwrap(),64),
             //                ( "CDCD:910A:2222:5498:8475:1111:3900:2023".parse().unwrap(),64)])
             .build_sync()?,
     );

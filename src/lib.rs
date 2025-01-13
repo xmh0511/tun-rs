@@ -78,13 +78,19 @@ impl DeviceBuilder {
 
         self
     }
-    pub fn ipv6_tup<Netmask: ToIpv6Netmask>(mut self, addrs: Vec<(Ipv6Addr, Netmask)>) -> Self {
-        self.ipv6 = Some(
-            addrs
-                .into_iter()
-                .map(|(ip, mask)| (ip, mask.prefix()))
-                .collect(),
-        );
+    pub fn ipv6_tuple<Netmask: ToIpv6Netmask>(mut self, addrs: Vec<(Ipv6Addr, Netmask)>) -> Self {
+        if let Some(v) = &mut self.ipv6 {
+            for (address, mask) in addrs {
+                v.push((address, mask.prefix()));
+            }
+        } else {
+            self.ipv6 = Some(
+                addrs
+                    .into_iter()
+                    .map(|(ip, mask)| (ip, mask.prefix()))
+                    .collect(),
+            );
+        }
         self
     }
     pub fn layer(mut self, layer: Layer) -> Self {
