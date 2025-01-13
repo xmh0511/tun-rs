@@ -1,7 +1,6 @@
 #[allow(unused_imports)]
 use crate::address::IntoAddress;
 use crate::platform::PlatformConfig;
-use crate::AbstractDevice;
 #[allow(unused_imports)]
 use std::net::IpAddr;
 
@@ -15,7 +14,7 @@ pub enum Layer {
 
 /// Configuration builder for a TUN interface.
 #[derive(Clone, Default, Debug)]
-pub struct Configuration {
+pub(crate) struct Configuration {
     #[cfg(any(
         target_os = "windows",
         target_os = "linux",
@@ -226,12 +225,11 @@ impl Configuration {
     }
 }
 
+use super::Device;
+
 /// Reconfigure the device.
 #[allow(dead_code)]
-pub(crate) fn configure<D: AbstractDevice>(
-    device: &D,
-    config: &Configuration,
-) -> crate::error::Result<()> {
+pub(crate) fn configure(device: &Device, config: &Configuration) -> crate::error::Result<()> {
     #[cfg(any(
         target_os = "windows",
         target_os = "linux",

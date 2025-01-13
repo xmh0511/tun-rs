@@ -8,7 +8,6 @@ mod address;
 pub use crate::address::IntoAddress;
 
 mod device;
-pub use crate::device::AbstractDevice;
 
 mod configuration;
 use crate::configuration::Configuration;
@@ -31,7 +30,7 @@ pub const DEFAULT_MTU: u16 = 0xFFFF; // 65535
 
 pub const PACKET_INFORMATION_LENGTH: usize = 4;
 
-use crate::platform::Device;
+pub use crate::platform::Device;
 pub use ::getifaddrs;
 
 pub struct DeviceBuilder {

@@ -43,20 +43,17 @@ pub use self::windows::*;
 ))]
 #[cfg(test)]
 mod test {
-    use crate::configuration::Configuration;
-    use crate::device::AbstractDevice;
+    use crate::DeviceBuilder;
     use std::net::Ipv4Addr;
 
     #[test]
     fn create() {
-        let dev = super::create(
-            Configuration::default()
-                .name("utun6")
-                .address_with_prefix("192.168.50.1", 24)
-                .mtu(crate::DEFAULT_MTU)
-                .up(),
-        )
-        .unwrap();
+        let dev = DeviceBuilder::new()
+            .name("utun6")
+            .ipv4("192.168.50.1".parse().unwrap(), 24, None)
+            .mtu(crate::DEFAULT_MTU)
+            .build_sync()
+            .unwrap();
 
         assert!(dev
             .addresses()

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use wintun::{load_from_path, Packet, Session};
 
 use crate::configuration::{configure, Configuration};
-use crate::device::{AbstractDevice, ETHER_ADDR_LEN};
+use crate::device::ETHER_ADDR_LEN;
 use crate::error::Result;
 use crate::platform::windows::netsh;
 use crate::platform::windows::tap::TapDevice;
@@ -263,10 +263,8 @@ impl Device {
     pub fn get_all_adapter_address(&self) -> Result<Vec<Interface>, crate::Error> {
         Ok(getifaddrs::getifaddrs()?.collect())
     }
-}
 
-impl AbstractDevice for Device {
-    fn name(&self) -> Result<String> {
+    pub fn name(&self) -> Result<String> {
         driver_case!(
             &self.driver;
             tun=>{
@@ -278,7 +276,7 @@ impl AbstractDevice for Device {
         )
     }
 
-    fn set_name(&self, value: &str) -> Result<()> {
+    pub fn set_name(&self, value: &str) -> Result<()> {
         driver_case!(
             &self.driver;
             tun=>{
@@ -291,11 +289,11 @@ impl AbstractDevice for Device {
         Ok(())
     }
 
-    fn if_index(&self) -> Result<u32> {
+    pub fn if_index(&self) -> Result<u32> {
         self.driver.index()
     }
 
-    fn enabled(&self, value: bool) -> Result<()> {
+    pub fn enabled(&self, value: bool) -> Result<()> {
         driver_case!(
             &self.driver;
             tun=>{
@@ -314,7 +312,7 @@ impl AbstractDevice for Device {
         Ok(())
     }
 
-    fn addresses(&self) -> Result<Vec<Interface>> {
+    pub fn addresses(&self) -> Result<Vec<Interface>> {
         driver_case!(
             &self.driver;
             tun=>{
@@ -330,7 +328,7 @@ impl AbstractDevice for Device {
         )
     }
 
-    fn set_network_address<A: IntoAddress>(
+    pub fn set_network_address<A: IntoAddress>(
         &self,
         address: A,
         netmask: A,
@@ -360,7 +358,7 @@ impl AbstractDevice for Device {
         Ok(())
     }
 
-    fn remove_network_address(&self, addrs: Vec<(IpAddr, u8)>) -> Result<()> {
+    pub fn remove_network_address(&self, addrs: Vec<(IpAddr, u8)>) -> Result<()> {
         for addr in addrs {
             if let Err(e) = netsh::delete_interface_ip(self.driver.index()?, addr.0) {
                 return Err(crate::Error::String(e.to_string()));
@@ -369,7 +367,7 @@ impl AbstractDevice for Device {
         Ok(())
     }
 
-    fn add_address_v6(&self, addr: IpAddr, prefix: u8) -> Result<()> {
+    pub fn add_address_v6(&self, addr: IpAddr, prefix: u8) -> Result<()> {
         if !addr.is_ipv6() {
             return Err(crate::Error::InvalidAddress);
         }
@@ -381,7 +379,7 @@ impl AbstractDevice for Device {
     }
 
     /// The return value is always `Ok(65535)` due to wintun
-    fn mtu(&self) -> Result<u16> {
+    pub fn mtu(&self) -> Result<u16> {
         driver_case!(
               &self.driver;
             tun=>{
@@ -396,7 +394,7 @@ impl AbstractDevice for Device {
     }
 
     /// This setting has no effect since the mtu of wintun is always 65535
-    fn set_mtu(&self, mtu: u16) -> Result<()> {
+    pub fn set_mtu(&self, mtu: u16) -> Result<()> {
         driver_case!(
             &self.driver;
             tun=>{
@@ -409,7 +407,7 @@ impl AbstractDevice for Device {
         )
     }
 
-    fn set_mac_address(&self, eth_addr: [u8; ETHER_ADDR_LEN as usize]) -> Result<()> {
+    pub fn set_mac_address(&self, eth_addr: [u8; ETHER_ADDR_LEN as usize]) -> Result<()> {
         driver_case!(
             &self.driver;
             _tun=>{
@@ -421,7 +419,7 @@ impl AbstractDevice for Device {
         )
     }
 
-    fn get_mac_address(&self) -> Result<[u8; ETHER_ADDR_LEN as usize]> {
+    pub fn mac_address(&self) -> Result<[u8; ETHER_ADDR_LEN as usize]> {
         driver_case!(
             &self.driver;
             _tun=>{
@@ -433,7 +431,7 @@ impl AbstractDevice for Device {
         )
     }
 
-    fn set_metric(&self, metric: u16) -> Result<()> {
+    pub fn set_metric(&self, metric: u16) -> Result<()> {
         netsh::set_interface_metric(self.if_index()?, metric)?;
         Ok(())
     }

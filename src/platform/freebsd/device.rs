@@ -1,6 +1,6 @@
 use crate::{
     configuration::{Configuration, Layer},
-    device::{AbstractDevice, ETHER_ADDR_LEN},
+    device::ETHER_ADDR_LEN,
     error::{Error, Result},
     platform::freebsd::sys::*,
     platform::posix::{self, sockaddr_union, Fd, Tun},
@@ -310,10 +310,8 @@ impl Device {
     //     }
     //     Ok(())
     // }
-}
 
-impl AbstractDevice for Device {
-    fn name(&self) -> Result<String> {
+    pub fn name(&self) -> Result<String> {
         use std::path::PathBuf;
         unsafe {
             let mut path_info: kinfo_file = std::mem::zeroed();
@@ -334,7 +332,7 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_name(&self, value: &str) -> Result<()> {
+    pub fn set_name(&self, value: &str) -> Result<()> {
         use std::ffi::CString;
         unsafe {
             if value.len() > IFNAMSIZ {
@@ -356,13 +354,13 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn if_index(&self) -> Result<u32> {
+    pub fn if_index(&self) -> Result<u32> {
         let if_name = self.name()?;
         let index = Self::get_if_index(&if_name)?;
         Ok(index)
     }
 
-    fn enabled(&self, value: bool) -> Result<()> {
+    pub fn enabled(&self, value: bool) -> Result<()> {
         unsafe {
             let mut req = self.request()?;
             let ctl = ctl()?;
@@ -384,7 +382,7 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn addresses(&self) -> Result<Vec<Interface>> {
+    pub fn addresses(&self) -> Result<Vec<Interface>> {
         let if_name = self.name()?;
         let addrs = getifaddrs::getifaddrs()?;
         let ifs = addrs
@@ -420,7 +418,7 @@ impl AbstractDevice for Device {
     //     }
     // }
 
-    fn mtu(&self) -> Result<u16> {
+    pub fn mtu(&self) -> Result<u16> {
         unsafe {
             let mut req = self.request()?;
 
@@ -435,7 +433,7 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_mtu(&self, value: u16) -> Result<()> {
+    pub fn set_mtu(&self, value: u16) -> Result<()> {
         unsafe {
             let mut req = self.request()?;
             req.ifr_ifru.ifru_mtu = value as i32;
@@ -447,7 +445,7 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_network_address<A: IntoAddress>(
+    pub fn set_network_address<A: IntoAddress>(
         &self,
         address: A,
         netmask: A,
@@ -463,7 +461,7 @@ impl AbstractDevice for Device {
         Ok(())
     }
 
-    fn remove_network_address(&self, addrs: Vec<(IpAddr, u8)>) -> Result<()> {
+    pub fn remove_network_address(&self, addrs: Vec<(IpAddr, u8)>) -> Result<()> {
         unsafe {
             for addr in addrs {
                 match addr.0 {
@@ -487,7 +485,7 @@ impl AbstractDevice for Device {
         Ok(())
     }
 
-    fn add_address_v6(&self, addr: IpAddr, prefix: u8) -> Result<()> {
+    pub fn add_address_v6(&self, addr: IpAddr, prefix: u8) -> Result<()> {
         if !addr.is_ipv6() {
             return Err(Error::InvalidAddress);
         }
@@ -514,7 +512,7 @@ impl AbstractDevice for Device {
         Ok(())
     }
 
-    fn set_mac_address(&self, eth_addr: [u8; ETHER_ADDR_LEN as usize]) -> Result<()> {
+    pub fn set_mac_address(&self, eth_addr: [u8; ETHER_ADDR_LEN as usize]) -> Result<()> {
         unsafe {
             let mut req = self.request()?;
             req.ifr_ifru.ifru_addr.sa_len = ETHER_ADDR_LEN;
@@ -528,7 +526,7 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn get_mac_address(&self) -> Result<[u8; ETHER_ADDR_LEN as usize]> {
+    pub fn mac_address(&self) -> Result<[u8; ETHER_ADDR_LEN as usize]> {
         let mac = mac_address_by_name(&self.name()?)
             .map_err(|e| io::Error::other(e.to_string()))?
             .ok_or(Error::InvalidConfig)?;

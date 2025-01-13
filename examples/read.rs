@@ -3,12 +3,12 @@ use std::sync::mpsc::Receiver;
 #[allow(unused_imports)]
 use std::sync::Arc;
 
+#[allow(unused_imports)]
+use tun_rs::BoxError;
 use tun_rs::DeviceBuilder;
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
 #[allow(unused_imports)]
 use tun_rs::Layer;
-#[allow(unused_imports)]
-use tun_rs::{AbstractDevice, BoxError};
 
 fn main() -> Result<(), BoxError> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("trace")).init();

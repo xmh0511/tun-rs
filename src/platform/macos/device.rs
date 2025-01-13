@@ -2,7 +2,6 @@
 
 use crate::{
     configuration::Configuration,
-    device::AbstractDevice,
     error::{Error, Result},
     platform::{
         macos::sys::*,
@@ -348,10 +347,8 @@ impl Device {
     //         Ok(())
     //     }
     // }
-}
 
-impl AbstractDevice for Device {
-    fn name(&self) -> Result<String> {
+    pub fn name(&self) -> Result<String> {
         let mut tun_name = [0u8; 64];
         let mut name_len: socklen_t = 64;
 
@@ -374,13 +371,13 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn if_index(&self) -> Result<u32> {
+    pub fn if_index(&self) -> Result<u32> {
         let if_name = self.name()?;
         let index = Self::get_if_index(&if_name)?;
         Ok(index)
     }
 
-    fn enabled(&self, value: bool) -> Result<()> {
+    pub fn enabled(&self, value: bool) -> Result<()> {
         unsafe {
             let ctl = ctl()?;
             let mut req = self.request()?;
@@ -403,7 +400,7 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn addresses(&self) -> Result<Vec<Interface>> {
+    pub fn addresses(&self) -> Result<Vec<Interface>> {
         let if_name = self.name()?;
         let addrs = getifaddrs::getifaddrs()?;
         let ifs = addrs
@@ -442,7 +439,7 @@ impl AbstractDevice for Device {
     //     }
     // }
 
-    fn mtu(&self) -> Result<u16> {
+    pub fn mtu(&self) -> Result<u16> {
         unsafe {
             let ctl = ctl()?;
             let mut req = self.request()?;
@@ -458,7 +455,7 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_mtu(&self, value: u16) -> Result<()> {
+    pub fn set_mtu(&self, value: u16) -> Result<()> {
         unsafe {
             let ctl = ctl()?;
             let mut req = self.request()?;
@@ -471,7 +468,7 @@ impl AbstractDevice for Device {
         }
     }
 
-    fn set_network_address<A: IntoAddress>(
+    pub fn set_network_address<A: IntoAddress>(
         &self,
         address: A,
         netmask: A,
@@ -487,7 +484,7 @@ impl AbstractDevice for Device {
         Ok(())
     }
 
-    fn remove_network_address(&self, addrs: Vec<(IpAddr, u8)>) -> Result<()> {
+    pub fn remove_network_address(&self, addrs: Vec<(IpAddr, u8)>) -> Result<()> {
         unsafe {
             for addr in addrs {
                 match addr.0 {
@@ -511,7 +508,7 @@ impl AbstractDevice for Device {
         Ok(())
     }
 
-    fn add_address_v6(&self, addr: IpAddr, prefix: u8) -> Result<()> {
+    pub fn add_address_v6(&self, addr: IpAddr, prefix: u8) -> Result<()> {
         if !addr.is_ipv6() {
             return Err(Error::InvalidAddress);
         }
@@ -538,11 +535,11 @@ impl AbstractDevice for Device {
         Ok(())
     }
 
-    fn ignore_packet_info(&self) -> bool {
+    pub fn ignore_packet_info(&self) -> bool {
         self.tun.ignore_packet_info()
     }
 
-    fn set_ignore_packet_info(&self, ign: bool) {
+    pub fn set_ignore_packet_info(&self, ign: bool) {
         self.tun.set_ignore_packet_info(ign)
     }
 }
