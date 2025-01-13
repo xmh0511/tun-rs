@@ -26,7 +26,7 @@ impl IntoRawFd for Device {
 }
 impl Device {
     pub fn from_fd(fd: RawFd) -> std::io::Result<Self> {
-        let tun = Fd::new(fd, true)?;
+        let tun = Fd::new(fd)?;
         Ok(Device::from_tun(Tun::new(tun)))
     }
     /// Set non-blocking mode

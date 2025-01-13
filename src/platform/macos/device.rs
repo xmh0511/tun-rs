@@ -36,10 +36,10 @@ pub struct Device {
 }
 
 unsafe fn ctl() -> io::Result<Fd> {
-    Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)
+    Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0))
 }
 unsafe fn ctl_v6() -> io::Result<Fd> {
-    Fd::new(libc::socket(AF_INET6, SOCK_DGRAM, 0), true)
+    Fd::new(libc::socket(AF_INET6, SOCK_DGRAM, 0))
 }
 impl Device {
     /// Create a new `Device` for the given `Configuration`.
@@ -61,7 +61,7 @@ impl Device {
 
         let device = unsafe {
             let fd = libc::socket(PF_SYSTEM, SOCK_DGRAM, SYSPROTO_CONTROL);
-            let tun = posix::Fd::new(fd, true).map_err(|_| io::Error::last_os_error())?;
+            let tun = posix::Fd::new(fd).map_err(|_| io::Error::last_os_error())?;
 
             let mut info = ctl_info {
                 ctl_id: 0,
@@ -101,7 +101,7 @@ impl Device {
                 return Err(io::Error::last_os_error().into());
             }
 
-            let ctl = Some(posix::Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)?);
+            let ctl = Some(posix::Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0))?);
 
             Device {
                 tun: posix::Tun::new(tun),

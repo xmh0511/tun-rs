@@ -77,7 +77,7 @@ impl Device {
 
             #[allow(clippy::manual_c_str_literals)]
             let fd = libc::open(b"/dev/net/tun\0".as_ptr() as *const _, O_RDWR);
-            let tun_fd = Fd::new(fd, true)?;
+            let tun_fd = Fd::new(fd)?;
             if let Err(err) = tunsetiff(tun_fd.inner, &mut req as *mut _ as *mut _) {
                 return Err(io::Error::from(err).into());
             }
@@ -745,11 +745,11 @@ impl Device {
 }
 
 unsafe fn ctl() -> io::Result<Fd> {
-    Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)
+    Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0))
 }
 
 unsafe fn ctl_v6() -> io::Result<Fd> {
-    Fd::new(libc::socket(AF_INET6, SOCK_DGRAM, 0), true)
+    Fd::new(libc::socket(AF_INET6, SOCK_DGRAM, 0))
 }
 
 unsafe fn name(fd: RawFd) -> io::Result<String> {

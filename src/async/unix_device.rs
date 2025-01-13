@@ -249,6 +249,6 @@ impl AsyncDevice {
     }
     #[cfg(any(target_os = "linux", target_os = "freebsd",))]
     pub fn mac_address(&self) -> crate::Result<[u8; crate::device::ETHER_ADDR_LEN as usize]> {
-        self.inner.get_ref().get_mac_address()
+        self.inner.get_ref().mac_address()
     }
 }

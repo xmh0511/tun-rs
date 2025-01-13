@@ -30,10 +30,10 @@ pub struct Device {
 }
 
 unsafe fn ctl() -> io::Result<Fd> {
-    Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0), true)
+    Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0))
 }
 unsafe fn ctl_v6() -> io::Result<Fd> {
-    Fd::new(libc::socket(AF_INET6, SOCK_DGRAM, 0), true)
+    Fd::new(libc::socket(AF_INET6, SOCK_DGRAM, 0))
 }
 impl Device {
     /// Create a new `Device` for the given `Configuration`.
@@ -70,7 +70,7 @@ impl Device {
                     let device_name = format!("{}{}", device_prefix, name_index);
                     let device_path = format!("/dev/{}\0", device_name);
                     let fd = libc::open(device_path.as_ptr() as *const _, O_RDWR);
-                    let tun = Fd::new(fd, true).map_err(|_| io::Error::last_os_error())?;
+                    let tun = Fd::new(fd).map_err(|_| io::Error::last_os_error())?;
                     (tun, device_name)
                 } else {
                     let (tun, device_name) = 'End: {
@@ -79,8 +79,7 @@ impl Device {
                             let device_path = format!("/dev/{device_name}\0");
                             let fd = libc::open(device_path.as_ptr() as *const _, O_RDWR);
                             if fd > 0 {
-                                let tun =
-                                    Fd::new(fd, true).map_err(|_| io::Error::last_os_error())?;
+                                let tun = Fd::new(fd).map_err(|_| io::Error::last_os_error())?;
                                 break 'End (tun, device_name);
                             }
                         }

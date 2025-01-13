@@ -9,7 +9,6 @@ use libc::{self, fcntl, F_GETFL, F_SETFL, O_NONBLOCK};
 /// POSIX file descriptor support for `io` traits.
 pub(crate) struct Fd {
     pub(crate) inner: RawFd,
-    close_fd_on_drop: bool,
     #[cfg(feature = "experimental")]
     is_shutdown: AtomicBool,
     #[cfg(feature = "experimental")]
@@ -17,13 +16,12 @@ pub(crate) struct Fd {
 }
 
 impl Fd {
-    pub fn new(value: RawFd, close_fd_on_drop: bool) -> io::Result<Self> {
+    pub fn new(value: RawFd) -> io::Result<Self> {
         if value < 0 {
             return Err(io::Error::from(io::ErrorKind::InvalidInput));
         }
         Ok(Fd {
             inner: value,
-            close_fd_on_drop,
             #[cfg(feature = "experimental")]
             is_shutdown: AtomicBool::new(false),
             #[cfg(feature = "experimental")]
@@ -275,7 +273,7 @@ impl IntoRawFd for Fd {
 
 impl Drop for Fd {
     fn drop(&mut self) {
-        if self.close_fd_on_drop && self.inner >= 0 {
+        if self.inner >= 0 {
             unsafe { libc::close(self.inner) };
         }
     }
