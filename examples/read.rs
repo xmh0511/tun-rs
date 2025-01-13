@@ -1,7 +1,8 @@
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::Ipv4Addr;
 use std::sync::mpsc::Receiver;
 #[allow(unused_imports)]
 use std::sync::Arc;
+
 use tun_rs::DeviceBuilder;
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
 #[allow(unused_imports)]
@@ -36,15 +37,21 @@ fn main_entry(_quit: Receiver<()>) -> Result<(), BoxError> {
 fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     #[allow(unused_imports)]
     use std::net::IpAddr;
-
     let dev = Arc::new(
         DeviceBuilder::new()
             .name("utun6")
-            .ipv4((Ipv4Addr::new(10, 0, 0, 2), 24, None))
-            .ipv6(vec![(
+            .ipv4(Ipv4Addr::new(10, 0, 0, 2), 24, None)
+            // .ipv4(Ipv4Addr::new(10, 0, 0, 2), Ipv4Addr::new(255, 255, 255, 0), None)
+            .ipv6(
                 "CDCD:910A:2222:5498:8475:1111:3900:2020".parse().unwrap(),
                 64,
-            )])
+            )
+            // .ipv6(
+            //     "CDCD:910A:2222:5498:8475:1111:3900:2021".parse().unwrap(),
+            //     "FFFF:FFFF:FFFF:FFFF:0000:0000:0000:0000".parse::<Ipv6Addr>().unwrap(),
+            // )
+            // .ipv6_tup(vec![( "CDCD:910A:2222:5498:8475:1111:3900:2022".parse().unwrap(),64),
+            //                ( "CDCD:910A:2222:5498:8475:1111:3900:2023".parse().unwrap(),64)])
             .build_sync()?,
     );
 

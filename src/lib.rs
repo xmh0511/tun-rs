@@ -60,12 +60,31 @@ impl DeviceBuilder {
         self.mtu = Some(mtu);
         self
     }
-    pub fn ipv4(mut self, addr_tup: (Ipv4Addr, u8, Option<Ipv4Addr>)) -> Self {
-        self.ipv4 = Some(addr_tup);
+    pub fn ipv4<Netmask: ToIpv4Netmask>(
+        mut self,
+        address: Ipv4Addr,
+        mask: Netmask,
+        destination: Option<Ipv4Addr>,
+    ) -> Self {
+        self.ipv4 = Some((address, mask.prefix(), destination));
         self
     }
-    pub fn ipv6(mut self, addrs: Vec<(Ipv6Addr, u8)>) -> Self {
-        self.ipv6 = Some(addrs);
+    pub fn ipv6<Netmask: ToIpv6Netmask>(mut self, address: Ipv6Addr, mask: Netmask) -> Self {
+        if let Some(v) = &mut self.ipv6 {
+            v.push((address, mask.prefix()));
+        } else {
+            self.ipv6 = Some(vec![(address, mask.prefix())]);
+        }
+
+        self
+    }
+    pub fn ipv6_tup<Netmask: ToIpv6Netmask>(mut self, addrs: Vec<(Ipv6Addr, Netmask)>) -> Self {
+        self.ipv6 = Some(
+            addrs
+                .into_iter()
+                .map(|(ip, mask)| (ip, mask.prefix()))
+                .collect(),
+        );
         self
     }
     pub fn layer(mut self, layer: Layer) -> Self {
@@ -99,5 +118,31 @@ impl DeviceBuilder {
         let config = self.config()?;
         let device = create_as_async(&config)?;
         Ok(device)
+    }
+}
+pub trait ToIpv4Netmask {
+    fn prefix(self) -> u8;
+}
+impl ToIpv4Netmask for u8 {
+    fn prefix(self) -> u8 {
+        self
+    }
+}
+impl ToIpv4Netmask for Ipv4Addr {
+    fn prefix(self) -> u8 {
+        u32::from_be_bytes(self.octets()).count_ones() as u8
+    }
+}
+pub trait ToIpv6Netmask {
+    fn prefix(self) -> u8;
+}
+impl ToIpv6Netmask for u8 {
+    fn prefix(self) -> u8 {
+        self
+    }
+}
+impl ToIpv6Netmask for Ipv6Addr {
+    fn prefix(self) -> u8 {
+        u128::from_be_bytes(self.octets()).count_ones() as u8
     }
 }
