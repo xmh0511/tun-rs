@@ -525,7 +525,7 @@ impl Device {
         unsafe { name(self.as_raw_fd()).map_err(|e| e.into()) }
     }
 
-    fn set_name(&self, value: &str) -> Result<()> {
+    pub fn set_name(&self, value: &str) -> Result<()> {
         unsafe {
             let tun_name = CString::new(value)?;
 

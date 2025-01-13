@@ -1,7 +1,7 @@
 use crate::device::ETHER_ADDR_LEN;
 use crate::getifaddrs::Interface;
 use crate::platform::Device;
-use crate::{AbstractDevice, IntoAddress};
+use crate::IntoAddress;
 use std::io;
 use std::sync::Arc;
 
@@ -62,30 +62,28 @@ impl AsyncDevice {
     pub fn try_send(&self, buf: &[u8]) -> io::Result<usize> {
         self.inner.try_send(buf)
     }
-}
 
-impl AbstractDevice for AsyncDevice {
-    fn name(&self) -> crate::Result<String> {
+    pub fn name(&self) -> crate::Result<String> {
         self.inner.name()
     }
 
-    fn set_name(&self, name: &str) -> crate::Result<()> {
+    pub fn set_name(&self, name: &str) -> crate::Result<()> {
         self.inner.set_name(name)
     }
 
-    fn if_index(&self) -> crate::Result<u32> {
+    pub fn if_index(&self) -> crate::Result<u32> {
         self.inner.if_index()
     }
 
-    fn enabled(&self, value: bool) -> crate::Result<()> {
+    pub fn enabled(&self, value: bool) -> crate::Result<()> {
         self.inner.enabled(value)
     }
 
-    fn addresses(&self) -> crate::Result<Vec<Interface>> {
+    pub fn addresses(&self) -> crate::Result<Vec<Interface>> {
         self.inner.addresses()
     }
 
-    fn set_network_address<A: IntoAddress>(
+    pub fn set_network_address<A: IntoAddress>(
         &self,
         address: A,
         netmask: A,
@@ -95,31 +93,31 @@ impl AbstractDevice for AsyncDevice {
             .set_network_address(address, netmask, destination)
     }
 
-    fn mtu(&self) -> crate::Result<u16> {
+    pub fn mtu(&self) -> crate::Result<u16> {
         self.inner.mtu()
     }
 
-    fn set_mtu(&self, value: u16) -> crate::Result<()> {
+    pub fn set_mtu(&self, value: u16) -> crate::Result<()> {
         self.inner.set_mtu(value)
     }
 
-    fn set_mac_address(&self, eth_addr: [u8; ETHER_ADDR_LEN as usize]) -> crate::Result<()> {
+    pub fn set_mac_address(&self, eth_addr: [u8; ETHER_ADDR_LEN as usize]) -> crate::Result<()> {
         self.inner.set_mac_address(eth_addr)
     }
 
-    fn get_mac_address(&self) -> crate::Result<[u8; ETHER_ADDR_LEN as usize]> {
-        self.inner.get_mac_address()
+    pub fn mac_address(&self) -> crate::Result<[u8; ETHER_ADDR_LEN as usize]> {
+        self.inner.mac_address()
     }
 
-    fn remove_network_address(&self, addrs: Vec<(std::net::IpAddr, u8)>) -> crate::Result<()> {
+    pub fn remove_network_address(&self, addrs: Vec<(std::net::IpAddr, u8)>) -> crate::Result<()> {
         self.inner.remove_network_address(addrs)
     }
 
-    fn add_address_v6(&self, addr: std::net::IpAddr, prefix: u8) -> crate::Result<()> {
+    pub fn add_address_v6(&self, addr: std::net::IpAddr, prefix: u8) -> crate::Result<()> {
         self.inner.add_address_v6(addr, prefix)
     }
 
-    fn set_metric(&self, metric: u16) -> crate::Result<()> {
+    pub fn set_metric(&self, metric: u16) -> crate::Result<()> {
         self.inner.set_metric(metric)
     }
 }

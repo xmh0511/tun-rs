@@ -4,7 +4,6 @@ use crate::platform::Device;
 #[cfg(target_os = "linux")]
 use crate::platform::GROTable;
 use crate::r#async::async_device::AsyncFd;
-use crate::AbstractDevice;
 use std::io;
 use std::io::IoSlice;
 #[allow(unused_imports)]
@@ -13,7 +12,6 @@ use std::net::IpAddr;
     target_os = "linux",
     target_os = "macos",
     target_os = "freebsd",
-    target_os = "windows",
     target_os = "ios",
     target_os = "android"
 ))]
@@ -175,66 +173,39 @@ impl AsyncDevice {
     pub fn tcp_gso(&self) -> bool {
         self.inner.get_ref().tcp_gso()
     }
-}
 
-impl AbstractDevice for AsyncDevice {
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
-    fn name(&self) -> crate::Result<String> {
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
+    pub fn name(&self) -> crate::Result<String> {
         self.inner.get_ref().name()
     }
-    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
-    fn set_name(&self, name: &str) -> crate::Result<()> {
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
+    pub fn set_name(&self, name: &str) -> crate::Result<()> {
         self.inner.get_ref().set_name(name)
     }
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd",
-    ))]
-    fn if_index(&self) -> crate::Result<u32> {
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd",))]
+    pub fn if_index(&self) -> crate::Result<u32> {
         self.inner.get_ref().if_index()
     }
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd",
-        target_os = "windows"
-    ))]
-    fn enabled(&self, value: bool) -> crate::Result<()> {
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd",))]
+    pub fn enabled(&self, value: bool) -> crate::Result<()> {
         self.inner.get_ref().enabled(value)
     }
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd",
-        target_os = "windows"
-    ))]
-    fn addresses(&self) -> crate::Result<Vec<crate::getifaddrs::Interface>> {
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd",))]
+    pub fn addresses(&self) -> crate::Result<Vec<crate::getifaddrs::Interface>> {
         self.inner.get_ref().addresses()
     }
 
     #[cfg(target_os = "linux")]
-    fn broadcast(&self) -> crate::Result<IpAddr> {
+    pub fn broadcast(&self) -> crate::Result<IpAddr> {
         self.inner.get_ref().broadcast()
     }
     #[cfg(target_os = "linux")]
-    fn set_broadcast<A: crate::IntoAddress>(&self, value: A) -> crate::Result<()> {
+    pub fn set_broadcast<A: crate::IntoAddress>(&self, value: A) -> crate::Result<()> {
         self.inner.get_ref().set_broadcast(value)
     }
 
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
-    fn set_network_address<A: crate::IntoAddress>(
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
+    pub fn set_network_address<A: crate::IntoAddress>(
         &self,
         address: A,
         netmask: A,
@@ -244,60 +215,40 @@ impl AbstractDevice for AsyncDevice {
             .get_ref()
             .set_network_address(address, netmask, destination)
     }
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
-    fn remove_network_address(&self, addrs: Vec<(IpAddr, u8)>) -> crate::Result<()> {
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
+    pub fn remove_network_address(&self, addrs: Vec<(IpAddr, u8)>) -> crate::Result<()> {
         self.inner.get_ref().remove_network_address(addrs)
     }
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
-    fn add_address_v6(&self, addr: IpAddr, prefix: u8) -> crate::Result<()> {
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
+    pub fn add_address_v6(&self, addr: IpAddr, prefix: u8) -> crate::Result<()> {
         self.inner.get_ref().add_address_v6(addr, prefix)
     }
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
-    fn mtu(&self) -> crate::Result<u16> {
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
+    pub fn mtu(&self) -> crate::Result<u16> {
         self.inner.get_ref().mtu()
     }
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
-    fn set_mtu(&self, value: u16) -> crate::Result<()> {
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
+    pub fn set_mtu(&self, value: u16) -> crate::Result<()> {
         self.inner.get_ref().set_mtu(value)
     }
     #[cfg(any(target_os = "macos", target_os = "ios"))]
-    fn ignore_packet_info(&self) -> bool {
+    pub fn ignore_packet_info(&self) -> bool {
         self.inner.get_ref().ignore_packet_info()
     }
     #[cfg(any(target_os = "macos", target_os = "ios"))]
-    fn set_ignore_packet_info(&self, ign: bool) {
+    pub fn set_ignore_packet_info(&self, ign: bool) {
         self.inner.get_ref().set_ignore_packet_info(ign)
     }
 
-    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
-    fn set_mac_address(
+    #[cfg(any(target_os = "linux", target_os = "freebsd",))]
+    pub fn set_mac_address(
         &self,
         eth_addr: [u8; crate::device::ETHER_ADDR_LEN as usize],
     ) -> crate::Result<()> {
         self.inner.get_ref().set_mac_address(eth_addr)
     }
-    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
-    fn get_mac_address(&self) -> crate::Result<[u8; crate::device::ETHER_ADDR_LEN as usize]> {
+    #[cfg(any(target_os = "linux", target_os = "freebsd",))]
+    pub fn mac_address(&self) -> crate::Result<[u8; crate::device::ETHER_ADDR_LEN as usize]> {
         self.inner.get_ref().get_mac_address()
     }
 }
