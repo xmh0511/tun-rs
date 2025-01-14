@@ -1,15 +1,18 @@
 use crate::device::ETHER_ADDR_LEN;
 use crate::getifaddrs::Interface;
+use crate::platform::windows::PacketVariant;
 use crate::platform::Device;
 use crate::IntoAddress;
 use std::io;
-use std::sync::Arc;
-
-use crate::platform::windows::PacketVariant;
+use std::pin::Pin;
+use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll};
+use tokio::io::ReadBuf;
 
 /// An async TUN device wrapper around a TUN device.
 pub struct AsyncDevice {
     inner: Arc<Device>,
+    lock: Arc<Mutex<Option<blocking::Task<io::Result<PacketVariant>>>>>,
 }
 
 impl Drop for AsyncDevice {
@@ -23,7 +26,37 @@ impl AsyncDevice {
     pub fn new(device: Device) -> io::Result<AsyncDevice> {
         let inner = Arc::new(device);
 
-        Ok(AsyncDevice { inner })
+        Ok(AsyncDevice {
+            inner,
+            lock: Arc::new(Mutex::new(None)),
+        })
+    }
+    pub fn poll_recv(&self, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+        let mut task = if let Some(task) = self.lock.lock().unwrap().take() {
+            task
+        } else {
+            let device = self.inner.clone();
+            blocking::unblock(move || device.driver.receive_blocking())
+        };
+        use std::future::Future;
+        match Pin::new(&mut task).poll(cx) {
+            Poll::Ready(Ok(packet)) => {
+                if buf.remaining() >= packet.len() {
+                    buf.put_slice(&packet);
+                    Poll::Ready(Ok(()))
+                } else {
+                    Poll::Ready(Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "buffer too small",
+                    )))
+                }
+            }
+            Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
+            Poll::Pending => {
+                self.lock.lock().unwrap().replace(task);
+                Poll::Pending
+            }
+        }
     }
 
     /// Recv a packet from tun device - Not implemented for windows
@@ -40,11 +73,7 @@ impl AsyncDevice {
         let packet = blocking::unblock(move || device.driver.receive_blocking())
             .await
             .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("{}", e)))?;
-
-        let mut packet = match &packet {
-            PacketVariant::Tun(packet) => packet.bytes(),
-            PacketVariant::Tap(packet) => packet.as_ref(),
-        };
+        let mut packet: &[u8] = &packet;
 
         match io::copy(&mut packet, &mut buf) {
             Ok(n) => Ok(n as usize),

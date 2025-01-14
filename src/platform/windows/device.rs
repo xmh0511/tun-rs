@@ -13,6 +13,7 @@ use crate::{Error, IntoAddress, Layer};
 use getifaddrs::Interface;
 use network_interface::NetworkInterfaceConfig;
 use std::net::IpAddr;
+use std::ops::Deref;
 
 pub enum Driver {
     Tun(Tun),
@@ -22,6 +23,16 @@ pub enum Driver {
 pub enum PacketVariant {
     Tun(Packet),
     Tap(Box<[u8]>),
+}
+impl Deref for PacketVariant {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            PacketVariant::Tun(packet) => packet.bytes(),
+            PacketVariant::Tap(packet) => packet.as_ref(),
+        }
+    }
 }
 impl Driver {
     pub(crate) fn index(&self) -> Result<u32> {
