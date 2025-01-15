@@ -89,7 +89,17 @@ impl AsyncDevice {
 
     /// Send a packet to tun device - Not implemented for windows
     pub async fn send(&self, buf: &[u8]) -> io::Result<usize> {
-        self.inner.send(buf)
+        match self.inner.try_send(buf) {
+            Ok(len) => return Ok(len),
+            Err(e) => {
+                if e.kind() != io::ErrorKind::WouldBlock {
+                    Err(e)?
+                }
+            }
+        }
+        let buf = buf.to_vec();
+        let device = self.inner.clone();
+        blocking::unblock(move || device.send(&buf)).await
     }
     pub fn try_send(&self, buf: &[u8]) -> io::Result<usize> {
         self.inner.try_send(buf)
