@@ -119,15 +119,13 @@ impl TapDevice {
     }
 
     /// Retieve the mtu of the interface
-    pub fn get_mtu(&self) -> io::Result<u32> {
-        let in_mtu: u32 = 0;
-        let mut out_mtu = 0;
-        ffi::device_io_control(self.handle, TAP_IOCTL_GET_MTU, &in_mtu, &mut out_mtu)
-            .map(|_| out_mtu)
-    }
-    pub fn set_mtu(&self, mtu: u16) -> io::Result<()> {
-        netsh::set_interface_mtu(self.index, mtu as _)
-    }
+    // pub fn get_mtu(&self) -> io::Result<u32> {
+    //     let in_mtu: u32 = 0;
+    //     let mut out_mtu = 0;
+    //     ffi::device_io_control(self.handle, TAP_IOCTL_GET_MTU, &in_mtu, &mut out_mtu)
+    //         .map(|_| out_mtu)
+    // }
+
     pub fn get_address(&self) -> io::Result<net::IpAddr> {
         unimplemented!()
     }
@@ -195,6 +193,6 @@ const fn CTL_CODE(DeviceType: u32, Function: u32, Method: u32, Access: u32) -> u
 const TAP_IOCTL_GET_MAC: u32 = CTL_CODE(FILE_DEVICE_UNKNOWN, 1, METHOD_BUFFERED, FILE_ANY_ACCESS);
 const TAP_IOCTL_GET_VERSION: u32 =
     CTL_CODE(FILE_DEVICE_UNKNOWN, 2, METHOD_BUFFERED, FILE_ANY_ACCESS);
-const TAP_IOCTL_GET_MTU: u32 = CTL_CODE(FILE_DEVICE_UNKNOWN, 3, METHOD_BUFFERED, FILE_ANY_ACCESS);
+// const TAP_IOCTL_GET_MTU: u32 = CTL_CODE(FILE_DEVICE_UNKNOWN, 3, METHOD_BUFFERED, FILE_ANY_ACCESS);
 const TAP_IOCTL_SET_MEDIA_STATUS: u32 =
     CTL_CODE(FILE_DEVICE_UNKNOWN, 6, METHOD_BUFFERED, FILE_ANY_ACCESS);

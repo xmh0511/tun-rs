@@ -301,33 +301,23 @@ impl Device {
         netsh::set_interface_ip(self.driver.index()?, addr, mask, None)?;
         Ok(())
     }
-
-    /// The return value is always `Ok(65535)` due to wintun
     pub fn mtu(&self) -> Result<u16> {
-        driver_case!(
-              &self.driver;
-            tun=>{
-                let mtu = tun.get_mtu()?;
-                Ok(mtu as _)
-            };
-            tap=>{
-                let mtu = tap.get_mtu()?;
-                 Ok(mtu as _)
-            }
-        )
+        let index = self.if_index()?;
+        let mtu = crate::platform::windows::ffi::get_mtu_by_index(index, true)?;
+        Ok(mtu as _)
+    }
+    pub fn mtu_v6(&self) -> Result<u16> {
+        let index = self.if_index()?;
+        let mtu = crate::platform::windows::ffi::get_mtu_by_index(index, false)?;
+        Ok(mtu as _)
     }
 
-    /// This setting has no effect since the mtu of wintun is always 65535
     pub fn set_mtu(&self, mtu: u16) -> Result<()> {
-        driver_case!(
-            &self.driver;
-            tun=>{
-                tun.set_mtu(mtu as _)?;
-            };
-            tap=>{
-                tap.set_mtu(mtu)?;
-            }
-        );
+        netsh::set_interface_mtu(self.if_index()?, mtu as _)?;
+        Ok(())
+    }
+    pub fn set_mtu_v6(&self, mtu: u16) -> Result<()> {
+        netsh::set_interface_mtu_v6(self.if_index()?, mtu as _)?;
         Ok(())
     }
 

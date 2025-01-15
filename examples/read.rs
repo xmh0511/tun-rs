@@ -39,11 +39,11 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     use std::net::IpAddr;
     let dev = Arc::new(
         DeviceBuilder::new()
-            .name("utun6")
-            .ipv4(Ipv4Addr::new(10, 0, 0, 2), 24, None)
+            .name("utun7")
+            .ipv4(Ipv4Addr::new(10, 0, 0, 12), 24, None)
             // .ipv4(Ipv4Addr::new(10, 0, 0, 2), Ipv4Addr::new(255, 255, 255, 0), None)
             .ipv6(
-                "CDCD:910A:2222:5498:8475:1111:3900:2020".parse().unwrap(),
+                "CDCD:910A:2222:5498:8475:1111:3900:2021".parse().unwrap(),
                 64,
             )
             .mtu(1400)
@@ -58,6 +58,8 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
 
     println!("if_index = {:?}", dev.if_index());
     println!("mtu = {:?}", dev.mtu());
+    #[cfg(windows)]
+    println!("mtu ipv6 = {:?}", dev.mtu_v6());
     let dev_t = dev.clone();
     let _join = std::thread::spawn(move || {
         let mut buf = [0; 4096];

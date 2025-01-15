@@ -113,11 +113,12 @@ pub fn set_interface_mtu(index: u32, mtu: u32) -> io::Result<()> {
         "netsh interface ipv4 set subinterface {}  mtu={} store=persistent",
         index, mtu
     );
-    exe_cmd(&cmd)?;
+    exe_cmd(&cmd)
+}
+pub fn set_interface_mtu_v6(index: u32, mtu: u32) -> io::Result<()> {
     let cmd = format!(
         "netsh interface ipv6 set subinterface {}  mtu={} store=persistent",
         index, mtu
     );
-    exe_cmd(&cmd)?;
-    Ok(())
+    exe_cmd(&cmd)
 }

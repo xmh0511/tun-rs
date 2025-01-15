@@ -143,12 +143,6 @@ impl TunDevice {
         let name = self.get_name()?;
         netsh::set_interface_name(&name, newname)
     }
-    pub fn get_mtu(&self) -> io::Result<u32> {
-        ffi::get_mtu_by_index(self.index)
-    }
-    pub fn set_mtu(&self, mtu: u16) -> io::Result<()> {
-        netsh::set_interface_mtu(self.index, mtu as _)
-    }
     pub fn send(&self, buf: &[u8]) -> io::Result<usize> {
         self.session.send(buf)
     }
