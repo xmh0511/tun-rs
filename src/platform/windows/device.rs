@@ -161,7 +161,7 @@ impl Device {
         };
         configure(&device, config)?;
         if let Some(metric) = config.platform_config.metric {
-            netsh::set_interface_metric(device.driver.index()?, metric)?;
+            device.set_metric(metric)?;
         }
         Ok(device)
     }
