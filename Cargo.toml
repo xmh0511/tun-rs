@@ -36,11 +36,11 @@ nix = { version = "0.29", features = ["ioctl"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 network-interface = "2.0.0"
-
 encoding_rs = "0.8.34"
 
 scopeguard = "1.2.0"
-winreg = "0.52.0"
+winreg = "0.55"
+widestring = "1.0.2"
 c2rust-bitfields = "0.19"
 windows-sys = { version = "0.59", features = [
     "Win32_Devices_DeviceAndDriverInstallation",
@@ -50,6 +50,9 @@ windows-sys = { version = "0.59", features = [
     "Win32_NetworkManagement_Ndis",
     "Win32_Foundation",
     "Win32_Security",
+    "Win32_System_IO",
+    "Win32_System_Ioctl",
+    "Win32_System_Com",
     "Win32_Security_WinTrust",
     "Win32_Security_Cryptography",
     "Win32_System_Threading",
@@ -57,7 +60,6 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_LibraryLoader",
     "Win32_NetworkManagement_IpHelper",
 ] }
-wintun = { version = "0.7.19", features = ["panic_on_unsent_packets"], package = "wintun-bindings" }
 libloading = "0.8"
 
 
@@ -76,11 +78,9 @@ async-std = { version = "1", features = ["attributes", "unstable"] }
 async-ctrlc = "1.2.0"
 
 [features]
-default = ["wintun-dns"]
 async = ["async_tokio"]
 async_tokio = ["blocking", "tokio"]
 async_std = ["blocking", "async-io"]
-wintun-dns = []
 experimental = []
 
 [package.metadata.docs.rs]

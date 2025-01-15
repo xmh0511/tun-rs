@@ -2,13 +2,12 @@ mod device;
 mod ffi;
 mod netsh;
 mod tap;
+mod tun;
 
 use crate::configuration::Configuration;
 use crate::error::Result;
+pub use device::Device;
 pub use device::Driver;
-pub use device::{Device, PacketVariant, Tun};
-use std::ffi::OsString;
-use std::net::IpAddr;
 
 #[allow(dead_code)]
 pub(crate) const WINTUN_PROVIDER: &str = "WireGuard LLC";
@@ -17,9 +16,7 @@ pub(crate) const WINTUN_PROVIDER: &str = "WireGuard LLC";
 #[derive(Clone, Debug)]
 pub struct PlatformConfig {
     pub(crate) device_guid: Option<u128>,
-    pub(crate) wintun_file: OsString,
-    #[cfg(feature = "wintun-dns")]
-    pub(crate) dns_servers: Option<Vec<IpAddr>>,
+    pub(crate) wintun_file: String,
     pub(crate) ring_capacity: Option<u32>,
     pub(crate) metric: Option<u16>,
 }
@@ -29,8 +26,6 @@ impl Default for PlatformConfig {
         Self {
             device_guid: None,
             wintun_file: "wintun.dll".into(),
-            #[cfg(feature = "wintun-dns")]
-            dns_servers: None,
             ring_capacity: None,
             metric: None,
         }
@@ -48,13 +43,8 @@ impl PlatformConfig {
     /// the indicated path.
     ///
     /// [`wintun_file`](PlatformConfig::wintun_file) likes "path/to/wintun" or "path/to/wintun.dll".
-    pub fn wintun_file<S: Into<OsString>>(&mut self, wintun_file: S) {
+    pub fn wintun_file<S: Into<String>>(&mut self, wintun_file: S) {
         self.wintun_file = wintun_file.into();
-    }
-
-    #[cfg(feature = "wintun-dns")]
-    pub fn dns_servers(&mut self, dns_servers: &[IpAddr]) {
-        self.dns_servers = Some(dns_servers.to_vec());
     }
 
     pub fn ring_capacity(&mut self, ring_capacity: u32) -> &mut Self {

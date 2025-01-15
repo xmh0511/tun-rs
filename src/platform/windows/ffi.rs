@@ -5,7 +5,12 @@
 
 use std::{io, mem, ptr};
 
-use windows_sys::Win32::Foundation::ERROR_IO_PENDING;
+use windows_sys::Win32::Foundation::{ERROR_BUFFER_OVERFLOW, ERROR_IO_PENDING, NO_ERROR};
+use windows_sys::Win32::NetworkManagement::IpHelper::{
+    GetAdaptersAddresses, GetIfTable2, GAA_FLAG_INCLUDE_PREFIX, IP_ADAPTER_ADDRESSES_LH,
+    MIB_IF_ROW2, MIB_IF_TABLE2,
+};
+use windows_sys::Win32::Networking::WinSock::{AF_INET, AF_UNSPEC};
 use windows_sys::Win32::System::IO::GetOverlappedResult;
 use windows_sys::{
     core::{GUID, PCWSTR},
@@ -592,5 +597,52 @@ pub fn device_io_control(
     } {
         0 => Err(io::Error::last_os_error()),
         _ => Ok(()),
+    }
+}
+
+pub fn get_mtu_by_index(index: u32) -> io::Result<u32> {
+    // https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getadaptersaddresses#examples
+    let mut out_buf_len = 15000u32;
+    let mut iterations = 0;
+    const MAX_TRIES: i32 = 3;
+    let mut mtu = None;
+    unsafe {
+        let mut result;
+        let mut p_addresses;
+        loop {
+            p_addresses = libc::malloc(out_buf_len as usize) as *mut IP_ADAPTER_ADDRESSES_LH;
+            result = unsafe {
+                GetAdaptersAddresses(
+                    AF_INET as u32,
+                    GAA_FLAG_INCLUDE_PREFIX,
+                    ptr::null() as _,
+                    p_addresses,
+                    &mut out_buf_len,
+                )
+            };
+            if result == ERROR_BUFFER_OVERFLOW && iterations < MAX_TRIES {
+                libc::free(p_addresses as _);
+                iterations += 1;
+            } else {
+                break;
+            }
+        }
+        if result == NO_ERROR {
+            let mut current = p_addresses;
+            while !current.is_null() {
+                let c = &*current;
+                if c.Anonymous1.Anonymous.IfIndex == index {
+                    mtu = Some(c.Mtu);
+                    break;
+                }
+                current = c.Next;
+            }
+        }
+        libc::free(p_addresses as _);
+    }
+    if let Some(mtu) = mtu {
+        Ok(mtu)
+    } else {
+        Err(io::Error::from(io::ErrorKind::NotFound))
     }
 }

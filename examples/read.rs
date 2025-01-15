@@ -46,6 +46,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
                 "CDCD:910A:2222:5498:8475:1111:3900:2020".parse().unwrap(),
                 64,
             )
+            .mtu(1400)
             // .ipv6(
             //     "CDCD:910A:2222:5498:8475:1111:3900:2021".parse().unwrap(),
             //     "FFFF:FFFF:FFFF:FFFF:0000:0000:0000:0000".parse::<Ipv6Addr>().unwrap(),
@@ -56,6 +57,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     );
 
     println!("if_index = {:?}", dev.if_index());
+    println!("mtu = {:?}", dev.mtu());
     let dev_t = dev.clone();
     let _join = std::thread::spawn(move || {
         let mut buf = [0; 4096];
