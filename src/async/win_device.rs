@@ -1,18 +1,16 @@
 use crate::device::ETHER_ADDR_LEN;
 use crate::getifaddrs::Interface;
-use crate::platform::windows::PacketVariant;
 use crate::platform::Device;
 use crate::IntoAddress;
 use std::io;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
-use tokio::io::ReadBuf;
 
 /// An async TUN device wrapper around a TUN device.
 pub struct AsyncDevice {
     inner: Arc<Device>,
-    lock: Arc<Mutex<Option<blocking::Task<io::Result<PacketVariant>>>>>,
+    lock: Arc<Mutex<Option<blocking::Task<io::Result<(Vec<u8>, usize)>>>>>,
 }
 
 impl Drop for AsyncDevice {
@@ -31,24 +29,25 @@ impl AsyncDevice {
             lock: Arc::new(Mutex::new(None)),
         })
     }
-    pub fn poll_recv(&self, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+    pub fn poll_recv(&self, cx: &mut Context<'_>, mut buf: &mut [u8]) -> Poll<io::Result<usize>> {
         let mut task = if let Some(task) = self.lock.lock().unwrap().take() {
             task
         } else {
             let device = self.inner.clone();
-            blocking::unblock(move || device.driver.receive_blocking())
+            let size = buf.len();
+            blocking::unblock(move || {
+                let mut in_buf = vec![0; size];
+                let n = device.recv(&mut in_buf)?;
+                Ok((in_buf, n))
+            })
         };
         use std::future::Future;
         match Pin::new(&mut task).poll(cx) {
-            Poll::Ready(Ok(packet)) => {
-                if buf.remaining() >= packet.len() {
-                    buf.put_slice(&packet);
-                    Poll::Ready(Ok(()))
-                } else {
-                    Poll::Ready(Err(io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        "buffer too small",
-                    )))
+            Poll::Ready(Ok((packet, n))) => {
+                let mut packet: &[u8] = &packet[..n];
+                match io::copy(&mut packet, &mut buf) {
+                    Ok(n) => Poll::Ready(Ok(n as usize)),
+                    Err(e) => Poll::Ready(Err(e)),
                 }
             }
             Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
@@ -70,10 +69,14 @@ impl AsyncDevice {
             }
         }
         let device = self.inner.clone();
-        let packet = blocking::unblock(move || device.driver.receive_blocking())
-            .await
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("{}", e)))?;
-        let mut packet: &[u8] = &packet;
+        let size = buf.len();
+        let (packet, n) = blocking::unblock(move || {
+            let mut in_buf = vec![0; size];
+            let n = device.recv(&mut in_buf)?;
+            Ok::<(Vec<u8>, usize), io::Error>((in_buf, n))
+        })
+        .await?;
+        let mut packet: &[u8] = &packet[..n];
 
         match io::copy(&mut packet, &mut buf) {
             Ok(n) => Ok(n as usize),

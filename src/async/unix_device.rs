@@ -18,7 +18,6 @@ use std::os::fd::IntoRawFd;
 ))]
 use std::os::fd::{FromRawFd, RawFd};
 use std::task::{Context, Poll};
-use tokio::io::ReadBuf;
 
 /// An async TUN device wrapper around a TUN device.
 pub struct AsyncDevice {
@@ -53,26 +52,14 @@ impl AsyncDevice {
     pub fn into_fd(self) -> io::Result<RawFd> {
         Ok(self.inner.into_device()?.into_raw_fd())
     }
-    pub fn poll_recv(&self, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+    pub fn poll_recv(&self, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
         loop {
             return match self.poll_readable(cx) {
-                Poll::Ready(Ok(())) => {
-                    let b = unsafe {
-                        &mut *(buf.unfilled_mut() as *mut [std::mem::MaybeUninit<u8>]
-                            as *mut [u8])
-                    };
-                    match self.try_recv(b) {
-                        Ok(n) => {
-                            unsafe {
-                                buf.assume_init(n);
-                            }
-                            buf.advance(n);
-                            Poll::Ready(Ok(()))
-                        }
-                        Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => continue,
-                        Err(e) => Poll::Ready(Err(e)),
-                    }
-                }
+                Poll::Ready(Ok(())) => match self.try_recv(buf) {
+                    Ok(n) => Poll::Ready(Ok(n)),
+                    Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => continue,
+                    Err(e) => Poll::Ready(Err(e)),
+                },
                 Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
                 Poll::Pending => Poll::Pending,
             };
