@@ -609,12 +609,10 @@ pub fn get_mtu_by_index(index: u32, is_v4: bool) -> io::Result<u32> {
         {
             return Err(io::Error::last_os_error());
         }
-        let ifaces = unsafe {
-            std::slice::from_raw_parts::<MIB_IPINTERFACE_ROW>(
-                &(*if_table).Table[0],
-                (*if_table).NumEntries as usize,
-            )
-        };
+        let ifaces = std::slice::from_raw_parts::<MIB_IPINTERFACE_ROW>(
+            &(*if_table).Table[0],
+            (*if_table).NumEntries as usize,
+        );
         for x in ifaces {
             if x.InterfaceIndex == index {
                 mtu = Some(x.NlMtu);
