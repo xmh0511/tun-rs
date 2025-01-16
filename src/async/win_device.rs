@@ -2,6 +2,7 @@ use crate::device::ETHER_ADDR_LEN;
 use crate::getifaddrs::Interface;
 use crate::platform::Device;
 use crate::IntoAddress;
+use std::future::Future;
 use std::io;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
@@ -10,7 +11,8 @@ use std::task::{Context, Poll};
 /// An async TUN device wrapper around a TUN device.
 pub struct AsyncDevice {
     inner: Arc<Device>,
-    lock: Arc<Mutex<Option<blocking::Task<io::Result<(Vec<u8>, usize)>>>>>,
+    recv_task_lock: Arc<Mutex<Option<blocking::Task<io::Result<(Vec<u8>, usize)>>>>>,
+    send_task_lock: Arc<Mutex<Option<blocking::Task<io::Result<usize>>>>>,
 }
 
 impl Drop for AsyncDevice {
@@ -26,11 +28,21 @@ impl AsyncDevice {
 
         Ok(AsyncDevice {
             inner,
-            lock: Arc::new(Mutex::new(None)),
+            recv_task_lock: Arc::new(Mutex::new(None)),
+            send_task_lock: Arc::new(Mutex::new(None)),
         })
     }
     pub fn poll_recv(&self, cx: &mut Context<'_>, mut buf: &mut [u8]) -> Poll<io::Result<usize>> {
-        let mut task = if let Some(task) = self.lock.lock().unwrap().take() {
+        match self.try_recv(buf) {
+            Ok(len) => return Poll::Ready(Ok(len)),
+            Err(e) => {
+                if e.kind() != io::ErrorKind::WouldBlock {
+                    return Poll::Ready(Err(e));
+                }
+            }
+        }
+        let mut guard = self.recv_task_lock.lock().unwrap();
+        let mut task = if let Some(task) = guard.take() {
             task
         } else {
             let device = self.inner.clone();
@@ -41,9 +53,9 @@ impl AsyncDevice {
                 Ok((in_buf, n))
             })
         };
-        use std::future::Future;
         match Pin::new(&mut task).poll(cx) {
             Poll::Ready(Ok((packet, n))) => {
+                drop(guard);
                 let mut packet: &[u8] = &packet[..n];
                 match io::copy(&mut packet, &mut buf) {
                     Ok(n) => Poll::Ready(Ok(n as usize)),
@@ -52,9 +64,36 @@ impl AsyncDevice {
             }
             Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
             Poll::Pending => {
-                self.lock.lock().unwrap().replace(task);
+                guard.replace(task);
                 Poll::Pending
             }
+        }
+    }
+    pub fn poll_send(&self, cx: &mut Context<'_>, src: &[u8]) -> Poll<io::Result<usize>> {
+        match self.try_send(src) {
+            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
+            rs => return Poll::Ready(rs),
+        }
+        let mut guard = self.send_task_lock.lock().unwrap();
+        loop {
+            if let Some(task) = guard.as_mut() {
+                match Pin::new(task).poll(cx) {
+                    Poll::Ready(rs) => {
+                        _ = guard.take();
+                        // If the previous write was successful, continue.
+                        // Otherwise, error.
+                        rs?;
+                        continue;
+                    }
+                    Poll::Pending => return Poll::Pending,
+                }
+            } else {
+                let device = self.inner.clone();
+                let buf = src.to_vec();
+                let task = blocking::unblock(move || device.send(&buf));
+                guard.replace(task);
+                return Poll::Ready(Ok(src.len()));
+            };
         }
     }
 
