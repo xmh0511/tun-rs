@@ -10,7 +10,7 @@ use windows_sys::Win32::NetworkManagement::IpHelper::{
     GetIpInterfaceTable, GAA_FLAG_INCLUDE_PREFIX, MIB_IPINTERFACE_ROW, MIB_IPINTERFACE_TABLE,
 };
 use windows_sys::Win32::Networking::WinSock::{AF_INET, AF_INET6};
-use windows_sys::Win32::System::IO::GetOverlappedResult;
+use windows_sys::Win32::System::IO::{GetOverlappedResult, OVERLAPPED};
 use windows_sys::{
     core::{GUID, PCWSTR},
     Win32::{
@@ -154,8 +154,8 @@ pub fn create_file(
         Ok(handle)
     }
 }
-fn ip_overlapped() -> windows_sys::Win32::System::IO::OVERLAPPED {
-    windows_sys::Win32::System::IO::OVERLAPPED {
+fn ip_overlapped() -> OVERLAPPED {
+    OVERLAPPED {
         Internal: 0,
         InternalHigh: 0,
         Anonymous: windows_sys::Win32::System::IO::OVERLAPPED_0 {
@@ -181,12 +181,7 @@ pub fn try_read_file(handle: HANDLE, buffer: &mut [u8]) -> io::Result<u32> {
         ) {
             let e = io::Error::last_os_error();
             if e.raw_os_error().unwrap_or(0) == ERROR_IO_PENDING as i32 {
-                windows_sys::Win32::System::IO::CancelIoEx(handle, &ip_overlapped);
-                if 0 == GetOverlappedResult(handle, &ip_overlapped, &mut ret, 1) {
-                    Err(io::Error::from(io::ErrorKind::WouldBlock))
-                } else {
-                    Ok(ret)
-                }
+                try_ip_overlapped(handle, ip_overlapped)
             } else {
                 Err(e)
             }
@@ -208,15 +203,21 @@ pub fn try_write_file(handle: HANDLE, buffer: &[u8]) -> io::Result<u32> {
         ) {
             let e = io::Error::last_os_error();
             if e.raw_os_error().unwrap_or(0) == ERROR_IO_PENDING as i32 {
-                windows_sys::Win32::System::IO::CancelIoEx(handle, &ip_overlapped);
-                if 0 == GetOverlappedResult(handle, &ip_overlapped, &mut ret, 1) {
-                    Err(io::Error::from(io::ErrorKind::WouldBlock))
-                } else {
-                    Ok(ret)
-                }
+                try_ip_overlapped(handle, ip_overlapped)
             } else {
                 Err(e)
             }
+        } else {
+            Ok(ret)
+        }
+    }
+}
+fn try_ip_overlapped(handle: HANDLE, ip_overlapped: OVERLAPPED) -> io::Result<u32> {
+    let mut ret = 0;
+    unsafe {
+        if 0 == GetOverlappedResult(handle, &ip_overlapped, &mut ret, 0) {
+            windows_sys::Win32::System::IO::CancelIoEx(handle, &ip_overlapped);
+            Err(io::Error::from(io::ErrorKind::WouldBlock))
         } else {
             Ok(ret)
         }
@@ -258,10 +259,7 @@ pub fn write_file(handle: HANDLE, buffer: &[u8]) -> io::Result<u32> {
         }
     }
 }
-unsafe fn wait_ip_overlapped(
-    handle: HANDLE,
-    ip_overlapped: &windows_sys::Win32::System::IO::OVERLAPPED,
-) -> io::Result<u32> {
+unsafe fn wait_ip_overlapped(handle: HANDLE, ip_overlapped: &OVERLAPPED) -> io::Result<u32> {
     let e = io::Error::last_os_error();
     if e.raw_os_error().unwrap_or(0) == ERROR_IO_PENDING as i32 {
         let mut ret = 0;
