@@ -1,6 +1,6 @@
 use crate::device::ETHER_ADDR_LEN;
 use crate::platform::Device;
-use crate::ToIpv4Netmask;
+use crate::{ToIpv4Netmask, ToIpv6Netmask};
 use std::future::Future;
 use std::io;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
@@ -162,6 +162,18 @@ impl AsyncDevice {
             .set_network_address(address, netmask, destination)
     }
 
+    pub fn add_address_v6<Netmask: ToIpv6Netmask>(
+        &self,
+        addr: Ipv6Addr,
+        netmask: Netmask,
+    ) -> io::Result<()> {
+        self.inner.add_address_v6(addr, netmask)
+    }
+
+    pub fn remove_network_address(&self, addrs: Vec<(IpAddr, u8)>) -> io::Result<()> {
+        self.inner.remove_network_address(addrs)
+    }
+
     pub fn mtu(&self) -> io::Result<u16> {
         self.inner.mtu()
     }
@@ -183,15 +195,6 @@ impl AsyncDevice {
     pub fn mac_address(&self) -> io::Result<[u8; ETHER_ADDR_LEN as usize]> {
         self.inner.mac_address()
     }
-
-    pub fn remove_network_address(&self, addrs: Vec<(IpAddr, u8)>) -> io::Result<()> {
-        self.inner.remove_network_address(addrs)
-    }
-
-    pub fn add_address_v6(&self, addr: Ipv6Addr, prefix: u8) -> io::Result<()> {
-        self.inner.add_address_v6(addr, prefix)
-    }
-
     pub fn set_metric(&self, metric: u16) -> io::Result<()> {
         self.inner.set_metric(metric)
     }

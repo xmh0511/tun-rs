@@ -6,7 +6,7 @@ use crate::device::ETHER_ADDR_LEN;
 use crate::platform::windows::netsh;
 use crate::platform::windows::tap::TapDevice;
 use crate::platform::windows::tun::TunDevice;
-use crate::{Error, Layer, ToIpv4Netmask};
+use crate::{Error, Layer, ToIpv4Netmask, ToIpv6Netmask};
 use getifaddrs::Interface;
 use network_interface::NetworkInterfaceConfig;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
@@ -202,7 +202,9 @@ impl Device {
         netmask: Netmask,
         destination: Option<Ipv4Addr>,
     ) -> io::Result<()> {
-        let netmask = ipnet::Ipv4Net::new_assert(address, netmask.prefix()).netmask();
+        let netmask = ipnet::Ipv4Net::new(address, netmask.prefix())
+            .map_err(|_| io::Error::from(io::ErrorKind::InvalidData))?
+            .netmask();
         netsh::set_interface_ip(
             self.if_index()?,
             address.into(),
@@ -218,8 +220,12 @@ impl Device {
         Ok(())
     }
 
-    pub fn add_address_v6(&self, addr: Ipv6Addr, prefix: u8) -> io::Result<()> {
-        let network_addr = ipnet::Ipv6Net::new(addr, prefix)
+    pub fn add_address_v6<Netmask: ToIpv6Netmask>(
+        &self,
+        addr: Ipv6Addr,
+        netmask: Netmask,
+    ) -> io::Result<()> {
+        let network_addr = ipnet::Ipv6Net::new(addr, netmask.prefix())
             .map_err(|_| io::Error::from(io::ErrorKind::InvalidData))?;
         let mask = network_addr.netmask();
         netsh::set_interface_ip(self.if_index()?, addr.into(), mask.into(), None)

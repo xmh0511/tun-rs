@@ -142,7 +142,6 @@ pub trait ToIpv4Netmask {
 }
 impl ToIpv4Netmask for u8 {
     fn prefix(self) -> u8 {
-        assert!(self <= 32);
         self
     }
 }
