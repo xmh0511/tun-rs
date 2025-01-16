@@ -34,12 +34,8 @@ impl AsyncDevice {
     }
     pub fn poll_recv(&self, cx: &mut Context<'_>, mut buf: &mut [u8]) -> Poll<io::Result<usize>> {
         match self.try_recv(buf) {
-            Ok(len) => return Poll::Ready(Ok(len)),
-            Err(e) => {
-                if e.kind() != io::ErrorKind::WouldBlock {
-                    return Poll::Ready(Err(e));
-                }
-            }
+            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
+            rs => return Poll::Ready(rs),
         }
         let mut guard = self.recv_task_lock.lock().unwrap();
         let mut task = if let Some(task) = guard.take() {
@@ -100,12 +96,8 @@ impl AsyncDevice {
     /// Recv a packet from tun device - Not implemented for windows
     pub async fn recv(&self, mut buf: &mut [u8]) -> io::Result<usize> {
         match self.try_recv(buf) {
-            Ok(len) => return Ok(len),
-            Err(e) => {
-                if e.kind() != io::ErrorKind::WouldBlock {
-                    Err(e)?
-                }
-            }
+            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
+            rs => return rs,
         }
         let device = self.inner.clone();
         let size = buf.len();
@@ -129,12 +121,8 @@ impl AsyncDevice {
     /// Send a packet to tun device - Not implemented for windows
     pub async fn send(&self, buf: &[u8]) -> io::Result<usize> {
         match self.inner.try_send(buf) {
-            Ok(len) => return Ok(len),
-            Err(e) => {
-                if e.kind() != io::ErrorKind::WouldBlock {
-                    Err(e)?
-                }
-            }
+            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
+            rs => return rs,
         }
         let buf = buf.to_vec();
         let device = self.inner.clone();
