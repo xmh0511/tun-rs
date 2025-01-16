@@ -44,9 +44,6 @@ pub struct Configuration {
 
 impl Configuration {
     pub(crate) fn config(self, device: &Device) -> io::Result<()> {
-        if let Some(dev_name) = self.dev_name {
-            device.set_name(&dev_name)?;
-        }
         if let Some(mtu) = self.mtu {
             device.set_mtu(mtu)?;
         }
@@ -57,6 +54,10 @@ impl Configuration {
         #[cfg(windows)]
         if let Some(metric) = self.metric {
             device.set_metric(metric)?;
+        }
+        #[cfg(target_os = "linux")]
+        if let Some(tx_queue_len) = self.tx_queue_len {
+            device.set_tx_queue_len(tx_queue_len)?;
         }
         #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
         if let Some(mac_addr) = self.mac_addr {

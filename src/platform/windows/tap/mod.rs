@@ -42,6 +42,7 @@ impl TapDevice {
             // If we surpassed 2 seconds just return
             let now = time::Instant::now();
             if now - start > time::Duration::from_secs(3) {
+                let _ = iface::delete_interface(component_id, &luid);
                 return Err(io::Error::new(
                     io::ErrorKind::TimedOut,
                     "Interface timed out",

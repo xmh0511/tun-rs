@@ -104,13 +104,6 @@ impl Device {
                 udp_gso,
             };
             config.config(&device)?;
-            // if let Some(tx_queue_len) = config.platform_config.tx_queue_len {
-            //     let mut ifreq = device.request()?;
-            //     ifreq.ifr_ifru.ifru_metric = tx_queue_len as _;
-            //     if let Err(err) = change_tx_queue_len(ctl()?.as_raw_fd(), &ifreq) {
-            //         return Err(io::Error::from(err).into());
-            //     }
-            // }
             Ok(device)
         }
     }
