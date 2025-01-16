@@ -198,4 +198,7 @@ impl AsyncDevice {
     pub fn set_metric(&self, metric: u16) -> io::Result<()> {
         self.inner.set_metric(metric)
     }
+    pub fn version(&self) -> io::Result<String> {
+        self.inner.version()
+    }
 }
