@@ -1,9 +1,9 @@
 use crate::platform::windows::ffi::encode_utf16;
 use crate::platform::windows::{ffi, netsh};
+use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 use std::{io, ptr};
 use windows_sys::Win32::Foundation::{
-    GetLastError, ERROR_BUFFER_OVERFLOW, ERROR_NO_MORE_ITEMS, FALSE, HANDLE, WAIT_FAILED,
-    WAIT_OBJECT_0,
+    GetLastError, ERROR_BUFFER_OVERFLOW, ERROR_NO_MORE_ITEMS, FALSE, WAIT_FAILED, WAIT_OBJECT_0,
 };
 use windows_sys::Win32::NetworkManagement::Ndis::NET_LUID_LH;
 use windows_sys::Win32::System::Threading::{
@@ -52,14 +52,11 @@ impl AdapterHandle {
 struct SessionHandle {
     adapter: AdapterHandle,
     handle: wintun_raw::WINTUN_SESSION_HANDLE,
-    read_event: HANDLE,
-    shutdown_event: HANDLE,
+    read_event: OwnedHandle,
+    shutdown_event: OwnedHandle,
 }
 impl Drop for SessionHandle {
     fn drop(&mut self) {
-        if let Err(e) = ffi::close_handle(self.shutdown_event) {
-            log::warn!("close shutdown_event={:?}", e)
-        }
         unsafe {
             self.adapter.win_tun.WintunEndSession(self.handle);
         }
@@ -125,8 +122,10 @@ impl TunDevice {
             if session.is_null() {
                 Err(io::Error::last_os_error())?
             }
-            let shutdown_event = CreateEventW(ptr::null_mut(), 0, 0, ptr::null_mut());
-            let read_event = adapter.win_tun.WintunGetReadWaitEvent(session) as HANDLE;
+            let shutdown_event =
+                OwnedHandle::from_raw_handle(CreateEventW(ptr::null_mut(), 0, 0, ptr::null_mut()));
+            let read_event =
+                OwnedHandle::from_raw_handle(adapter.win_tun.WintunGetReadWaitEvent(session));
             let session = SessionHandle {
                 adapter,
                 handle: session,
@@ -246,7 +245,10 @@ impl SessionHandle {
     }
     fn wait_readable(&self) -> io::Result<()> {
         //Wait on both the read handle and the shutdown handle so that we stop when requested
-        let handles = [self.read_event, self.shutdown_event];
+        let handles = [
+            self.read_event.as_raw_handle(),
+            self.shutdown_event.as_raw_handle(),
+        ];
         let result = unsafe {
             //SAFETY: We abide by the requirements of WaitForMultipleObjects, handles is a
             //pointer to valid, aligned, stack memory
@@ -270,7 +272,7 @@ impl SessionHandle {
     }
     fn shutdown(&self) -> io::Result<()> {
         unsafe {
-            if FALSE == SetEvent(self.shutdown_event) {
+            if FALSE == SetEvent(self.shutdown_event.as_raw_handle()) {
                 return Err(io::Error::last_os_error());
             }
         }
