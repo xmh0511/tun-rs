@@ -604,9 +604,7 @@ pub fn get_mtu_by_index(index: u32, is_v4: bool) -> io::Result<u32> {
     let mut if_table: *mut MIB_IPINTERFACE_TABLE = ptr::null_mut();
     let mut mtu = None;
     unsafe {
-        if GetIpInterfaceTable(if is_v4 { AF_INET } else { AF_INET6 }, &mut if_table as _)
-            != NO_ERROR
-        {
+        if GetIpInterfaceTable(if is_v4 { AF_INET } else { AF_INET6 }, &mut if_table) != NO_ERROR {
             return Err(io::Error::last_os_error());
         }
         let ifaces = std::slice::from_raw_parts::<MIB_IPINTERFACE_ROW>(
