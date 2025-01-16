@@ -213,9 +213,9 @@ impl Device {
         )
     }
 
-    pub fn remove_network_address(&self, addrs: Vec<(IpAddr, u8)>) -> io::Result<()> {
+    pub fn remove_network_address(&self, addrs: &[IpAddr]) -> io::Result<()> {
         for addr in addrs {
-            netsh::delete_interface_ip(self.if_index()?, addr.0)?;
+            netsh::delete_interface_ip(self.if_index()?, *addr)?;
         }
         Ok(())
     }

@@ -170,7 +170,7 @@ impl AsyncDevice {
         self.inner.add_address_v6(addr, netmask)
     }
 
-    pub fn remove_network_address(&self, addrs: Vec<(IpAddr, u8)>) -> io::Result<()> {
+    pub fn remove_network_address(&self, addrs: &[IpAddr]) -> io::Result<()> {
         self.inner.remove_network_address(addrs)
     }
 
