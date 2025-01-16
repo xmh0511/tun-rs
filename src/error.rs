@@ -12,18 +12,6 @@ pub enum Error {
     #[error("invalid device tun name")]
     InvalidName,
 
-    #[error("invalid address")]
-    InvalidAddress,
-
-    #[error("invalid file descriptor")]
-    InvalidDescriptor,
-
-    #[error("unsupported network layer of operation")]
-    UnsupportedLayer,
-
-    #[error("out of range integral type conversion attempted")]
-    TryFromIntError,
-
     #[error(transparent)]
     Io(#[from] std::io::Error),
 

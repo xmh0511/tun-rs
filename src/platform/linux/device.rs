@@ -1,4 +1,3 @@
-use crate::configuration::configure;
 use crate::platform::linux::offload::{
     gso_none_checksum, gso_split, handle_gro, VirtioNetHdr, VIRTIO_NET_HDR_F_NEEDS_CSUM,
     VIRTIO_NET_HDR_GSO_NONE, VIRTIO_NET_HDR_GSO_TCPV4, VIRTIO_NET_HDR_GSO_TCPV6,
@@ -8,10 +7,9 @@ use crate::platform::{ExpandBuffer, GROTable};
 use crate::{
     configuration::{Configuration, Layer},
     device::ETHER_ADDR_LEN,
-    error::{Error, Result},
     platform::linux::sys::*,
     platform::posix::{ipaddr_to_sockaddr, sockaddr_union, Fd, Tun},
-    IntoAddress,
+    ToIpv4Netmask, ToIpv6Netmask,
 };
 use getifaddrs::{self, Interface};
 use libc::{
@@ -19,6 +17,7 @@ use libc::{
     IFF_NO_PI, IFF_RUNNING, IFF_TAP, IFF_TUN, IFF_UP, IFNAMSIZ, O_RDWR, SOCK_DGRAM,
 };
 use mac_address::mac_address_by_name;
+use std::net::Ipv6Addr;
 use std::{
     ffi::CString,
     io, mem,
@@ -38,13 +37,13 @@ pub struct Device {
 
 impl Device {
     /// Create a new `Device` for the given `Configuration`.
-    pub fn new(config: &Configuration) -> Result<Self> {
-        let dev_name = match config.name.as_ref() {
+    pub fn new(config: Configuration) -> crate::Result<Self> {
+        let dev_name = match config.dev_name.as_ref() {
             Some(tun_name) => {
                 let tun_name = CString::new(tun_name.clone())?;
 
                 if tun_name.as_bytes_with_nul().len() > IFNAMSIZ {
-                    return Err(Error::NameTooLong);
+                    return Err(crate::Error::NameTooLong);
                 }
 
                 Some(tun_name)
@@ -68,8 +67,8 @@ impl Device {
             let iff_no_pi = IFF_NO_PI as c_short;
             let iff_multi_queue = IFF_MULTI_QUEUE as c_short;
             let iff_vnet_hdr = libc::IFF_VNET_HDR as c_short;
-            let packet_information = config.platform_config.packet_information;
-            let offload = config.platform_config.offload;
+            let packet_information = config.packet_information.unwrap_or(false);
+            let offload = config.offload.unwrap_or(false);
             req.ifr_ifru.ifru_flags = device_type
                 | if packet_information { 0 } else { iff_no_pi }
                 | if queues_num > 1 { iff_multi_queue } else { 0 }
@@ -104,14 +103,14 @@ impl Device {
                 vnet_hdr,
                 udp_gso,
             };
-            configure(&device, config)?;
-            if let Some(tx_queue_len) = config.platform_config.tx_queue_len {
-                let mut ifreq = device.request()?;
-                ifreq.ifr_ifru.ifru_metric = tx_queue_len as _;
-                if let Err(err) = change_tx_queue_len(ctl()?.as_raw_fd(), &ifreq) {
-                    return Err(io::Error::from(err).into());
-                }
-            }
+            config.config(&device)?;
+            // if let Some(tx_queue_len) = config.platform_config.tx_queue_len {
+            //     let mut ifreq = device.request()?;
+            //     ifreq.ifr_ifru.ifru_metric = tx_queue_len as _;
+            //     if let Err(err) = change_tx_queue_len(ctl()?.as_raw_fd(), &ifreq) {
+            //         return Err(io::Error::from(err).into());
+            //     }
+            // }
             Ok(device)
         }
     }
@@ -128,30 +127,30 @@ impl Device {
     pub fn tcp_gso(&self) -> bool {
         self.vnet_hdr
     }
-    pub fn set_tx_queue_len(&self, tx_queue_len: u32) -> Result<()> {
+    pub fn set_tx_queue_len(&self, tx_queue_len: u32) -> io::Result<()> {
         unsafe {
             let mut ifreq = self.request()?;
             ifreq.ifr_ifru.ifru_metric = tx_queue_len as _;
             if let Err(err) = change_tx_queue_len(ctl()?.as_raw_fd(), &ifreq) {
-                return Err(io::Error::from(err).into());
+                return Err(io::Error::from(err));
             }
         }
         Ok(())
     }
-    pub fn tx_queue_len(&self) -> Result<u32> {
+    pub fn tx_queue_len(&self) -> io::Result<u32> {
         unsafe {
             let mut ifreq = self.request()?;
             if let Err(err) = tx_queue_len(ctl()?.as_raw_fd(), &mut ifreq) {
-                return Err(io::Error::from(err).into());
+                return Err(io::Error::from(err));
             }
             Ok(ifreq.ifr_ifru.ifru_metric as _)
         }
     }
     /// Make the device persistent.
-    pub fn persist(&self) -> Result<()> {
+    pub fn persist(&self) -> io::Result<()> {
         unsafe {
             if let Err(err) = tunsetpersist(self.as_raw_fd(), &1) {
-                Err(io::Error::from(err).into())
+                Err(io::Error::from(err))
             } else {
                 Ok(())
             }
@@ -159,10 +158,10 @@ impl Device {
     }
 
     /// Set the owner of the device.
-    pub fn user(&self, value: i32) -> Result<()> {
+    pub fn user(&self, value: i32) -> io::Result<()> {
         unsafe {
             if let Err(err) = tunsetowner(self.as_raw_fd(), &value) {
-                Err(io::Error::from(err).into())
+                Err(io::Error::from(err))
             } else {
                 Ok(())
             }
@@ -170,10 +169,10 @@ impl Device {
     }
 
     /// Set the group of the device.
-    pub fn group(&self, value: i32) -> Result<()> {
+    pub fn group(&self, value: i32) -> io::Result<()> {
         unsafe {
             if let Err(err) = tunsetgroup(self.as_raw_fd(), &value) {
-                Err(io::Error::from(err).into())
+                Err(io::Error::from(err))
             } else {
                 Ok(())
             }
@@ -389,148 +388,51 @@ impl Device {
 
 impl Device {
     /// Prepare a new request.
-    unsafe fn request(&self) -> Result<ifreq> {
+    unsafe fn request(&self) -> io::Result<ifreq> {
         request(&self.name()?)
     }
-
-    fn set_address(&self, value: IpAddr, mask: Option<u32>) -> Result<()> {
+    pub fn set_address_v4(&self, addr: Ipv4Addr) -> io::Result<()> {
         unsafe {
-            if let Ok(addrs) = self.addresses() {
-                for addr in addrs {
-                    match addr.address {
-                        IpAddr::V4(_) => {
-                            let mut req = self.request()?;
-                            ipaddr_to_sockaddr(
-                                IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-                                0,
-                                &mut req.ifr_ifru.ifru_addr,
-                                OVERWRITE_SIZE,
-                            );
-                            if let Err(err) = siocsifaddr(ctl()?.as_raw_fd(), &req) {
-                                log::error!("{err:?}");
-                            }
-                        }
-                        IpAddr::V6(_) => {
-                            let if_index = {
-                                let name = self.name()?;
-                                let name = CString::new(name)?;
-                                libc::if_nametoindex(name.as_ptr())
-                            };
-                            let ctl = ctl_v6()?;
-                            let mut ifrv6: in6_ifreq = mem::zeroed();
-                            ifrv6.ifr6_ifindex = if_index as i32;
-                            ifrv6.ifr6_prefixlen = if let Some(v) = addr.netmask {
-                                ipnet::ip_mask_to_prefix(v).unwrap_or(64) as u32
-                            } else {
-                                64
-                            };
-                            ifrv6.ifr6_addr =
-                                sockaddr_union::from(std::net::SocketAddr::new(addr.address, 0))
-                                    .addr6
-                                    .sin6_addr;
-                            if let Err(e) = siocdifaddr_in6(ctl.as_raw_fd(), &ifrv6) {
-                                log::error!("{e:?}");
-                            }
-                        }
-                    }
-                }
+            let mut req = self.request()?;
+            ipaddr_to_sockaddr(addr, 0, &mut req.ifr_ifru.ifru_addr, OVERWRITE_SIZE);
+            if let Err(err) = siocsifaddr(ctl()?.as_raw_fd(), &req) {
+                return Err(io::Error::from(err));
             }
-            match value {
-                IpAddr::V4(addr) => {
-                    let mut req = self.request()?;
-                    ipaddr_to_sockaddr(addr, 0, &mut req.ifr_ifru.ifru_addr, OVERWRITE_SIZE);
-                    if let Err(err) = siocsifaddr(ctl()?.as_raw_fd(), &req) {
-                        return Err(io::Error::from(err).into());
-                    }
-                }
-                IpAddr::V6(_) => {
-                    let if_index = {
-                        let name = self.name()?;
-                        let name = CString::new(name)?;
-                        libc::if_nametoindex(name.as_ptr())
-                    };
-                    let ctl = ctl_v6()?;
-                    let mut ifrv6: in6_ifreq = mem::zeroed();
-                    ifrv6.ifr6_ifindex = if_index as i32;
-                    if let Ok(addrs) = self.addresses() {
-                        for addr in addrs {
-                            if addr.address.is_ipv6() {
-                                ifrv6.ifr6_prefixlen = if let Some(v) = addr.netmask {
-                                    ipnet::ip_mask_to_prefix(v).unwrap_or(64) as u32
-                                } else {
-                                    64
-                                };
-                                ifrv6.ifr6_addr = sockaddr_union::from(std::net::SocketAddr::new(
-                                    addr.address,
-                                    0,
-                                ))
-                                .addr6
-                                .sin6_addr;
-                                if let Err(e) = siocdifaddr_in6(ctl.as_raw_fd(), &ifrv6) {
-                                    log::error!("{e:?}");
-                                }
-                            }
-                        }
-                    }
-                    ifrv6.ifr6_prefixlen = mask.unwrap_or(64);
-                    ifrv6.ifr6_addr = sockaddr_union::from(std::net::SocketAddr::new(value, 0))
-                        .addr6
-                        .sin6_addr;
-                    if let Err(err) = siocsifaddr_in6(ctl.as_raw_fd(), &ifrv6) {
-                        return Err(io::Error::from(err).into());
-                    }
-                }
-            }
-            Ok(())
         }
+        Ok(())
     }
-    fn set_netmask(&self, value: IpAddr) -> Result<()> {
+    pub fn set_netmask(&self, value: Ipv4Addr) -> io::Result<()> {
         unsafe {
-            match value {
-                IpAddr::V4(addr) => {
-                    let mut req = self.request()?;
-                    ipaddr_to_sockaddr(addr, 0, &mut req.ifr_ifru.ifru_netmask, OVERWRITE_SIZE);
-                    if let Err(err) = siocsifnetmask(ctl()?.as_raw_fd(), &req) {
-                        return Err(io::Error::from(err).into());
-                    }
-                }
-                IpAddr::V6(_) => {
-                    unreachable!()
-                }
+            let mut req = self.request()?;
+            ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_netmask, OVERWRITE_SIZE);
+            if let Err(err) = siocsifnetmask(ctl()?.as_raw_fd(), &req) {
+                return Err(io::Error::from(err));
             }
             Ok(())
         }
     }
 
-    fn set_destination<A: IntoAddress>(&self, value: A) -> Result<()> {
-        let value = value.into_address()?;
+    pub fn set_destination(&self, value: Ipv4Addr) -> io::Result<()> {
         unsafe {
-            match value {
-                IpAddr::V4(addr) => {
-                    let mut req = self.request()?;
-                    ipaddr_to_sockaddr(addr, 0, &mut req.ifr_ifru.ifru_dstaddr, OVERWRITE_SIZE);
-                    if let Err(err) = siocsifdstaddr(ctl()?.as_raw_fd(), &req) {
-                        return Err(io::Error::from(err).into());
-                    }
-                }
-                IpAddr::V6(_) => {
-                    unreachable!()
-                }
+            let mut req = self.request()?;
+            ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_dstaddr, OVERWRITE_SIZE);
+            if let Err(err) = siocsifdstaddr(ctl()?.as_raw_fd(), &req) {
+                return Err(io::Error::from(err));
             }
             Ok(())
         }
     }
 
-    pub fn name(&self) -> Result<String> {
-        unsafe { name(self.as_raw_fd()).map_err(|e| e.into()) }
+    pub fn name(&self) -> io::Result<String> {
+        unsafe { name(self.as_raw_fd()) }
     }
 
-    pub fn set_name(&self, value: &str) -> Result<()> {
+    pub fn set_name(&self, value: &str) -> io::Result<()> {
         unsafe {
             let tun_name = CString::new(value)?;
 
             if tun_name.as_bytes_with_nul().len() > IFNAMSIZ {
-                return Err(Error::NameTooLong);
+                return Err(io::Error::new(io::ErrorKind::InvalidInput, "name too long"));
             }
 
             let mut req = self.request()?;
@@ -541,26 +443,26 @@ impl Device {
             );
 
             if let Err(err) = siocsifname(ctl()?.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
+                return Err(io::Error::from(err));
             }
 
             Ok(())
         }
     }
 
-    pub fn if_index(&self) -> Result<u32> {
+    pub fn if_index(&self) -> io::Result<u32> {
         let if_name = self.name()?;
         let index = Self::get_if_index(&if_name)?;
         Ok(index)
     }
 
-    pub fn enabled(&self, value: bool) -> Result<()> {
+    pub fn enabled(&self, value: bool) -> io::Result<()> {
         unsafe {
             let ctl = ctl()?;
             let mut req = self.request()?;
 
             if let Err(err) = siocgifflags(ctl.as_raw_fd(), &mut req) {
-                return Err(io::Error::from(err).into());
+                return Err(io::Error::from(err));
             }
 
             if value {
@@ -570,23 +472,23 @@ impl Device {
             }
 
             if let Err(err) = siocsifflags(ctl.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
+                return Err(io::Error::from(err));
             }
 
             Ok(())
         }
     }
-
-    pub fn addresses(&self) -> Result<Vec<Interface>> {
+    fn getifaddrs(&self) -> io::Result<Vec<Interface>> {
         let if_name = self.name()?;
         let addrs = getifaddrs::getifaddrs()?;
-        let ifs = addrs
-            .filter(|v| v.name == if_name)
-            .collect::<Vec<Interface>>();
+        let ifs = addrs.filter(|v| v.name == if_name).collect();
         Ok(ifs)
     }
+    pub fn addresses(&self) -> io::Result<Vec<IpAddr>> {
+        Ok(self.getifaddrs()?.iter().map(|v| v.address).collect())
+    }
 
-    pub fn broadcast(&self) -> Result<IpAddr> {
+    pub fn broadcast(&self) -> io::Result<IpAddr> {
         unsafe {
             let mut req = self.request()?;
             if let Err(err) = siocgifbrdaddr(ctl()?.as_raw_fd(), &mut req) {
@@ -597,73 +499,45 @@ impl Device {
         }
     }
 
-    pub fn set_broadcast<A: IntoAddress>(&self, value: A) -> Result<()> {
-        let value = value.into_address()?;
+    pub fn set_broadcast(&self, value: IpAddr) -> io::Result<()> {
         unsafe {
             let mut req = self.request()?;
             ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_broadaddr, OVERWRITE_SIZE);
             if let Err(err) = siocsifbrdaddr(ctl()?.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
+                return Err(io::Error::from(err));
             }
             Ok(())
         }
     }
 
-    pub fn set_network_address<A: IntoAddress>(
+    pub fn set_network_address<Netmask: ToIpv4Netmask>(
         &self,
-        address: A,
-        netmask: A,
-        destination: Option<A>,
-    ) -> Result<()> {
-        let addr = address.into_address()?;
-        if addr.is_ipv6() {
-            self.set_address(addr, {
-                let prefix_len = ipnet::ip_mask_to_prefix(netmask.into_address()?)
-                    .map_err(|_| Error::InvalidConfig)?;
-                Some(prefix_len as u32)
-            })?;
-        } else {
-            self.set_address(addr, None)?;
-            self.set_netmask(netmask.into_address()?)?;
-            if let Some(destination) = destination {
-                self.set_destination(destination.into_address()?)?;
-            }
+        address: Ipv4Addr,
+        netmask: Netmask,
+        destination: Option<Ipv4Addr>,
+    ) -> io::Result<()> {
+        self.set_address_v4(address.into())?;
+        self.set_netmask(netmask.netmask())?;
+        if let Some(destination) = destination {
+            self.set_destination(destination)?;
         }
         Ok(())
     }
-
-    pub fn remove_network_address(&self, addrs: Vec<(IpAddr, u8)>) -> Result<()> {
-        unsafe {
-            for addr in addrs {
-                match addr.0 {
-                    IpAddr::V4(_) => {
-                        let mut req = self.request()?;
-                        ipaddr_to_sockaddr(
-                            IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-                            0,
-                            &mut req.ifr_ifru.ifru_addr,
-                            OVERWRITE_SIZE,
-                        );
-                        if let Err(err) = siocsifaddr(ctl()?.as_raw_fd(), &req) {
-                            return Err(io::Error::from(err).into());
-                        }
+    pub fn remove_address(&self, addr: IpAddr) -> io::Result<()> {
+        match addr {
+            IpAddr::V4(_) => {
+                for x in self.addresses()? {
+                    if x == addr {
+                        return self.set_address_v4(Ipv4Addr::UNSPECIFIED);
                     }
-                    IpAddr::V6(_) => {
-                        let if_index = {
-                            let name = self.name()?;
-                            let name = CString::new(name)?;
-                            libc::if_nametoindex(name.as_ptr())
-                        };
-                        let ctl = ctl_v6()?;
-                        let mut ifrv6: in6_ifreq = mem::zeroed();
-                        ifrv6.ifr6_ifindex = if_index as i32;
-                        ifrv6.ifr6_prefixlen = addr.1 as u32;
-                        ifrv6.ifr6_addr =
-                            sockaddr_union::from(std::net::SocketAddr::new(addr.0, 0))
-                                .addr6
-                                .sin6_addr;
-                        if let Err(err) = siocdifaddr_in6(ctl.as_raw_fd(), &ifrv6) {
-                            return Err(io::Error::from(err).into());
+                }
+            }
+            IpAddr::V6(addr_v6) => {
+                for x in self.getifaddrs()? {
+                    if x.address == addr {
+                        if let Some(netmask) = x.netmask {
+                            let prefix = ipnet::ip_mask_to_prefix(netmask).unwrap_or(0);
+                            self.remove_address_v6(addr_v6, prefix)?
                         }
                     }
                 }
@@ -671,75 +545,88 @@ impl Device {
         }
         Ok(())
     }
-
-    pub fn add_address_v6(&self, addr: IpAddr, prefix: u8) -> Result<()> {
-        if !addr.is_ipv6() {
-            return Err(Error::InvalidAddress);
-        }
+    pub fn remove_address_v6(&self, addr: Ipv6Addr, prefix: u8) -> io::Result<()> {
         unsafe {
-            let if_index = {
-                let name = self.name()?;
-                let name = CString::new(name)?;
-                libc::if_nametoindex(name.as_ptr())
-            };
+            let if_index = self.if_index()?;
             let ctl = ctl_v6()?;
             let mut ifrv6: in6_ifreq = mem::zeroed();
             ifrv6.ifr6_ifindex = if_index as i32;
-            ifrv6.ifr6_prefixlen = prefix as u32;
-            ifrv6.ifr6_addr = sockaddr_union::from(std::net::SocketAddr::new(addr, 0))
+            ifrv6.ifr6_prefixlen = prefix as _;
+            ifrv6.ifr6_addr = sockaddr_union::from(std::net::SocketAddr::new(addr.into(), 0))
                 .addr6
                 .sin6_addr;
-            if let Err(err) = siocsifaddr_in6(ctl.as_raw_fd(), &ifrv6) {
-                return Err(io::Error::from(err).into());
+            if let Err(err) = siocdifaddr_in6(ctl.as_raw_fd(), &ifrv6) {
+                return Err(io::Error::from(err));
             }
         }
         Ok(())
     }
 
-    pub fn mtu(&self) -> Result<u16> {
+    pub fn add_address_v6<Netmask: ToIpv6Netmask>(
+        &self,
+        addr: Ipv6Addr,
+        netmask: Netmask,
+    ) -> io::Result<()> {
+        unsafe {
+            let if_index = self.if_index()?;
+            let ctl = ctl_v6()?;
+            let mut ifrv6: in6_ifreq = mem::zeroed();
+            ifrv6.ifr6_ifindex = if_index as i32;
+            ifrv6.ifr6_prefixlen = netmask.prefix() as u32;
+            ifrv6.ifr6_addr = sockaddr_union::from(std::net::SocketAddr::new(addr.into(), 0))
+                .addr6
+                .sin6_addr;
+            if let Err(err) = siocsifaddr_in6(ctl.as_raw_fd(), &ifrv6) {
+                return Err(io::Error::from(err));
+            }
+        }
+        Ok(())
+    }
+
+    pub fn mtu(&self) -> io::Result<u16> {
         unsafe {
             let mut req = self.request()?;
 
             if let Err(err) = siocgifmtu(ctl()?.as_raw_fd(), &mut req) {
-                return Err(io::Error::from(err).into());
+                return Err(io::Error::from(err));
             }
 
             req.ifr_ifru
                 .ifru_mtu
                 .try_into()
-                .map_err(|_| Error::TryFromIntError)
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("{e:?}")))
         }
     }
 
-    pub fn set_mtu(&self, value: u16) -> Result<()> {
+    pub fn set_mtu(&self, value: u16) -> io::Result<()> {
         unsafe {
             let mut req = self.request()?;
             req.ifr_ifru.ifru_mtu = value as i32;
 
             if let Err(err) = siocsifmtu(ctl()?.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
+                return Err(io::Error::from(err));
             }
             Ok(())
         }
     }
 
-    pub fn set_mac_address(&self, eth_addr: [u8; ETHER_ADDR_LEN as usize]) -> Result<()> {
+    pub fn set_mac_address(&self, eth_addr: [u8; ETHER_ADDR_LEN as usize]) -> io::Result<()> {
         unsafe {
             let mut req = self.request()?;
             req.ifr_ifru.ifru_hwaddr.sa_family = ARPHRD_ETHER;
             req.ifr_ifru.ifru_hwaddr.sa_data[0..ETHER_ADDR_LEN as usize]
                 .copy_from_slice(eth_addr.map(|c| c as _).as_slice());
             if let Err(err) = siocsifhwaddr(ctl()?.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
+                return Err(io::Error::from(err));
             }
             Ok(())
         }
     }
 
-    pub fn mac_address(&self) -> Result<[u8; ETHER_ADDR_LEN as usize]> {
+    pub fn mac_address(&self) -> io::Result<[u8; ETHER_ADDR_LEN as usize]> {
         let mac = mac_address_by_name(&self.name()?)
-            .map_err(|e| Error::String(e.to_string()))?
-            .ok_or(Error::InvalidConfig)?;
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?
+            .ok_or(io::Error::from(io::ErrorKind::NotFound))?;
         Ok(mac.bytes())
     }
 }
@@ -762,7 +649,7 @@ unsafe fn name(fd: RawFd) -> io::Result<String> {
     Ok(tun_name)
 }
 
-unsafe fn request(name: &str) -> Result<ifreq> {
+unsafe fn request(name: &str) -> io::Result<ifreq> {
     let mut req: ifreq = mem::zeroed();
     ptr::copy_nonoverlapping(
         name.as_ptr() as *const c_char,

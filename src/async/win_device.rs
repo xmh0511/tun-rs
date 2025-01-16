@@ -170,8 +170,8 @@ impl AsyncDevice {
         self.inner.add_address_v6(addr, netmask)
     }
 
-    pub fn remove_network_address(&self, addrs: &[IpAddr]) -> io::Result<()> {
-        self.inner.remove_network_address(addrs)
+    pub fn remove_address(&self, addr: IpAddr) -> io::Result<()> {
+        self.inner.remove_address(addr)
     }
 
     pub fn mtu(&self) -> io::Result<u16> {

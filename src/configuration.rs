@@ -15,6 +15,7 @@ pub enum Layer {
 #[derive(Clone, Default, Debug)]
 pub struct Configuration {
     pub dev_name: Option<String>,
+    pub enabled: Option<bool>,
     pub mtu: Option<u16>,
     #[cfg(windows)]
     pub mtu_v6: Option<u16>,
@@ -29,12 +30,18 @@ pub struct Configuration {
     pub wintun_file: Option<String>,
     #[cfg(windows)]
     pub ring_capacity: Option<u32>,
+    /// switch of Enable/Disable packet information for network driver
+    #[cfg(unix)]
+    pub packet_information: Option<bool>,
+    #[cfg(target_os = "linux")]
+    pub tx_queue_len: Option<u32>,
+    /// Enable/Disable TUN offloads
+    #[cfg(target_os = "linux")]
+    pub offload: Option<bool>,
 }
+
 impl Configuration {
     pub(crate) fn config(self, device: &Device) -> io::Result<()> {
-        if let Some(dev_name) = self.dev_name {
-            device.set_name(&dev_name)?;
-        }
         if let Some(mtu) = self.mtu {
             device.set_mtu(mtu)?;
         }
@@ -57,7 +64,7 @@ impl Configuration {
                 device.add_address_v6(ip, prefix)?;
             }
         }
-
+        device.enabled(self.enabled.unwrap_or(true))?;
         Ok(())
     }
 }
@@ -126,27 +133,39 @@ impl DeviceBuilder {
         self.config.layer = Some(layer);
         self
     }
-
-    pub fn build_sync(self) -> std::io::Result<Device> {
+    #[cfg(unix)]
+    pub fn packet_information(mut self, packet_information: bool) -> Self {
+        self.config.packet_information = Some(packet_information);
+        self
+    }
+    pub fn enable(mut self, enable: bool) -> Self {
+        self.config.enabled = Some(enable);
+        self
+    }
+    pub fn build_sync(self) -> io::Result<Device> {
         let device = Device::new(self.config)?;
         Ok(device)
     }
     #[cfg(any(feature = "async_std", feature = "async_tokio"))]
-    pub fn build_async(self) -> std::io::Result<crate::AsyncDevice> {
+    pub fn build_async(self) -> io::Result<crate::AsyncDevice> {
         let device = crate::AsyncDevice::new(self.build_sync()?)?;
         Ok(device)
     }
 }
 pub trait ToIpv4Netmask {
-    fn prefix(self) -> u8;
+    fn prefix(&self) -> u8;
+    fn netmask(&self) -> Ipv4Addr {
+        let ip = u32::MAX.checked_shl(32 - self.prefix() as u32).unwrap_or(0);
+        Ipv4Addr::from(ip)
+    }
 }
 impl ToIpv4Netmask for u8 {
-    fn prefix(self) -> u8 {
-        self
+    fn prefix(&self) -> u8 {
+        *self
     }
 }
 impl ToIpv4Netmask for Ipv4Addr {
-    fn prefix(self) -> u8 {
+    fn prefix(&self) -> u8 {
         u32::from_be_bytes(self.octets()).count_ones() as u8
     }
 }

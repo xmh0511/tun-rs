@@ -2,7 +2,7 @@ use crate::platform::Device;
 use ::async_io::Async;
 use std::io;
 use std::io::IoSlice;
-
+use std::task::{Context, Poll};
 pub struct AsyncFd(Async<Device>);
 impl AsyncFd {
     pub fn new(device: Device) -> io::Result<Self> {

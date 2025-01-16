@@ -180,7 +180,13 @@ impl Device {
 
     pub fn enabled(&self, value: bool) -> io::Result<()> {
         match &self.driver {
-            Driver::Tun(_tun) => Ok(()),
+            Driver::Tun(_tun) => {
+                if value {
+                    Ok(())
+                } else {
+                    Err(io::Error::from(io::ErrorKind::Unsupported))
+                }
+            }
             Driver::Tap(tap) => tap.set_status(value),
         }
     }
@@ -213,11 +219,8 @@ impl Device {
         )
     }
 
-    pub fn remove_network_address(&self, addrs: &[IpAddr]) -> io::Result<()> {
-        for addr in addrs {
-            netsh::delete_interface_ip(self.if_index()?, *addr)?;
-        }
-        Ok(())
+    pub fn remove_address(&self, addr: IpAddr) -> io::Result<()> {
+        netsh::delete_interface_ip(self.if_index()?, addr)
     }
 
     pub fn add_address_v6<Netmask: ToIpv6Netmask>(
