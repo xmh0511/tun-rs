@@ -30,6 +30,8 @@ pub struct Configuration {
     pub wintun_file: Option<String>,
     #[cfg(windows)]
     pub ring_capacity: Option<u32>,
+    #[cfg(windows)]
+    pub metric: Option<u16>,
     /// switch of Enable/Disable packet information for network driver
     #[cfg(unix)]
     pub packet_information: Option<bool>,
@@ -42,12 +44,19 @@ pub struct Configuration {
 
 impl Configuration {
     pub(crate) fn config(self, device: &Device) -> io::Result<()> {
+        if let Some(dev_name) = self.dev_name {
+            device.set_name(&dev_name)?;
+        }
         if let Some(mtu) = self.mtu {
             device.set_mtu(mtu)?;
         }
         #[cfg(windows)]
         if let Some(mtu) = self.mtu_v6 {
             device.set_mtu_v6(mtu)?;
+        }
+        #[cfg(windows)]
+        if let Some(metric) = self.metric {
+            device.set_metric(metric)?;
         }
         #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
         if let Some(mac_addr) = self.mac_addr {
@@ -131,6 +140,26 @@ impl DeviceBuilder {
     }
     pub fn layer(mut self, layer: Layer) -> Self {
         self.config.layer = Some(layer);
+        self
+    }
+    #[cfg(windows)]
+    pub fn device_guid(mut self, device_guid: u128) -> Self {
+        self.config.device_guid = Some(device_guid);
+        self
+    }
+    #[cfg(windows)]
+    pub fn wintun_file(mut self, wintun_file: String) -> Self {
+        self.config.wintun_file = Some(wintun_file);
+        self
+    }
+    #[cfg(windows)]
+    pub fn ring_capacity(mut self, ring_capacity: u32) -> Self {
+        self.config.ring_capacity = Some(ring_capacity);
+        self
+    }
+    #[cfg(windows)]
+    pub fn metric(mut self, metric: u16) -> Self {
+        self.config.metric = Some(metric);
         self
     }
     #[cfg(unix)]

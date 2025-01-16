@@ -165,10 +165,11 @@ impl Device {
     }
 
     pub fn set_name(&self, value: &str) -> io::Result<()> {
-        match &self.driver {
-            Driver::Tun(tun) => tun.set_name(value),
-            Driver::Tap(tap) => tap.set_name(value),
+        let name = self.name()?;
+        if value == &name {
+            return Ok(());
         }
+        netsh::set_interface_name(&name, value)
     }
 
     pub fn if_index(&self) -> io::Result<u32> {

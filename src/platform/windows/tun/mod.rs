@@ -1,7 +1,6 @@
-use crate::platform::windows::ffi::encode_utf16;
-use crate::platform::windows::{ffi, netsh};
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 use std::{io, ptr};
+
 use windows_sys::Win32::Foundation::{
     GetLastError, ERROR_BUFFER_OVERFLOW, ERROR_NO_MORE_ITEMS, FALSE, WAIT_FAILED, WAIT_OBJECT_0,
 };
@@ -9,6 +8,10 @@ use windows_sys::Win32::NetworkManagement::Ndis::NET_LUID_LH;
 use windows_sys::Win32::System::Threading::{
     CreateEventW, SetEvent, WaitForMultipleObjects, INFINITE,
 };
+
+use crate::platform::windows::ffi;
+use crate::platform::windows::ffi::encode_utf16;
+
 mod wintun_log;
 mod wintun_raw;
 
@@ -148,10 +151,6 @@ impl TunDevice {
     }
     pub fn get_name(&self) -> io::Result<String> {
         ffi::luid_to_alias(&self.luid)
-    }
-    pub fn set_name(&self, newname: &str) -> io::Result<()> {
-        let name = self.get_name()?;
-        netsh::set_interface_name(&name, newname)
     }
     pub fn send(&self, buf: &[u8]) -> io::Result<usize> {
         self.session.send(buf)

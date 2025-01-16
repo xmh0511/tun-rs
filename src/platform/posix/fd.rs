@@ -18,15 +18,18 @@ pub(crate) struct Fd {
 impl Fd {
     pub fn new(value: RawFd) -> io::Result<Self> {
         if value < 0 {
-            return Err(io::Error::from(io::ErrorKind::InvalidInput));
+            return Err(io::Error::last_os_error());
         }
-        Ok(Fd {
+        Ok(Self::new_uncheck(value))
+    }
+    pub fn new_uncheck(value: RawFd) -> Self {
+        Fd {
             inner: value,
             #[cfg(feature = "experimental")]
             is_shutdown: AtomicBool::new(false),
             #[cfg(feature = "experimental")]
             event_fd: EventFd::new()?,
-        })
+        }
     }
 
     /// Enable non-blocking mode
