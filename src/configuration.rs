@@ -40,6 +40,9 @@ pub struct Configuration {
     /// Enable/Disable TUN offloads
     #[cfg(target_os = "linux")]
     pub offload: Option<bool>,
+    /// Enable multi queue support
+    #[cfg(target_os = "linux")]
+    pub iff_multi_queue: Option<bool>,
 }
 
 impl Configuration {
@@ -163,6 +166,22 @@ impl DeviceBuilder {
         self.config.metric = Some(metric);
         self
     }
+    #[cfg(target_os = "linux")]
+    pub fn tx_queue_len(mut self, tx_queue_len: u32) -> Self {
+        self.config.tx_queue_len = Some(tx_queue_len);
+        self
+    }
+    #[cfg(target_os = "linux")]
+    pub fn offload(mut self, offload: bool) -> Self {
+        self.config.offload = Some(offload);
+        self
+    }
+    #[cfg(target_os = "linux")]
+    pub fn iff_multi_queue(mut self, iff_multi_queue: bool) -> Self {
+        self.config.iff_multi_queue = Some(iff_multi_queue);
+        self
+    }
+
     #[cfg(unix)]
     pub fn packet_information(mut self, packet_information: bool) -> Self {
         self.config.packet_information = Some(packet_information);

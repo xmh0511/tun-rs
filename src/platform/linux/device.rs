@@ -33,6 +33,7 @@ pub struct Device {
     pub(crate) tun: Tun,
     pub(crate) vnet_hdr: bool,
     pub(crate) udp_gso: bool,
+    flags: c_short,
 }
 
 impl Device {
@@ -61,17 +62,19 @@ impl Device {
                     dev_name.as_bytes_with_nul().len(),
                 );
             }
-
+            let iff_multi_queue = config.iff_multi_queue.unwrap_or(false);
             let device_type: c_short = config.layer.unwrap_or(Layer::L3).into();
-            let queues_num = 1;
             let iff_no_pi = IFF_NO_PI as c_short;
-            let iff_multi_queue = IFF_MULTI_QUEUE as c_short;
             let iff_vnet_hdr = libc::IFF_VNET_HDR as c_short;
             let packet_information = config.packet_information.unwrap_or(false);
             let offload = config.offload.unwrap_or(false);
             req.ifr_ifru.ifru_flags = device_type
                 | if packet_information { 0 } else { iff_no_pi }
-                | if queues_num > 1 { iff_multi_queue } else { 0 }
+                | if iff_multi_queue {
+                    IFF_MULTI_QUEUE as c_short
+                } else {
+                    0
+                }
                 | if offload { iff_vnet_hdr } else { 0 };
 
             #[allow(clippy::manual_c_str_literals)]
@@ -102,16 +105,68 @@ impl Device {
                 tun: Tun::new(tun_fd),
                 vnet_hdr,
                 udp_gso,
+                flags: req.ifr_ifru.ifru_flags,
             };
             config.config(&device)?;
             Ok(device)
         }
+    }
+    unsafe fn set_tcp_offloads(&self) -> io::Result<()> {
+        let tun_tcp_offloads = libc::TUN_F_CSUM | libc::TUN_F_TSO4 | libc::TUN_F_TSO6;
+        tunsetoffload(self.as_raw_fd(), tun_tcp_offloads as _)
+            .map(|_| ())
+            .map_err(|e| io::Error::from(e))
+    }
+    unsafe fn set_tcp_udp_offloads(&self) -> io::Result<()> {
+        let tun_tcp_offloads = libc::TUN_F_CSUM | libc::TUN_F_TSO4 | libc::TUN_F_TSO6;
+        let tun_udp_offloads = libc::TUN_F_USO4 | libc::TUN_F_USO6;
+        tunsetoffload(self.as_raw_fd(), (tun_tcp_offloads | tun_udp_offloads) as _)
+            .map(|_| ())
+            .map_err(|e| io::Error::from(e))
     }
     pub(crate) fn from_tun(tun: Tun) -> Self {
         Self {
             tun,
             vnet_hdr: false,
             udp_gso: false,
+            flags: 0,
+        }
+    }
+
+    /// # Prerequisites
+    /// - The `IFF_MULTI_QUEUE` flag must be enabled.
+    /// - The system must support network interface multi-queue functionality.
+    ///
+    /// # Description
+    /// When multi-queue is enabled, create a new queue by duplicating an existing one.
+    pub fn try_clone(&self) -> io::Result<Device> {
+        let flags = self.flags;
+        if flags & (IFF_MULTI_QUEUE as c_short) != IFF_MULTI_QUEUE as c_short {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "iff_multi_queue not enabled",
+            ));
+        }
+        unsafe {
+            let mut req = self.request()?;
+            req.ifr_ifru.ifru_flags = flags;
+            let fd = libc::open(b"/dev/net/tun\0".as_ptr() as *const _, O_RDWR);
+            let tun_fd = Fd::new(fd)?;
+            if let Err(err) = tunsetiff(tun_fd.inner, &mut req as *mut _ as *mut _) {
+                return Err(io::Error::from(err));
+            }
+            let dev = Device {
+                tun: Tun::new(tun_fd),
+                vnet_hdr: self.vnet_hdr,
+                udp_gso: self.udp_gso,
+                flags,
+            };
+            if dev.udp_gso {
+                dev.set_tcp_udp_offloads()?
+            } else if dev.vnet_hdr {
+                dev.set_tcp_offloads()?;
+            }
+            Ok(dev)
         }
     }
     pub fn udp_gso(&self) -> bool {

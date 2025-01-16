@@ -46,6 +46,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
                 "CDCD:910A:2222:5498:8475:1111:3900:2021".parse().unwrap(),
                 64,
             )
+            // .iff_multi_queue(true)
             .mtu(1400)
             // .ipv6(
             //     "CDCD:910A:2222:5498:8475:1111:3900:2021".parse().unwrap(),
@@ -55,6 +56,10 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
             //                ( "CDCD:910A:2222:5498:8475:1111:3900:2023".parse().unwrap(),64)])
             .build_sync()?,
     );
+    // // linux multi queue
+    // let device = dev.try_clone().unwrap();
+    // println!("clone {:?}", device.name());
+
     println!("if_index = {:?}", dev.if_index());
     println!("mtu = {:?}", dev.mtu());
     #[cfg(windows)]
