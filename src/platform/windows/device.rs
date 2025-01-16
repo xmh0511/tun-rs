@@ -1,54 +1,19 @@
 use std::collections::HashSet;
 use std::io;
 
-use crate::configuration::{configure, Configuration};
+use crate::configuration::Configuration;
 use crate::device::ETHER_ADDR_LEN;
-use crate::error::Result;
 use crate::platform::windows::netsh;
 use crate::platform::windows::tap::TapDevice;
 use crate::platform::windows::tun::TunDevice;
-use crate::{Error, IntoAddress, Layer};
+use crate::{Error, Layer, ToIpv4Netmask};
 use getifaddrs::Interface;
 use network_interface::NetworkInterfaceConfig;
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-pub enum Driver {
+pub(crate) enum Driver {
     Tun(TunDevice),
-    #[allow(dead_code)]
     Tap(TapDevice),
-}
-
-impl Driver {
-    pub(crate) fn index(&self) -> Result<u32> {
-        match self {
-            Driver::Tun(tun) => Ok(tun.index()),
-            Driver::Tap(tap) => Ok(tap.index()),
-        }
-    }
-    pub fn read_by_ref(&self, buf: &mut [u8]) -> io::Result<usize> {
-        match self {
-            Driver::Tap(tap) => tap.read(buf),
-            Driver::Tun(tun) => tun.recv(buf),
-        }
-    }
-    pub fn try_read_by_ref(&self, buf: &mut [u8]) -> io::Result<usize> {
-        match self {
-            Driver::Tap(tap) => tap.try_read(buf),
-            Driver::Tun(tun) => tun.try_recv(buf),
-        }
-    }
-    pub fn write_by_ref(&self, buf: &[u8]) -> io::Result<usize> {
-        match self {
-            Driver::Tap(tap) => tap.write(buf),
-            Driver::Tun(tun) => tun.send(buf),
-        }
-    }
-    pub fn try_write_by_ref(&self, buf: &[u8]) -> io::Result<usize> {
-        match self {
-            Driver::Tap(tap) => tap.try_write(buf),
-            Driver::Tun(tun) => tun.try_send(buf),
-        }
-    }
 }
 
 /// A TUN device using the wintun driver.
@@ -56,14 +21,6 @@ pub struct Device {
     pub(crate) driver: Driver,
 }
 
-macro_rules! driver_case {
-    ($driver:expr; $tun:ident =>  $tun_branch:block; $tap:ident => $tap_branch:block) => {
-        match $driver {
-            Driver::Tun($tun) => $tun_branch
-            Driver::Tap($tap) => $tap_branch
-        }
-    };
-}
 fn hash_name(input_str: &str) -> u128 {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::hash::DefaultHasher::new();
@@ -80,7 +37,7 @@ fn hash_name(input_str: &str) -> u128 {
 
 impl Device {
     /// Create a new `Device` for the given `Configuration`.
-    pub fn new(config: &Configuration) -> Result<Self> {
+    pub fn new(config: Configuration) -> crate::Result<Self> {
         let layer = config.layer.unwrap_or(Layer::L3);
         let mut count = 0;
         let interfaces = network_interface::NetworkInterface::show().map_err(|e| {
@@ -90,30 +47,30 @@ impl Device {
         })?;
         let interfaces: HashSet<String> = interfaces.into_iter().map(|v| v.name).collect();
         let device = if layer == Layer::L3 {
-            let wintun_file = &config.platform_config.wintun_file;
+            let default_wintun_file = "wintun.dll".to_string();
+            let wintun_file = config
+                .wintun_file
+                .as_deref()
+                .unwrap_or(&default_wintun_file);
             let ring_capacity = config
-                .platform_config
                 .ring_capacity
                 .unwrap_or(crate::platform::windows::tun::MAX_RING_CAPACITY);
             let mut attempts = 0;
             let tun_device = loop {
                 let default_name = format!("tun{count}");
                 count += 1;
-                let name = config.name.as_deref().unwrap_or(&default_name);
+                let name = config.dev_name.as_deref().unwrap_or(&default_name);
 
                 if interfaces.contains(name) {
-                    if config.name.is_none() {
+                    if config.dev_name.is_none() {
                         continue;
                     }
                     Err(Error::String(format!(
                         "The network adapter [{name}] already exists."
                     )))?
                 }
-                let guid = config
-                    .platform_config
-                    .device_guid
-                    .unwrap_or_else(|| hash_name(name));
-                match TunDevice::create(&wintun_file, name, name, guid, ring_capacity) {
+                let guid = config.device_guid.unwrap_or_else(|| hash_name(name));
+                match TunDevice::create(wintun_file, name, name, guid, ring_capacity) {
                     Ok(tun_device) => break tun_device,
                     Err(e) => {
                         if attempts > 3 {
@@ -131,14 +88,14 @@ impl Device {
             const HARDWARE_ID: &str = "tap0901";
             let tap = loop {
                 let default_name = format!("tap{count}");
-                let name = config.name.as_deref().unwrap_or(&default_name);
+                let name = config.dev_name.as_deref().unwrap_or(&default_name);
                 if interfaces.contains(name) {
-                    if config.name.is_none() {
+                    if config.dev_name.is_none() {
                         continue;
                     }
                 }
                 if let Ok(tap) = TapDevice::open(HARDWARE_ID, name) {
-                    if config.name.is_none() {
+                    if config.dev_name.is_none() {
                         count += 1;
                         continue;
                     }
@@ -146,7 +103,7 @@ impl Device {
                 } else {
                     let tap = TapDevice::create(HARDWARE_ID)?;
                     if let Err(e) = tap.set_name(name) {
-                        if config.name.is_some() {
+                        if config.dev_name.is_some() {
                             Err(e)?
                         }
                     }
@@ -159,194 +116,158 @@ impl Device {
         } else {
             panic!("unknown layer {:?}", layer);
         };
-        configure(&device, config)?;
-        if let Some(metric) = config.platform_config.metric {
-            device.set_metric(metric)?;
-        }
+        config.config(&device)?;
         Ok(device)
     }
 
     /// Recv a packet from tun device
     pub fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
-        self.driver.read_by_ref(buf)
+        match &self.driver {
+            Driver::Tap(tap) => tap.read(buf),
+            Driver::Tun(tun) => tun.recv(buf),
+        }
     }
     pub fn try_recv(&self, buf: &mut [u8]) -> io::Result<usize> {
-        self.driver.try_read_by_ref(buf)
+        match &self.driver {
+            Driver::Tap(tap) => tap.try_read(buf),
+            Driver::Tun(tun) => tun.try_recv(buf),
+        }
     }
 
     /// Send a packet to tun device
     pub fn send(&self, buf: &[u8]) -> io::Result<usize> {
-        self.driver.write_by_ref(buf)
+        match &self.driver {
+            Driver::Tap(tap) => tap.write(buf),
+            Driver::Tun(tun) => tun.send(buf),
+        }
     }
     pub fn try_send(&self, buf: &[u8]) -> io::Result<usize> {
-        self.driver.try_write_by_ref(buf)
+        match &self.driver {
+            Driver::Tap(tap) => tap.try_write(buf),
+            Driver::Tun(tun) => tun.try_send(buf),
+        }
     }
     pub fn shutdown(&self) -> io::Result<()> {
-        driver_case!(
-            &self.driver;
-            tun=>{
-                tun.shutdown()
-            };
-            tap=>{
-               tap.down()
-            }
-        )
+        match &self.driver {
+            Driver::Tun(tun) => tun.shutdown(),
+            Driver::Tap(tap) => tap.down(),
+        }
     }
-    pub fn get_all_adapter_address(&self) -> Result<Vec<Interface>, crate::Error> {
+    fn get_all_adapter_address(&self) -> Result<Vec<Interface>, Error> {
         Ok(getifaddrs::getifaddrs()?.collect())
     }
 
-    pub fn name(&self) -> Result<String> {
-        driver_case!(
-            &self.driver;
-            tun=>{
-                Ok(tun.get_name()?)
-            };
-            tap=>{
-               Ok(tap.get_name()?)
-            }
-        )
+    pub fn name(&self) -> io::Result<String> {
+        match &self.driver {
+            Driver::Tun(tun) => tun.get_name(),
+            Driver::Tap(tap) => tap.get_name(),
+        }
     }
 
-    pub fn set_name(&self, value: &str) -> Result<()> {
-        driver_case!(
-            &self.driver;
-            tun=>{
-                tun.set_name(value)?;
-            };
-            tap=>{
-               tap.set_name(value)?
-            }
-        );
-        Ok(())
+    pub fn set_name(&self, value: &str) -> io::Result<()> {
+        match &self.driver {
+            Driver::Tun(tun) => tun.set_name(value),
+            Driver::Tap(tap) => tap.set_name(value),
+        }
     }
 
-    pub fn if_index(&self) -> Result<u32> {
-        self.driver.index()
+    pub fn if_index(&self) -> io::Result<u32> {
+        match &self.driver {
+            Driver::Tun(tun) => Ok(tun.index()),
+            Driver::Tap(tap) => Ok(tap.index()),
+        }
     }
 
-    pub fn enabled(&self, value: bool) -> Result<()> {
-        driver_case!(
-            &self.driver;
-            _tun=>{
-                // Unsupported
-            };
-            tap=>{
-                 if value{
-                    tap.up()?
-                 }else{
-                     tap.down()?
-                }
-            }
-        );
-        Ok(())
+    pub fn enabled(&self, value: bool) -> io::Result<()> {
+        match &self.driver {
+            Driver::Tun(_tun) => Ok(()),
+            Driver::Tap(tap) => tap.set_status(value),
+        }
     }
 
-    pub fn addresses(&self) -> Result<Vec<Interface>> {
+    pub fn addresses(&self) -> io::Result<Vec<IpAddr>> {
         let index = self.if_index()?;
         let r = self
             .get_all_adapter_address()?
             .into_iter()
             .filter(|v| v.index == Some(index))
+            .map(|v| v.address)
             .collect();
         Ok(r)
     }
 
-    pub fn set_network_address<A: IntoAddress>(
+    pub fn set_network_address<Netmask: ToIpv4Netmask>(
         &self,
-        address: A,
-        netmask: A,
-        destination: Option<A>,
-    ) -> Result<()> {
-        let destination = if let Some(destination) = destination {
-            Some(destination.into_address()?)
-        } else {
-            None
-        };
-        if let Ok(addr) = self.addresses() {
-            for e in addr {
-                if e.address.is_ipv6() {
-                    if let Err(e) = netsh::delete_interface_ip(self.driver.index()?, e.address) {
-                        log::error!("{e:?}");
-                    }
-                }
-            }
-        }
-
+        address: Ipv4Addr,
+        netmask: Netmask,
+        destination: Option<Ipv4Addr>,
+    ) -> io::Result<()> {
+        let netmask = ipnet::Ipv4Net::new_assert(address, netmask.prefix()).netmask();
         netsh::set_interface_ip(
-            self.driver.index()?,
-            address.into_address()?,
-            netmask.into_address()?,
-            destination,
-        )?;
-        Ok(())
+            self.if_index()?,
+            address.into(),
+            netmask.into(),
+            destination.map(|v| v.into()),
+        )
     }
 
-    pub fn remove_network_address(&self, addrs: Vec<(IpAddr, u8)>) -> Result<()> {
+    pub fn remove_network_address(&self, addrs: Vec<(IpAddr, u8)>) -> io::Result<()> {
         for addr in addrs {
-            if let Err(e) = netsh::delete_interface_ip(self.driver.index()?, addr.0) {
-                return Err(crate::Error::String(e.to_string()));
-            }
+            netsh::delete_interface_ip(self.if_index()?, addr.0)?;
         }
         Ok(())
     }
 
-    pub fn add_address_v6(&self, addr: IpAddr, prefix: u8) -> Result<()> {
-        if !addr.is_ipv6() {
-            return Err(crate::Error::InvalidAddress);
-        }
-        let network_addr =
-            ipnet::IpNet::new(addr, prefix).map_err(|e| Error::String(e.to_string()))?;
+    pub fn add_address_v6(&self, addr: Ipv6Addr, prefix: u8) -> io::Result<()> {
+        let network_addr = ipnet::Ipv6Net::new(addr, prefix)
+            .map_err(|_| io::Error::from(io::ErrorKind::InvalidData))?;
         let mask = network_addr.netmask();
-        netsh::set_interface_ip(self.driver.index()?, addr, mask, None)?;
-        Ok(())
+        netsh::set_interface_ip(self.if_index()?, addr.into(), mask.into(), None)
     }
-    pub fn mtu(&self) -> Result<u16> {
+    pub fn mtu(&self) -> io::Result<u16> {
         let index = self.if_index()?;
         let mtu = crate::platform::windows::ffi::get_mtu_by_index(index, true)?;
         Ok(mtu as _)
     }
-    pub fn mtu_v6(&self) -> Result<u16> {
+    pub fn mtu_v6(&self) -> io::Result<u16> {
         let index = self.if_index()?;
         let mtu = crate::platform::windows::ffi::get_mtu_by_index(index, false)?;
         Ok(mtu as _)
     }
 
-    pub fn set_mtu(&self, mtu: u16) -> Result<()> {
-        netsh::set_interface_mtu(self.if_index()?, mtu as _)?;
-        Ok(())
+    pub fn set_mtu(&self, mtu: u16) -> io::Result<()> {
+        netsh::set_interface_mtu(self.if_index()?, mtu as _)
     }
-    pub fn set_mtu_v6(&self, mtu: u16) -> Result<()> {
-        netsh::set_interface_mtu_v6(self.if_index()?, mtu as _)?;
-        Ok(())
+    pub fn set_mtu_v6(&self, mtu: u16) -> io::Result<()> {
+        netsh::set_interface_mtu_v6(self.if_index()?, mtu as _)
     }
 
-    pub fn set_mac_address(&self, eth_addr: [u8; ETHER_ADDR_LEN as usize]) -> Result<()> {
-        driver_case!(
-            &self.driver;
-            _tun=>{
-                Err(io::Error::from(io::ErrorKind::Unsupported))?
-            };
-            tap=>{
-                tap.set_mac(&eth_addr).map_err(|e|e.into())
-            }
-        )
+    pub fn set_mac_address(&self, eth_addr: [u8; ETHER_ADDR_LEN as usize]) -> io::Result<()> {
+        match &self.driver {
+            Driver::Tun(_tun) => Err(io::Error::from(io::ErrorKind::Unsupported)),
+            Driver::Tap(tap) => tap.set_mac(&eth_addr),
+        }
     }
 
-    pub fn mac_address(&self) -> Result<[u8; ETHER_ADDR_LEN as usize]> {
-        driver_case!(
-            &self.driver;
-            _tun=>{
-                Err(io::Error::from(io::ErrorKind::Unsupported))?
-            };
-            tap=>{
-                tap.get_mac().map_err(|e|e.into())
-            }
-        )
+    pub fn mac_address(&self) -> io::Result<[u8; ETHER_ADDR_LEN as usize]> {
+        match &self.driver {
+            Driver::Tun(_tun) => Err(io::Error::from(io::ErrorKind::Unsupported)),
+            Driver::Tap(tap) => tap.get_mac(),
+        }
     }
 
-    pub fn set_metric(&self, metric: u16) -> Result<()> {
-        netsh::set_interface_metric(self.if_index()?, metric)?;
-        Ok(())
+    pub fn set_metric(&self, metric: u16) -> io::Result<()> {
+        netsh::set_interface_metric(self.if_index()?, metric)
+    }
+    pub fn version(&self) -> io::Result<String> {
+        match &self.driver {
+            Driver::Tun(tun) => tun.version(),
+            Driver::Tap(tap) => tap.get_version().map(|v| {
+                v.iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<String>>()
+                    .join(".")
+            }),
+        }
     }
 }

@@ -1,12 +1,11 @@
-#[allow(unused_imports)]
-use crate::address::IntoAddress;
-use crate::platform::PlatformConfig;
-#[allow(unused_imports)]
-use std::net::IpAddr;
+use crate::Device;
+use std::io;
+use std::net::{Ipv4Addr, Ipv6Addr};
 
 /// TUN interface OSI layer of operation.
 #[derive(Clone, Copy, Default, Debug, Eq, PartialEq)]
 pub enum Layer {
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
     L2,
     #[default]
     L3,
@@ -14,260 +13,154 @@ pub enum Layer {
 
 /// Configuration builder for a TUN interface.
 #[derive(Clone, Default, Debug)]
-pub(crate) struct Configuration {
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
-    pub(crate) name: Option<String>,
-    pub(crate) platform_config: PlatformConfig,
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
+pub struct Configuration {
+    pub dev_name: Option<String>,
+    pub mtu: Option<u16>,
+    #[cfg(windows)]
+    pub mtu_v6: Option<u16>,
+    pub ipv4: Option<(Ipv4Addr, u8, Option<Ipv4Addr>)>,
+    pub ipv6: Option<Vec<(Ipv6Addr, u8)>>,
+    pub layer: Option<Layer>,
     #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
-    pub(crate) mac_addr: Option<[u8; 6]>,
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
-    pub(crate) address_prefix_v6: Option<Vec<(IpAddr, u8)>>,
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
-    pub(crate) address_mask_v4: Option<(IpAddr, IpAddr)>,
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
-    pub(crate) destination: Option<IpAddr>,
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
-    pub(crate) broadcast: Option<IpAddr>,
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
-    pub(crate) mtu: Option<u16>,
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd",
-        target_os = "windows"
-    ))]
-    pub(crate) enabled: Option<bool>,
-    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
-    pub(crate) layer: Option<Layer>,
+    pub mac_addr: Option<[u8; 6]>,
+    #[cfg(windows)]
+    pub device_guid: Option<u128>,
+    #[cfg(windows)]
+    pub wintun_file: Option<String>,
+    #[cfg(windows)]
+    pub ring_capacity: Option<u32>,
 }
-
 impl Configuration {
-    /// Access the platform-dependent configuration.
-    pub fn platform_config<F>(&mut self, f: F) -> &mut Self
-    where
-        F: FnOnce(&mut PlatformConfig),
-    {
-        f(&mut self.platform_config);
-        self
-    }
-
-    /// Set the tun name.
-    ///
-    /// [Note: on macOS, the tun name must be the form `utunx` where `x` is a number, such as `utun3`. -- end note]
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
-    pub fn name<S: AsRef<str>>(&mut self, name: S) -> &mut Self {
-        self.name = Some(name.as_ref().into());
-        self
-    }
-
-    /// Set the address.
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
-    pub fn address_with_prefix<A: IntoAddress>(&mut self, value: A, prefix: u8) -> &mut Self {
-        let address = value.into_address().unwrap();
-        if address.is_ipv4() {
-            let ip_net = ipnet::IpNet::new(address, prefix).unwrap();
-            self.address_mask_v4.replace((address, ip_net.netmask()));
-        } else {
-            self.address_prefix_v6.replace(vec![(address, prefix)]);
+    pub(crate) fn config(self, device: &Device) -> io::Result<()> {
+        if let Some(dev_name) = self.dev_name {
+            device.set_name(&dev_name)?;
         }
-        self
-    }
-    /// Set the address.
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
-    pub fn address_with_netmask<A: IntoAddress>(&mut self, value: A, netmask: A) -> &mut Self {
-        let address = value.into_address().unwrap();
-        let netmask = netmask.into_address().unwrap();
-        let prefix = ipnet::ip_mask_to_prefix(netmask).unwrap();
-        self.address_with_prefix(address, prefix)
-    }
-    /// Set the address.
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
-    pub fn address_with_prefix_multi<A: IntoAddress>(&mut self, values: &[(A, u8)]) -> &mut Self {
-        let mut address_mask_v4 = None;
-        let mut address_mask_v6 = Vec::new();
-        for (value, prefix) in values {
-            let address = value.into_address().unwrap();
-            if address.is_ipv4() {
-                let ip_net = ipnet::IpNet::new(address, *prefix).unwrap();
-                address_mask_v4.replace((address, ip_net.netmask()));
-            } else {
-                address_mask_v6.push((address, *prefix));
-            }
-        }
-        self.address_mask_v4 = address_mask_v4;
-        if !address_mask_v6.is_empty() {
-            self.address_prefix_v6.replace(address_mask_v6);
-        }
-        self
-    }
-    /// Set the destination address.
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
-    pub fn destination<A: IntoAddress>(&mut self, value: A) -> &mut Self {
-        self.destination = Some(value.into_address().unwrap());
-        self
-    }
-
-    /// Set the broadcast address.
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
-    pub fn broadcast<A: IntoAddress>(&mut self, value: A) -> &mut Self {
-        self.broadcast = Some(value.into_address().unwrap());
-        self
-    }
-
-    /// Set the MTU.
-    ///
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
-    pub fn mtu(&mut self, value: u16) -> &mut Self {
-        self.mtu = Some(value);
-        self
-    }
-
-    /// Set the interface to be enabled once created.
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd",
-        target_os = "windows"
-    ))]
-    pub fn up(&mut self) -> &mut Self {
-        self.enabled = Some(true);
-        self
-    }
-
-    /// Set the interface to be disabled once created.
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd",
-        target_os = "windows"
-    ))]
-    pub fn down(&mut self) -> &mut Self {
-        self.enabled = Some(false);
-        self
-    }
-
-    /// Set the OSI layer of operation.
-    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
-    pub fn layer(&mut self, value: Layer) -> &mut Self {
-        self.layer = Some(value);
-        self
-    }
-}
-
-use super::Device;
-
-/// Reconfigure the device.
-#[allow(dead_code)]
-pub(crate) fn configure(device: &Device, config: &Configuration) -> crate::error::Result<()> {
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd"
-    ))]
-    {
-        if let Some(mtu) = config.mtu {
+        if let Some(mtu) = self.mtu {
             device.set_mtu(mtu)?;
         }
-        if let Some((address, netmask)) = config.address_mask_v4 {
-            device.set_network_address(address, netmask, config.destination)?;
+        #[cfg(windows)]
+        if let Some(mtu) = self.mtu_v6 {
+            device.set_mtu_v6(mtu)?;
         }
-        if let Some(values) = &config.address_prefix_v6 {
-            for (address, prefix) in values {
-                device.add_address_v6(*address, *prefix)?
+        #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+        if let Some(mac_addr) = self.mac_addr {
+            if self.layer.unwrap_or_default() == Layer::L2 {
+                device.set_mac_address(mac_addr)?;
             }
         }
-    }
-    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
-    if config.layer == Some(Layer::L2) {
-        if let Some(mac_addr) = config.mac_addr {
-            device.set_mac_address(mac_addr)?;
+
+        if let Some((address, netmask, destination)) = self.ipv4 {
+            device.set_network_address(address, netmask, destination)?;
         }
+        if let Some(ipv6) = self.ipv6 {
+            for (ip, prefix) in ipv6 {
+                device.add_address_v6(ip, prefix)?;
+            }
+        }
+
+        Ok(())
     }
-    #[cfg(target_os = "linux")]
-    if let Some(ip) = config.broadcast {
-        device.set_broadcast(ip)?;
+}
+
+#[derive(Default)]
+pub struct DeviceBuilder {
+    config: Configuration,
+}
+
+impl DeviceBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    pub fn name<S: Into<String>>(mut self, dev_name: S) -> Self {
+        self.config.dev_name = Some(dev_name.into());
+        self
+    }
+    pub fn mtu(mut self, mtu: u16) -> Self {
+        self.config.mtu = Some(mtu);
+        self
+    }
+    #[cfg(windows)]
+    pub fn mtu_v6(mut self, mtu: u16) -> Self {
+        self.config.mtu = Some(mtu);
+        self
+    }
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+    pub fn mac_addr(mut self, mac_addr: [u8; 6]) -> Self {
+        self.config.mac_addr = Some(mac_addr);
+        self
+    }
+    pub fn ipv4<Netmask: ToIpv4Netmask>(
+        mut self,
+        address: Ipv4Addr,
+        mask: Netmask,
+        destination: Option<Ipv4Addr>,
+    ) -> Self {
+        self.config.ipv4 = Some((address, mask.prefix(), destination));
+        self
+    }
+    pub fn ipv6<Netmask: ToIpv6Netmask>(mut self, address: Ipv6Addr, mask: Netmask) -> Self {
+        if let Some(v) = &mut self.config.ipv6 {
+            v.push((address, mask.prefix()));
+        } else {
+            self.config.ipv6 = Some(vec![(address, mask.prefix())]);
+        }
+
+        self
+    }
+    pub fn ipv6_tuple<Netmask: ToIpv6Netmask>(mut self, addrs: Vec<(Ipv6Addr, Netmask)>) -> Self {
+        if let Some(v) = &mut self.config.ipv6 {
+            for (address, mask) in addrs {
+                v.push((address, mask.prefix()));
+            }
+        } else {
+            self.config.ipv6 = Some(
+                addrs
+                    .into_iter()
+                    .map(|(ip, mask)| (ip, mask.prefix()))
+                    .collect(),
+            );
+        }
+        self
+    }
+    pub fn layer(mut self, layer: Layer) -> Self {
+        self.config.layer = Some(layer);
+        self
     }
 
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "freebsd",
-        target_os = "windows"
-    ))]
-    device.enabled(config.enabled.unwrap_or(true))?;
-    _ = device;
-    _ = config;
-    Ok(())
+    pub fn build_sync(self) -> std::io::Result<Device> {
+        let device = Device::new(self.config)?;
+        Ok(device)
+    }
+    #[cfg(any(feature = "async_std", feature = "async_tokio"))]
+    pub fn build_async(self) -> std::io::Result<crate::AsyncDevice> {
+        let device = crate::AsyncDevice::new(self.build_sync()?)?;
+        Ok(device)
+    }
+}
+pub trait ToIpv4Netmask {
+    fn prefix(self) -> u8;
+}
+impl ToIpv4Netmask for u8 {
+    fn prefix(self) -> u8 {
+        assert!(self <= 32);
+        self
+    }
+}
+impl ToIpv4Netmask for Ipv4Addr {
+    fn prefix(self) -> u8 {
+        u32::from_be_bytes(self.octets()).count_ones() as u8
+    }
+}
+pub trait ToIpv6Netmask {
+    fn prefix(self) -> u8;
+}
+impl ToIpv6Netmask for u8 {
+    fn prefix(self) -> u8 {
+        self
+    }
+}
+impl ToIpv6Netmask for Ipv6Addr {
+    fn prefix(self) -> u8 {
+        u128::from_be_bytes(self.octets()).count_ones() as u8
+    }
 }

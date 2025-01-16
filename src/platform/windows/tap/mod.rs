@@ -1,5 +1,5 @@
 use crate::platform::windows::{ffi, netsh};
-use std::{io, net, time};
+use std::{io, time};
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::NetworkManagement::Ndis::NET_LUID_LH;
 use windows_sys::Win32::System::Ioctl::{FILE_ANY_ACCESS, FILE_DEVICE_UNKNOWN, METHOD_BUFFERED};
@@ -92,12 +92,6 @@ impl TapDevice {
         })
     }
 
-    /// Sets the status of the interface to connected.
-    /// Equivalent to `.set_status(true)`
-    pub fn up(&self) -> io::Result<()> {
-        self.set_status(true)
-    }
-
     /// Sets the status of the interface to disconnected.
     /// Equivalent to `.set_status(false)`
     pub fn down(&self) -> io::Result<()> {
@@ -126,15 +120,6 @@ impl TapDevice {
     //         .map(|_| out_mtu)
     // }
 
-    pub fn get_address(&self) -> io::Result<net::IpAddr> {
-        unimplemented!()
-    }
-    pub fn get_netmask(&self) -> io::Result<net::IpAddr> {
-        unimplemented!()
-    }
-    pub fn get_destination(&self) -> io::Result<net::IpAddr> {
-        unimplemented!()
-    }
     /// Retrieve the name of the interface
     pub fn get_name(&self) -> io::Result<String> {
         ffi::luid_to_alias(&self.luid)

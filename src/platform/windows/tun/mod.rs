@@ -38,6 +38,17 @@ impl Drop for AdapterHandle {
         }
     }
 }
+impl AdapterHandle {
+    fn version(&self) -> io::Result<String> {
+        let version = unsafe { self.win_tun.WintunGetRunningDriverVersion() };
+        let v = version.to_be_bytes();
+        Ok(format!(
+            "{}.{}",
+            u16::from_be_bytes([v[0], v[1]]),
+            u16::from_be_bytes([v[2], v[3]])
+        ))
+    }
+}
 struct SessionHandle {
     adapter: AdapterHandle,
     handle: wintun_raw::WINTUN_SESSION_HANDLE,
@@ -157,6 +168,9 @@ impl TunDevice {
     }
     pub fn shutdown(&self) -> io::Result<()> {
         self.session.shutdown()
+    }
+    pub fn version(&self) -> io::Result<String> {
+        self.session.adapter.version()
     }
 }
 

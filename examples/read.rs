@@ -55,11 +55,14 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
             //                ( "CDCD:910A:2222:5498:8475:1111:3900:2023".parse().unwrap(),64)])
             .build_sync()?,
     );
-
+    dev.set_mtu_v6(2000).unwrap();
     println!("if_index = {:?}", dev.if_index());
     println!("mtu = {:?}", dev.mtu());
     #[cfg(windows)]
-    println!("mtu ipv6 = {:?}", dev.mtu_v6());
+    {
+        println!("mtu ipv6 = {:?}", dev.mtu_v6());
+        println!("version = {:?}", dev.version());
+    }
     let dev_t = dev.clone();
     let _join = std::thread::spawn(move || {
         let mut buf = [0; 4096];
