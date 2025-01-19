@@ -161,11 +161,14 @@ impl Device {
                 udp_gso: self.udp_gso,
                 flags,
             };
-            if dev.udp_gso {
-                dev.set_tcp_udp_offloads()?
-            } else if dev.vnet_hdr {
-                dev.set_tcp_offloads()?;
+            if dev.vnet_hdr {
+                if dev.udp_gso {
+                    dev.set_tcp_udp_offloads()?
+                } else {
+                    dev.set_tcp_offloads()?;
+                }
             }
+
             Ok(dev)
         }
     }

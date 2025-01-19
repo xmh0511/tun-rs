@@ -11,13 +11,6 @@ use std::io::IoSlice;
 use std::net::IpAddr;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::os::fd::IntoRawFd;
-#[cfg(any(
-    target_os = "linux",
-    target_os = "macos",
-    target_os = "freebsd",
-    target_os = "ios",
-    target_os = "android"
-))]
 use std::os::fd::{FromRawFd, RawFd};
 use std::task::{Context, Poll};
 
@@ -112,7 +105,32 @@ impl AsyncDevice {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl AsyncDevice {
+    pub fn try_clone(&self) -> io::Result<Self> {
+        AsyncDevice::new(self.inner.get_ref().try_clone()?)
+    }
+    pub fn tx_queue_len(&self) -> io::Result<u32> {
+        self.inner.get_ref().tx_queue_len()
+    }
+    pub fn set_tx_queue_len(&self, tx_queue_len: u32) -> io::Result<()> {
+        self.inner.get_ref().set_tx_queue_len(tx_queue_len)
+    }
+    pub fn udp_gso(&self) -> bool {
+        self.inner.get_ref().udp_gso()
+    }
+    pub fn tcp_gso(&self) -> bool {
+        self.inner.get_ref().tcp_gso()
+    }
+    pub fn persist(&self) -> io::Result<()> {
+        self.inner.get_ref().persist()
+    }
+    pub fn user(&self, value: i32) -> io::Result<()> {
+        self.inner.get_ref().user(value)
+    }
+    pub fn group(&self, value: i32) -> io::Result<()> {
+        self.inner.get_ref().group(value)
+    }
     /// Recv a packet from tun device.
     /// If offload is enabled. This method can be used to obtain processed data.
     ///
@@ -204,26 +222,8 @@ impl AsyncDevice {
         Ok(total)
     }
 }
-
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
 impl AsyncDevice {
-    #[cfg(target_os = "linux")]
-    pub fn tx_queue_len(&self) -> io::Result<u32> {
-        self.inner.get_ref().tx_queue_len()
-    }
-    #[cfg(target_os = "linux")]
-    pub fn set_tx_queue_len(&self, tx_queue_len: u32) -> io::Result<()> {
-        self.inner.get_ref().set_tx_queue_len(tx_queue_len)
-    }
-    #[cfg(target_os = "linux")]
-    pub fn udp_gso(&self) -> bool {
-        self.inner.get_ref().udp_gso()
-    }
-    #[cfg(target_os = "linux")]
-    pub fn tcp_gso(&self) -> bool {
-        self.inner.get_ref().tcp_gso()
-    }
-
     #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
     pub fn name(&self) -> io::Result<String> {
         self.inner.get_ref().name()

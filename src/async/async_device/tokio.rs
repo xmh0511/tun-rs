@@ -68,7 +68,7 @@ impl AsyncRead for AsyncFd {
         loop {
             let mut guard = ready!(self.0.poll_read_ready(cx))?;
             let unfilled = buf.initialize_unfilled();
-            match guard.try_io(|inner| inner.get_ref().tun.recv(unfilled)) {
+            match guard.try_io(|inner| inner.get_ref().recv(unfilled)) {
                 Ok(Ok(len)) => {
                     buf.advance(len);
                     return Poll::Ready(Ok(()));
@@ -89,7 +89,7 @@ impl AsyncWrite for AsyncFd {
         loop {
             let mut guard = ready!(self.0.poll_write_ready(cx))?;
 
-            match guard.try_io(|inner| inner.get_ref().tun.send(buf)) {
+            match guard.try_io(|inner| inner.get_ref().send(buf)) {
                 Ok(result) => return Poll::Ready(result),
                 Err(_would_block) => continue,
             }
