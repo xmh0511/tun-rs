@@ -51,13 +51,12 @@ impl Device {
     pub fn send_vectored(&self, bufs: &[IoSlice<'_>]) -> std::io::Result<usize> {
         self.tun.send_vectored(bufs)
     }
-    /// Do not use nonblocking fd when you want to use shutdown
     #[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
     #[cfg(feature = "experimental")]
     pub fn shutdown(&self) -> std::io::Result<()> {
         self.tun.shutdown()
     }
-    #[allow(dead_code)]
+    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
     pub(crate) fn get_if_index(name: &str) -> std::io::Result<u32> {
         let ifname = std::ffi::CString::new(name)?;
         unsafe { Ok(libc::if_nametoindex(ifname.as_ptr())) }
