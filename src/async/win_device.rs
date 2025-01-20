@@ -15,12 +15,6 @@ pub struct AsyncDevice {
     send_task_lock: Arc<Mutex<Option<blocking::Task<io::Result<usize>>>>>,
 }
 
-impl Drop for AsyncDevice {
-    fn drop(&mut self) {
-        let _ = self.inner.shutdown();
-    }
-}
-
 impl AsyncDevice {
     /// Create a new `AsyncDevice` wrapping around a `Device`.
     pub fn new(device: Device) -> io::Result<AsyncDevice> {
@@ -131,7 +125,9 @@ impl AsyncDevice {
     pub fn try_send(&self, buf: &[u8]) -> io::Result<usize> {
         self.inner.try_send(buf)
     }
-
+    pub fn shutdown(&self) -> io::Result<()> {
+        self.inner.shutdown()
+    }
     pub fn name(&self) -> io::Result<String> {
         self.inner.name()
     }
