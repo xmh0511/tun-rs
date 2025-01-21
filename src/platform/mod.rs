@@ -59,7 +59,7 @@ mod test {
             .addresses()
             .unwrap()
             .into_iter()
-            .any(|v| v.address == "192.168.50.1".parse::<Ipv4Addr>().unwrap()));
+            .any(|v| v == "192.168.50.1".parse::<Ipv4Addr>().unwrap()));
 
         assert_eq!(crate::DEFAULT_MTU, dev.mtu().unwrap());
     }

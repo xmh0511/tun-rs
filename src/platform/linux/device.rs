@@ -11,7 +11,7 @@ use crate::{
     platform::posix::{ipaddr_to_sockaddr, sockaddr_union, Fd, Tun},
     ToIpv4Netmask, ToIpv6Netmask,
 };
-use getifaddrs::{self, Interface};
+
 use libc::{
     self, c_char, c_short, ifreq, in6_ifreq, AF_INET, AF_INET6, ARPHRD_ETHER, IFF_MULTI_QUEUE,
     IFF_NO_PI, IFF_RUNNING, IFF_TAP, IFF_TUN, IFF_UP, IFNAMSIZ, O_RDWR, SOCK_DGRAM,
@@ -38,13 +38,16 @@ pub struct Device {
 
 impl Device {
     /// Create a new `Device` for the given `Configuration`.
-    pub fn new(config: Configuration) -> crate::Result<Self> {
+    pub fn new(config: Configuration) -> std::io::Result<Self> {
         let dev_name = match config.dev_name.as_ref() {
             Some(tun_name) => {
                 let tun_name = CString::new(tun_name.clone())?;
 
                 if tun_name.as_bytes_with_nul().len() > IFNAMSIZ {
-                    return Err(crate::Error::NameTooLong);
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidInput,
+                        "device name too long",
+                    ));
                 }
 
                 Some(tun_name)
@@ -442,7 +445,7 @@ impl Device {
     unsafe fn request(&self) -> io::Result<ifreq> {
         request(&self.name()?)
     }
-    pub fn set_address_v4(&self, addr: Ipv4Addr) -> io::Result<()> {
+    fn set_address_v4(&self, addr: Ipv4Addr) -> io::Result<()> {
         unsafe {
             let mut req = self.request()?;
             ipaddr_to_sockaddr(addr, 0, &mut req.ifr_ifru.ifru_addr, OVERWRITE_SIZE);
@@ -452,7 +455,7 @@ impl Device {
         }
         Ok(())
     }
-    pub fn set_netmask(&self, value: Ipv4Addr) -> io::Result<()> {
+    fn set_netmask(&self, value: Ipv4Addr) -> io::Result<()> {
         unsafe {
             let mut req = self.request()?;
             ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_netmask, OVERWRITE_SIZE);
@@ -463,7 +466,7 @@ impl Device {
         }
     }
 
-    pub fn set_destination(&self, value: Ipv4Addr) -> io::Result<()> {
+    fn set_destination(&self, value: Ipv4Addr) -> io::Result<()> {
         unsafe {
             let mut req = self.request()?;
             ipaddr_to_sockaddr(value, 0, &mut req.ifr_ifru.ifru_dstaddr, OVERWRITE_SIZE);
@@ -472,6 +475,23 @@ impl Device {
             }
             Ok(())
         }
+    }
+
+    pub fn remove_address_v6(&self, addr: Ipv6Addr, prefix: u8) -> io::Result<()> {
+        unsafe {
+            let if_index = self.if_index()?;
+            let ctl = ctl_v6()?;
+            let mut ifrv6: in6_ifreq = mem::zeroed();
+            ifrv6.ifr6_ifindex = if_index as i32;
+            ifrv6.ifr6_prefixlen = prefix as _;
+            ifrv6.ifr6_addr = sockaddr_union::from(std::net::SocketAddr::new(addr.into(), 0))
+                .addr6
+                .sin6_addr;
+            if let Err(err) = siocdifaddr_in6(ctl.as_raw_fd(), &ifrv6) {
+                return Err(io::Error::from(err));
+            }
+        }
+        Ok(())
     }
 
     pub fn name(&self) -> io::Result<String> {
@@ -529,14 +549,11 @@ impl Device {
             Ok(())
         }
     }
-    fn getifaddrs(&self) -> io::Result<Vec<Interface>> {
-        let if_name = self.name()?;
-        let addrs = getifaddrs::getifaddrs()?;
-        let ifs = addrs.filter(|v| v.name == if_name).collect();
-        Ok(ifs)
-    }
     pub fn addresses(&self) -> io::Result<Vec<IpAddr>> {
-        Ok(self.getifaddrs()?.iter().map(|v| v.address).collect())
+        Ok(crate::device::get_if_addrs_by_name(self.name()?)?
+            .iter()
+            .map(|v| v.address)
+            .collect())
     }
 
     pub fn broadcast(&self) -> io::Result<IpAddr> {
@@ -584,7 +601,8 @@ impl Device {
                 }
             }
             IpAddr::V6(addr_v6) => {
-                for x in self.getifaddrs()? {
+                let addrs = crate::device::get_if_addrs_by_name(self.name()?)?;
+                for x in addrs {
                     if x.address == addr {
                         if let Some(netmask) = x.netmask {
                             let prefix = ipnet::ip_mask_to_prefix(netmask).unwrap_or(0);
@@ -592,22 +610,6 @@ impl Device {
                         }
                     }
                 }
-            }
-        }
-        Ok(())
-    }
-    pub fn remove_address_v6(&self, addr: Ipv6Addr, prefix: u8) -> io::Result<()> {
-        unsafe {
-            let if_index = self.if_index()?;
-            let ctl = ctl_v6()?;
-            let mut ifrv6: in6_ifreq = mem::zeroed();
-            ifrv6.ifr6_ifindex = if_index as i32;
-            ifrv6.ifr6_prefixlen = prefix as _;
-            ifrv6.ifr6_addr = sockaddr_union::from(std::net::SocketAddr::new(addr.into(), 0))
-                .addr6
-                .sin6_addr;
-            if let Err(err) = siocdifaddr_in6(ctl.as_raw_fd(), &ifrv6) {
-                return Err(io::Error::from(err));
             }
         }
         Ok(())

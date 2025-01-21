@@ -28,7 +28,7 @@ impl Fd {
             #[cfg(feature = "experimental")]
             is_shutdown: AtomicBool::new(false),
             #[cfg(feature = "experimental")]
-            event_fd: EventFd::new()?,
+            event_fd: EventFd::new().expect("failed to create event fd"),
         }
     }
 

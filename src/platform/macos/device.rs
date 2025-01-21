@@ -2,12 +2,12 @@
 
 use crate::{
     configuration::Configuration,
-    error::{Error, Result},
+    error::Error,
     platform::{
         macos::sys::*,
         posix::{self, sockaddr_union, Fd},
     },
-    IntoAddress,
+    ToIpv4Netmask, ToIpv6Netmask,
 };
 
 //const OVERWRITE_SIZE: usize = std::mem::size_of::<libc::__c_anonymous_ifr_ifru>();
@@ -19,6 +19,8 @@ use libc::{
     AF_SYS_CONTROL, IFF_RUNNING, IFF_UP, IFNAMSIZ, PF_SYSTEM, SOCK_DGRAM, SYSPROTO_CONTROL,
     UTUN_OPT_IFNAME,
 };
+use std::io::ErrorKind;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::{ffi::CStr, io, mem, net::IpAddr, os::unix::io::AsRawFd, ptr, sync::Mutex};
 
 #[derive(Clone, Copy, Debug)]
@@ -43,18 +45,27 @@ unsafe fn ctl_v6() -> io::Result<Fd> {
 }
 impl Device {
     /// Create a new `Device` for the given `Configuration`.
-    pub fn new(config: &Configuration) -> Result<Self> {
+    pub fn new(config: Configuration) -> std::io::Result<Self> {
         let mtu = config.mtu.unwrap_or(crate::DEFAULT_MTU);
 
-        let id = if let Some(tun_name) = config.name.as_ref() {
+        let id = if let Some(tun_name) = config.dev_name.as_ref() {
             if tun_name.len() > IFNAMSIZ {
-                return Err(Error::NameTooLong);
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "device name too long",
+                ));
             }
 
             if !tun_name.starts_with("utun") {
-                return Err(Error::InvalidName);
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "device name must start with utun",
+                ));
             }
-            tun_name[4..].parse::<u32>()? + 1_u32
+            tun_name[4..]
+                .parse::<u32>()
+                .map_err(|e| std::io::Error::new(ErrorKind::InvalidInput, e))?
+                + 1_u32
         } else {
             0_u32
         };
@@ -108,7 +119,7 @@ impl Device {
                 alias_lock: Mutex::new(()),
             }
         };
-        crate::configuration::configure(&device, config)?;
+        config.config(&device)?;
         Ok(device)
     }
     pub(crate) fn from_tun(tun: Tun) -> Self {
@@ -119,7 +130,7 @@ impl Device {
     }
     /// Prepare a new request.
     /// # Safety
-    unsafe fn request(&self) -> Result<libc::ifreq> {
+    unsafe fn request(&self) -> std::io::Result<libc::ifreq> {
         let tun_name = self.name()?;
         let mut req: libc::ifreq = mem::zeroed();
         ptr::copy_nonoverlapping(
@@ -131,7 +142,7 @@ impl Device {
         Ok(req)
     }
     /// # Safety
-    unsafe fn request_v6(&self) -> Result<in6_ifreq> {
+    unsafe fn request_v6(&self) -> std::io::Result<in6_ifreq> {
         let tun_name = self.name()?;
         let mut req: in6_ifreq = mem::zeroed();
         ptr::copy_nonoverlapping(
@@ -144,7 +155,7 @@ impl Device {
     }
 
     fn current_route(&self) -> Option<Route> {
-        let addr = self.addresses().ok()?;
+        let addr = crate::device::get_if_addrs_by_name(self.name().ok()?).ok()?;
         let addr = addr
             .into_iter()
             .filter(|v| v.address.is_ipv4())
@@ -162,7 +173,7 @@ impl Device {
         })
     }
 
-    fn calc_dest_addr(&self, addr: IpAddr, netmask: IpAddr) -> Result<IpAddr> {
+    pub(crate) fn calc_dest_addr(&self, addr: IpAddr, netmask: IpAddr) -> std::io::Result<IpAddr> {
         let prefix_len = ipnet::ip_mask_to_prefix(netmask).map_err(|_| Error::InvalidConfig)?;
         Ok(ipnet::IpNet::new(addr, prefix_len)
             .map_err(|_| Error::InvalidConfig)?
@@ -170,31 +181,11 @@ impl Device {
     }
 
     /// Set the IPv4 alias of the device.
-    fn set_alias(&self, addr: IpAddr, dest: IpAddr, mask: IpAddr) -> Result<()> {
+    fn set_alias(&self, addr: IpAddr, dest: IpAddr, mask: IpAddr) -> std::io::Result<()> {
         let _guard = self.alias_lock.lock().unwrap();
         let old_route = self.current_route();
         let tun_name = self.name()?;
         unsafe {
-            if let Ok(addrs) = self.addresses() {
-                for addr in addrs {
-                    match addr.address {
-                        IpAddr::V4(addr) => {
-                            let mut req_v4 = self.request()?;
-                            req_v4.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr;
-                            if let Err(err) = siocdifaddr(ctl()?.as_raw_fd(), &req_v4) {
-                                log::error!("{err:?}");
-                            }
-                        }
-                        IpAddr::V6(addr) => {
-                            let mut req_v6 = self.request_v6()?;
-                            req_v6.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr6;
-                            if let Err(err) = siocdifaddr_in6(ctl_v6()?.as_raw_fd(), &req_v6) {
-                                log::error!("{err:?}");
-                            }
-                        }
-                    }
-                }
-            }
             match addr {
                 IpAddr::V4(_) => {
                     let mut req: ifaliasreq = mem::zeroed();
@@ -213,7 +204,7 @@ impl Device {
                 }
                 IpAddr::V6(_) => {
                     let IpAddr::V6(_) = mask else {
-                        return Err(Error::InvalidAddress);
+                        return Err(std::io::Error::from(ErrorKind::InvalidInput));
                     };
                     let mut req: in6_ifaliasreq = mem::zeroed();
                     ptr::copy_nonoverlapping(
@@ -243,7 +234,7 @@ impl Device {
         }
     }
 
-    fn set_route(&self, old_route: Option<Route>, new_route: Route) -> Result<()> {
+    fn set_route(&self, old_route: Option<Route>, new_route: Route) -> std::io::Result<()> {
         let if_name = self.name()?;
         if let Some(v) = old_route {
             let prefix_len =
@@ -348,7 +339,7 @@ impl Device {
     //     }
     // }
 
-    pub fn name(&self) -> Result<String> {
+    pub fn name(&self) -> std::io::Result<String> {
         let mut tun_name = [0u8; 64];
         let mut name_len: socklen_t = 64;
 
@@ -371,13 +362,13 @@ impl Device {
         }
     }
 
-    pub fn if_index(&self) -> Result<u32> {
+    pub fn if_index(&self) -> std::io::Result<u32> {
         let if_name = self.name()?;
         let index = Self::get_if_index(&if_name)?;
         Ok(index)
     }
 
-    pub fn enabled(&self, value: bool) -> Result<()> {
+    pub fn enabled(&self, value: bool) -> std::io::Result<()> {
         unsafe {
             let ctl = ctl()?;
             let mut req = self.request()?;
@@ -400,13 +391,11 @@ impl Device {
         }
     }
 
-    pub fn addresses(&self) -> Result<Vec<Interface>> {
-        let if_name = self.name()?;
-        let addrs = getifaddrs::getifaddrs()?;
-        let ifs = addrs
-            .filter(|v| v.name == if_name)
-            .collect::<Vec<Interface>>();
-        Ok(ifs)
+    pub fn addresses(&self) -> std::io::Result<Vec<IpAddr>> {
+        Ok(crate::device::get_if_addrs_by_name(self.name()?)?
+            .iter()
+            .map(|v| v.address)
+            .collect())
     }
 
     // /// Question on macOS
@@ -439,7 +428,7 @@ impl Device {
     //     }
     // }
 
-    pub fn mtu(&self) -> Result<u16> {
+    pub fn mtu(&self) -> std::io::Result<u16> {
         unsafe {
             let ctl = ctl()?;
             let mut req = self.request()?;
@@ -448,14 +437,16 @@ impl Device {
                 return Err(io::Error::from(err).into());
             }
 
-            req.ifr_ifru
+            let r: u16 = req
+                .ifr_ifru
                 .ifru_mtu
                 .try_into()
-                .map_err(|_| Error::TryFromIntError)
+                .map_err(|e| std::io::Error::other(e))?;
+            Ok(r)
         }
     }
 
-    pub fn set_mtu(&self, value: u16) -> Result<()> {
+    pub fn set_mtu(&self, value: u16) -> std::io::Result<()> {
         unsafe {
             let ctl = ctl()?;
             let mut req = self.request()?;
@@ -468,50 +459,51 @@ impl Device {
         }
     }
 
-    pub fn set_network_address<A: IntoAddress>(
+    pub fn set_network_address<Netmask: ToIpv4Netmask>(
         &self,
-        address: A,
-        netmask: A,
-        destination: Option<A>,
-    ) -> Result<()> {
-        let addr = address.into_address()?;
-        let netmask = netmask.into_address()?;
+        address: Ipv4Addr,
+        netmask: Netmask,
+        destination: Option<Ipv4Addr>,
+    ) -> std::io::Result<()> {
+        let addr: IpAddr = address.into();
+        let netmask = netmask.netmask().into();
         let default_dest = self.calc_dest_addr(addr, netmask)?;
-        let dest = destination
-            .map(|d| d.into_address().unwrap_or(default_dest))
-            .unwrap_or(default_dest);
+        let dest = destination.map(|d| d.into()).unwrap_or(default_dest);
         self.set_alias(addr, dest, netmask)?;
         Ok(())
     }
 
-    pub fn remove_network_address(&self, addrs: Vec<(IpAddr, u8)>) -> Result<()> {
+    pub fn remove_address(&self, addr: IpAddr) -> io::Result<()> {
         unsafe {
-            for addr in addrs {
-                match addr.0 {
-                    IpAddr::V4(addr) => {
-                        let mut req_v4 = self.request()?;
-                        req_v4.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr;
-                        if let Err(err) = siocdifaddr(ctl()?.as_raw_fd(), &req_v4) {
-                            return Err(io::Error::from(err).into());
-                        }
+            match addr {
+                IpAddr::V4(addr) => {
+                    let mut req_v4 = self.request()?;
+                    req_v4.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr;
+                    if let Err(err) = siocdifaddr(ctl()?.as_raw_fd(), &req_v4) {
+                        return Err(io::Error::from(err).into());
                     }
-                    IpAddr::V6(addr) => {
-                        let mut req_v6 = self.request_v6()?;
-                        req_v6.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr6;
-                        if let Err(err) = siocdifaddr_in6(ctl_v6()?.as_raw_fd(), &req_v6) {
-                            return Err(io::Error::from(err).into());
-                        }
+                }
+                IpAddr::V6(addr) => {
+                    let mut req_v6 = self.request_v6()?;
+                    req_v6.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr6;
+                    if let Err(err) = siocdifaddr_in6(ctl_v6()?.as_raw_fd(), &req_v6) {
+                        return Err(io::Error::from(err).into());
                     }
                 }
             }
+            Ok(())
         }
-        Ok(())
     }
 
-    pub fn add_address_v6(&self, addr: IpAddr, prefix: u8) -> Result<()> {
-        if !addr.is_ipv6() {
-            return Err(Error::InvalidAddress);
-        }
+    pub fn remove_address_v6(&self, addr: Ipv6Addr, _prefix: u8) -> io::Result<()> {
+        self.remove_address(IpAddr::V6(addr))
+    }
+
+    pub fn add_address_v6<Netmask: ToIpv6Netmask>(
+        &self,
+        addr: Ipv6Addr,
+        netmask: Netmask,
+    ) -> std::io::Result<()> {
         unsafe {
             let tun_name = self.name()?;
             let mut req: in6_ifaliasreq = mem::zeroed();
@@ -521,8 +513,8 @@ impl Device {
                 tun_name.len(),
             );
             req.ifra_addr = sockaddr_union::from((addr, 0)).addr6;
-            let network_addr =
-                ipnet::IpNet::new(addr, prefix).map_err(|e| Error::String(e.to_string()))?;
+            let network_addr = ipnet::IpNet::new(addr.into(), netmask.prefix())
+                .map_err(|e| Error::String(e.to_string()))?;
             let mask = network_addr.netmask();
             req.ifra_prefixmask = sockaddr_union::from((mask, 0)).addr6;
             req.in6_addrlifetime.ia6t_vltime = 0xffffffff_u32;

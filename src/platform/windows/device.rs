@@ -37,7 +37,7 @@ fn hash_name(input_str: &str) -> u128 {
 
 impl Device {
     /// Create a new `Device` for the given `Configuration`.
-    pub fn new(config: Configuration) -> crate::Result<Self> {
+    pub fn new(config: Configuration) -> std::io::Result<Self> {
         let layer = config.layer.unwrap_or(Layer::L3);
         let mut count = 0;
         let interfaces = network_interface::NetworkInterface::show().map_err(|e| {
@@ -153,7 +153,7 @@ impl Device {
             Driver::Tap(tap) => tap.down(),
         }
     }
-    fn get_all_adapter_address(&self) -> Result<Vec<Interface>, Error> {
+    fn get_all_adapter_address(&self) -> std::io::Result<Vec<Interface>> {
         Ok(getifaddrs::getifaddrs()?.collect())
     }
 
