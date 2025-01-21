@@ -1,6 +1,8 @@
 use crate::Device;
 use std::io;
+use std::io::{IoSlice, IoSliceMut};
 use std::net::{Ipv4Addr, Ipv6Addr};
+use std::ops::Deref;
 
 /// TUN interface OSI layer of operation.
 #[derive(Clone, Copy, Default, Debug, Eq, PartialEq)]
@@ -191,13 +193,13 @@ impl DeviceBuilder {
         self.config.enabled = Some(enable);
         self
     }
-    pub fn build_sync(self) -> io::Result<Device> {
+    pub fn build_sync(self) -> io::Result<SyncDevice> {
         let device = Device::new(self.config)?;
-        Ok(device)
+        Ok(SyncDevice(device))
     }
     #[cfg(any(feature = "async_std", feature = "async_tokio"))]
     pub fn build_async(self) -> io::Result<crate::AsyncDevice> {
-        let device = crate::AsyncDevice::new(self.build_sync()?)?;
+        let device = crate::AsyncDevice::new(Device::new(self.config)?)?;
         Ok(device)
     }
 }
@@ -229,5 +231,53 @@ impl ToIpv6Netmask for u8 {
 impl ToIpv6Netmask for Ipv6Addr {
     fn prefix(self) -> u8 {
         u128::from_be_bytes(self.octets()).count_ones() as u8
+    }
+}
+
+#[repr(transparent)]
+pub struct SyncDevice(Device);
+
+impl SyncDevice {
+    pub fn recv(&self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.0.recv(buf)
+    }
+    pub fn send(&self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.send(buf)
+    }
+    #[cfg(target_os = "windows")]
+    pub fn try_recv(&self, buf: &mut [u8]) -> io::Result<usize> {
+        self.0.try_recv(buf)
+    }
+    #[cfg(target_os = "windows")]
+    pub fn try_send(&self, buf: &[u8]) -> io::Result<usize> {
+        self.0.try_send(buf)
+    }
+    #[cfg(target_os = "windows")]
+    pub fn shutdown(&self) -> io::Result<()> {
+        self.0.shutdown()
+    }
+
+    #[cfg(all(
+        unix,
+        not(any(target_os = "android", target_os = "ios")),
+        feature = "experimental"
+    ))]
+    pub fn shutdown(&self) -> io::Result<()> {
+        self.0.shutdown()
+    }
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "ios"))))]
+    pub fn recv_vectored(&self, bufs: &mut [IoSliceMut<'_>]) -> std::io::Result<usize> {
+        self.0.recv_vectored(bufs)
+    }
+    #[cfg(all(unix, not(any(target_os = "android", target_os = "ios"))))]
+    fn send_vectored(&self, bufs: &[IoSlice<'_>]) -> std::io::Result<usize> {
+        self.0.send_vectored(bufs)
+    }
+}
+
+impl Deref for SyncDevice {
+    type Target = Device;
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }

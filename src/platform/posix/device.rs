@@ -32,28 +32,28 @@ impl Device {
         Device::from_tun(Tun::new(tun))
     }
     /// Set non-blocking mode
-    pub fn set_nonblock(&self) -> std::io::Result<()> {
+    pub(crate) fn set_nonblock(&self) -> std::io::Result<()> {
         self.tun.set_nonblock()
     }
 
     /// Recv a packet from tun device
-    pub fn recv(&self, buf: &mut [u8]) -> std::io::Result<usize> {
+    pub(crate) fn recv(&self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.tun.recv(buf)
     }
-    pub fn recv_vectored(&self, bufs: &mut [IoSliceMut<'_>]) -> std::io::Result<usize> {
+    pub(crate) fn recv_vectored(&self, bufs: &mut [IoSliceMut<'_>]) -> std::io::Result<usize> {
         self.tun.recv_vectored(bufs)
     }
 
     /// Send a packet to tun device
-    pub fn send(&self, buf: &[u8]) -> std::io::Result<usize> {
+    pub(crate) fn send(&self, buf: &[u8]) -> std::io::Result<usize> {
         self.tun.send(buf)
     }
-    pub fn send_vectored(&self, bufs: &[IoSlice<'_>]) -> std::io::Result<usize> {
+    pub(crate) fn send_vectored(&self, bufs: &[IoSlice<'_>]) -> std::io::Result<usize> {
         self.tun.send_vectored(bufs)
     }
     #[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
     #[cfg(feature = "experimental")]
-    pub fn shutdown(&self) -> std::io::Result<()> {
+    pub(crate) fn shutdown(&self) -> std::io::Result<()> {
         self.tun.shutdown()
     }
     #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]

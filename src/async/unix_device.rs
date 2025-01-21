@@ -10,6 +10,7 @@ use std::io::IoSlice;
 #[allow(unused_imports)]
 use std::net::IpAddr;
 use std::net::{Ipv4Addr, Ipv6Addr};
+use std::ops::Deref;
 use std::os::fd::IntoRawFd;
 use std::os::fd::{FromRawFd, RawFd};
 use std::task::{Context, Poll};
@@ -27,6 +28,14 @@ impl FromRawFd for AsyncDevice {
 impl IntoRawFd for AsyncDevice {
     fn into_raw_fd(self) -> RawFd {
         self.into_fd().unwrap()
+    }
+}
+
+impl Deref for AsyncDevice {
+    type Target = Device;
+
+    fn deref(&self) -> &Self::Target {
+        self.inner.get_ref()
     }
 }
 
@@ -220,71 +229,5 @@ impl AsyncDevice {
         }
         err?;
         Ok(total)
-    }
-}
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
-impl AsyncDevice {
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
-    pub fn name(&self) -> io::Result<String> {
-        self.inner.get_ref().name()
-    }
-    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
-    pub fn set_name(&self, name: &str) -> io::Result<()> {
-        self.inner.get_ref().set_name(name)
-    }
-
-    #[cfg(target_os = "linux")]
-    pub fn broadcast(&self) -> io::Result<IpAddr> {
-        self.inner.get_ref().broadcast()
-    }
-    #[cfg(target_os = "linux")]
-    pub fn set_broadcast(&self, value: IpAddr) -> io::Result<()> {
-        self.inner.get_ref().set_broadcast(value)
-    }
-
-    pub fn set_network_address<Netmask: ToIpv4Netmask>(
-        &self,
-        address: Ipv4Addr,
-        netmask: Netmask,
-        destination: Option<Ipv4Addr>,
-    ) -> io::Result<()> {
-        self.inner
-            .get_ref()
-            .set_network_address(address, netmask, destination)
-    }
-    pub fn remove_address(&self, addr: IpAddr) -> io::Result<()> {
-        self.inner.get_ref().remove_address(addr)
-    }
-    pub fn remove_address_v6(&self, addr: Ipv6Addr, prefix: u8) -> io::Result<()> {
-        self.inner.get_ref().remove_address_v6(addr, prefix)
-    }
-    pub fn add_address_v6(&self, addr: Ipv6Addr, prefix: u8) -> io::Result<()> {
-        self.inner.get_ref().add_address_v6(addr, prefix)
-    }
-    pub fn mtu(&self) -> io::Result<u16> {
-        self.inner.get_ref().mtu()
-    }
-    pub fn set_mtu(&self, value: u16) -> io::Result<()> {
-        self.inner.get_ref().set_mtu(value)
-    }
-    #[cfg(any(target_os = "macos", target_os = "ios"))]
-    pub fn ignore_packet_info(&self) -> bool {
-        self.inner.get_ref().ignore_packet_info()
-    }
-    #[cfg(any(target_os = "macos", target_os = "ios"))]
-    pub fn set_ignore_packet_info(&self, ign: bool) {
-        self.inner.get_ref().set_ignore_packet_info(ign)
-    }
-
-    #[cfg(any(target_os = "linux", target_os = "freebsd",))]
-    pub fn set_mac_address(
-        &self,
-        eth_addr: [u8; crate::device::ETHER_ADDR_LEN as usize],
-    ) -> io::Result<()> {
-        self.inner.get_ref().set_mac_address(eth_addr)
-    }
-    #[cfg(any(target_os = "linux", target_os = "freebsd",))]
-    pub fn mac_address(&self) -> io::Result<[u8; crate::device::ETHER_ADDR_LEN as usize]> {
-        self.inner.get_ref().mac_address()
     }
 }

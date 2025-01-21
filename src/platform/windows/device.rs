@@ -121,13 +121,13 @@ impl Device {
     }
 
     /// Recv a packet from tun device
-    pub fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
+    pub(crate) fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
         match &self.driver {
             Driver::Tap(tap) => tap.read(buf),
             Driver::Tun(tun) => tun.recv(buf),
         }
     }
-    pub fn try_recv(&self, buf: &mut [u8]) -> io::Result<usize> {
+    pub(crate) fn try_recv(&self, buf: &mut [u8]) -> io::Result<usize> {
         match &self.driver {
             Driver::Tap(tap) => tap.try_read(buf),
             Driver::Tun(tun) => tun.try_recv(buf),
@@ -135,19 +135,19 @@ impl Device {
     }
 
     /// Send a packet to tun device
-    pub fn send(&self, buf: &[u8]) -> io::Result<usize> {
+    pub(crate) fn send(&self, buf: &[u8]) -> io::Result<usize> {
         match &self.driver {
             Driver::Tap(tap) => tap.write(buf),
             Driver::Tun(tun) => tun.send(buf),
         }
     }
-    pub fn try_send(&self, buf: &[u8]) -> io::Result<usize> {
+    pub(crate) fn try_send(&self, buf: &[u8]) -> io::Result<usize> {
         match &self.driver {
             Driver::Tap(tap) => tap.try_write(buf),
             Driver::Tun(tun) => tun.try_send(buf),
         }
     }
-    pub fn shutdown(&self) -> io::Result<()> {
+    pub(crate) fn shutdown(&self) -> io::Result<()> {
         match &self.driver {
             Driver::Tun(tun) => tun.shutdown(),
             Driver::Tap(tap) => tap.down(),
