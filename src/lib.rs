@@ -16,6 +16,7 @@ pub use crate::platform::Device;
 mod error;
 
 mod device;
+pub use device::SyncDevice;
 
 #[cfg(any(feature = "async_std", feature = "async_tokio"))]
 pub mod r#async;
@@ -27,6 +28,4 @@ pub mod r#async;
 ))]
 mod configuration;
 pub mod platform;
-pub const DEFAULT_MTU: u16 = 1500;
-
 pub const PACKET_INFORMATION_LENGTH: usize = 4;

@@ -1,5 +1,6 @@
 use crate::platform::posix::Fd;
 use crate::platform::{Device, Tun};
+use std::io;
 use std::io::{IoSlice, IoSliceMut};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, RawFd};
 
@@ -31,9 +32,12 @@ impl Device {
         let tun = Fd::new_uncheck(fd);
         Device::from_tun(Tun::new(tun))
     }
-    /// Set non-blocking mode
-    pub(crate) fn set_nonblock(&self) -> std::io::Result<()> {
-        self.tun.set_nonblock()
+    pub fn is_nonblocking(&self) -> io::Result<bool> {
+        self.tun.is_nonblocking()
+    }
+    /// Moves this Device into or out of nonblocking mode.
+    pub fn set_nonblocking(&self, nonblocking: bool) -> std::io::Result<()> {
+        self.tun.set_nonblocking(nonblocking)
     }
 
     /// Recv a packet from tun device

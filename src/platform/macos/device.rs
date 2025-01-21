@@ -1,5 +1,3 @@
-#![allow(unused_variables)]
-
 use crate::{
     configuration::Configuration,
     error::Error,
@@ -46,8 +44,6 @@ unsafe fn ctl_v6() -> io::Result<Fd> {
 impl Device {
     /// Create a new `Device` for the given `Configuration`.
     pub fn new(config: Configuration) -> std::io::Result<Self> {
-        let mtu = config.mtu.unwrap_or(crate::DEFAULT_MTU);
-
         let id = if let Some(tun_name) = config.dev_name.as_ref() {
             if tun_name.len() > IFNAMSIZ {
                 return Err(std::io::Error::new(

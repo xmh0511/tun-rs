@@ -4,7 +4,7 @@ use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 #[cfg(feature = "experimental")]
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use libc::{self, fcntl, F_GETFL, F_SETFL, O_NONBLOCK};
+use libc::{self, fcntl, F_GETFL, O_NONBLOCK};
 
 /// POSIX file descriptor support for `io` traits.
 pub(crate) struct Fd {
@@ -31,10 +31,19 @@ impl Fd {
             event_fd: EventFd::new().expect("failed to create event fd"),
         }
     }
-
+    pub fn is_nonblocking(&self) -> io::Result<bool> {
+        unsafe {
+            let flags = fcntl(self.inner, F_GETFL);
+            if flags == -1 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok((flags & O_NONBLOCK) != 0)
+        }
+    }
     /// Enable non-blocking mode
-    pub fn set_nonblock(&self) -> io::Result<()> {
-        match unsafe { fcntl(self.inner, F_SETFL, fcntl(self.inner, F_GETFL) | O_NONBLOCK) } {
+    pub fn set_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
+        let mut nonblocking = nonblocking as libc::c_int;
+        match unsafe { libc::ioctl(self.as_raw_fd(), libc::FIONBIO, &mut nonblocking) } {
             0 => Ok(()),
             _ => Err(io::Error::last_os_error()),
         }
@@ -125,20 +134,11 @@ impl Fd {
 }
 #[cfg(feature = "experimental")]
 impl Fd {
-    fn is_fd_nonblocking(&self) -> io::Result<bool> {
-        unsafe {
-            let flags = fcntl(self.inner, F_GETFL);
-            if flags == -1 {
-                return Err(io::Error::last_os_error());
-            }
-            Ok((flags & O_NONBLOCK) != 0)
-        }
-    }
     pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
         if self.is_shutdown.load(Ordering::Relaxed) {
             return Err(io::Error::new(io::ErrorKind::ConnectionAborted, "close"));
         }
-        if self.is_fd_nonblocking()? {
+        if self.is_nonblocking()? {
             return self.read0(buf);
         }
         self.wait()?;
@@ -148,7 +148,7 @@ impl Fd {
         if self.is_shutdown.load(Ordering::Relaxed) {
             return Err(io::Error::new(io::ErrorKind::ConnectionAborted, "close"));
         }
-        if self.is_fd_nonblocking()? {
+        if self.is_nonblocking()? {
             return self.readv0(bufs);
         }
         self.wait()?;

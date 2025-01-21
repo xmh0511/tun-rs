@@ -4,12 +4,8 @@ use crate::platform::Device;
 #[cfg(target_os = "linux")]
 use crate::platform::GROTable;
 use crate::r#async::async_device::AsyncFd;
-use crate::ToIpv4Netmask;
 use std::io;
 use std::io::IoSlice;
-#[allow(unused_imports)]
-use std::net::IpAddr;
-use std::net::{Ipv4Addr, Ipv6Addr};
 use std::ops::Deref;
 use std::os::fd::IntoRawFd;
 use std::os::fd::{FromRawFd, RawFd};

@@ -10,7 +10,7 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 pub struct AsyncFd(TokioAsyncFd<Device>);
 impl AsyncFd {
     pub fn new(device: Device) -> io::Result<Self> {
-        device.set_nonblock()?;
+        device.set_nonblocking(true)?;
         Ok(Self(TokioAsyncFd::new(device)?))
     }
     pub fn into_device(self) -> io::Result<Device> {

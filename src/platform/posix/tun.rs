@@ -58,9 +58,11 @@ impl Tun {
             ignore_packet_information: AtomicBool::new(true),
         }
     }
-
-    pub fn set_nonblock(&self) -> io::Result<()> {
-        self.fd.set_nonblock()
+    pub fn is_nonblocking(&self) -> io::Result<bool> {
+        self.fd.is_nonblocking()
+    }
+    pub fn set_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
+        self.fd.set_nonblocking(nonblocking)
     }
     #[cfg(not(any(target_os = "macos", target_os = "ios")))]
     #[inline]
