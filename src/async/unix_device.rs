@@ -81,13 +81,13 @@ impl AsyncDevice {
     pub async fn readable(&self) -> io::Result<()> {
         self.inner.readable().await
     }
-    pub fn poll_readable<'a>(&'a self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    pub fn poll_readable(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         self.inner.poll_readable(cx)
     }
     pub async fn writable(&self) -> io::Result<()> {
         self.inner.writable().await
     }
-    pub fn poll_writable<'a>(&'a self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    pub fn poll_writable(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         self.inner.poll_writable(cx)
     }
     /// Recv a packet from tun device

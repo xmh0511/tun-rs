@@ -89,10 +89,8 @@ impl Device {
             let tap = loop {
                 let default_name = format!("tap{count}");
                 let name = config.dev_name.as_deref().unwrap_or(&default_name);
-                if interfaces.contains(name) {
-                    if config.dev_name.is_none() {
-                        continue;
-                    }
+                if interfaces.contains(name) && config.dev_name.is_none() {
+                    continue;
                 }
                 if let Ok(tap) = TapDevice::open(HARDWARE_ID, name) {
                     if config.dev_name.is_none() {
@@ -166,7 +164,7 @@ impl Device {
 
     pub fn set_name(&self, value: &str) -> io::Result<()> {
         let name = self.name()?;
-        if value == &name {
+        if value == name {
             return Ok(());
         }
         netsh::set_interface_name(&name, value)

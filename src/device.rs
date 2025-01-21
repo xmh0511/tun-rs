@@ -1,6 +1,6 @@
 use crate::Device;
 use getifaddrs::Interface;
-#[cfg(all(unix, not(any(target_os = "android", target_os = "ios"))))]
+#[cfg(unix)]
 use std::io::{IoSlice, IoSliceMut};
 use std::ops::Deref;
 
@@ -37,19 +37,15 @@ impl SyncDevice {
         self.0.shutdown()
     }
 
-    #[cfg(all(
-        unix,
-        not(any(target_os = "android", target_os = "ios")),
-        feature = "experimental"
-    ))]
+    #[cfg(all(unix, feature = "experimental"))]
     pub fn shutdown(&self) -> io::Result<()> {
         self.0.shutdown()
     }
-    #[cfg(all(unix, not(any(target_os = "android", target_os = "ios"))))]
+    #[cfg(unix)]
     pub fn recv_vectored(&self, bufs: &mut [IoSliceMut<'_>]) -> std::io::Result<usize> {
         self.0.recv_vectored(bufs)
     }
-    #[cfg(all(unix, not(any(target_os = "android", target_os = "ios"))))]
+    #[cfg(unix)]
     pub fn send_vectored(&self, bufs: &[IoSlice<'_>]) -> std::io::Result<usize> {
         self.0.send_vectored(bufs)
     }

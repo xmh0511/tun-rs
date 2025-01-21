@@ -16,6 +16,7 @@ pub(crate) struct Fd {
 }
 
 impl Fd {
+    #[cfg(not(any(target_os = "ios", target_os = "android")))]
     pub fn new(value: RawFd) -> io::Result<Self> {
         if value < 0 {
             return Err(io::Error::last_os_error());

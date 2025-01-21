@@ -120,8 +120,8 @@ impl TunDevice {
                 format!("ring capacity {ring_capacity} not in [{MIN_RING_CAPACITY},{MAX_RING_CAPACITY}]"),
             ))?;
         }
-        let name_utf16 = encode_utf16(&name);
-        let tunnel_type_utf16 = encode_utf16(&tunnel_type);
+        let name_utf16 = encode_utf16(name);
+        let tunnel_type_utf16 = encode_utf16(tunnel_type);
         if name_utf16.len() > MAX_POOL {
             Err(io::Error::new(io::ErrorKind::Other, "name too long"))?;
         }

@@ -20,7 +20,7 @@ impl AsyncFd {
         _ = self.0.readable().await?;
         Ok(())
     }
-    pub fn poll_readable<'a>(&'a self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    pub fn poll_readable(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         match self.0.poll_read_ready(cx) {
             Poll::Ready(rs) => Poll::Ready(rs.map(|_| ())),
             Poll::Pending => Poll::Pending,
@@ -30,7 +30,7 @@ impl AsyncFd {
         _ = self.0.writable().await?;
         Ok(())
     }
-    pub fn poll_writable<'a>(&'a self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    pub fn poll_writable(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         match self.0.poll_write_ready(cx) {
             Poll::Ready(rs) => Poll::Ready(rs.map(|_| ())),
             Poll::Pending => Poll::Pending,

@@ -3,6 +3,7 @@ use crate::platform::linux::offload::{
     VIRTIO_NET_HDR_GSO_NONE, VIRTIO_NET_HDR_GSO_TCPV4, VIRTIO_NET_HDR_GSO_TCPV6,
     VIRTIO_NET_HDR_GSO_UDP_L4, VIRTIO_NET_HDR_LEN,
 };
+use crate::platform::posix::device::{ctl, ctl_v6};
 use crate::platform::{ExpandBuffer, GROTable};
 use crate::{
     configuration::{Configuration, Layer},
@@ -11,10 +12,9 @@ use crate::{
     platform::posix::{ipaddr_to_sockaddr, sockaddr_union, Fd, Tun},
     ToIpv4Netmask, ToIpv6Netmask,
 };
-
 use libc::{
-    self, c_char, c_short, ifreq, in6_ifreq, AF_INET, AF_INET6, ARPHRD_ETHER, IFF_MULTI_QUEUE,
-    IFF_NO_PI, IFF_RUNNING, IFF_TAP, IFF_TUN, IFF_UP, IFNAMSIZ, O_RDWR, SOCK_DGRAM,
+    self, c_char, c_short, ifreq, in6_ifreq, ARPHRD_ETHER, IFF_MULTI_QUEUE, IFF_NO_PI, IFF_RUNNING,
+    IFF_TAP, IFF_TUN, IFF_UP, IFNAMSIZ, O_RDWR,
 };
 use mac_address::mac_address_by_name;
 use std::net::Ipv6Addr;
@@ -80,7 +80,7 @@ impl Device {
             let fd = libc::open(b"/dev/net/tun\0".as_ptr() as *const _, O_RDWR);
             let tun_fd = Fd::new(fd)?;
             if let Err(err) = tunsetiff(tun_fd.inner, &mut req as *mut _ as *mut _) {
-                return Err(io::Error::from(err).into());
+                return Err(io::Error::from(err));
             }
             let (vnet_hdr, udp_gso) = if offload && libc::IFF_VNET_HDR != 0 {
                 // tunTCPOffloads were added in Linux v2.6. We require their support if IFF_VNET_HDR is set.
@@ -114,14 +114,14 @@ impl Device {
         let tun_tcp_offloads = libc::TUN_F_CSUM | libc::TUN_F_TSO4 | libc::TUN_F_TSO6;
         tunsetoffload(self.as_raw_fd(), tun_tcp_offloads as _)
             .map(|_| ())
-            .map_err(|e| io::Error::from(e))
+            .map_err(|e| e.into())
     }
     unsafe fn set_tcp_udp_offloads(&self) -> io::Result<()> {
         let tun_tcp_offloads = libc::TUN_F_CSUM | libc::TUN_F_TSO4 | libc::TUN_F_TSO6;
         let tun_udp_offloads = libc::TUN_F_USO4 | libc::TUN_F_USO6;
         tunsetoffload(self.as_raw_fd(), (tun_tcp_offloads | tun_udp_offloads) as _)
             .map(|_| ())
-            .map_err(|e| io::Error::from(e))
+            .map_err(|e| e.into())
     }
     pub(crate) fn from_tun(tun: Tun) -> Self {
         Self {
@@ -517,11 +517,6 @@ impl Device {
         }
     }
 
-    pub fn if_index(&self) -> io::Result<u32> {
-        let if_name = self.name()?;
-        let index = Self::get_if_index(&if_name)?;
-        Ok(index)
-    }
     fn ifru_flags(&self) -> io::Result<i16> {
         unsafe {
             let ctl = ctl()?;
@@ -560,18 +555,12 @@ impl Device {
             Ok(())
         }
     }
-    pub fn addresses(&self) -> io::Result<Vec<IpAddr>> {
-        Ok(crate::device::get_if_addrs_by_name(self.name()?)?
-            .iter()
-            .map(|v| v.address)
-            .collect())
-    }
 
     pub fn broadcast(&self) -> io::Result<IpAddr> {
         unsafe {
             let mut req = self.request()?;
             if let Err(err) = siocgifbrdaddr(ctl()?.as_raw_fd(), &mut req) {
-                return Err(io::Error::from(err).into());
+                return Err(io::Error::from(err));
             }
             let sa = sockaddr_union::from(req.ifr_ifru.ifru_broadaddr);
             Ok(std::net::SocketAddr::try_from(sa)?.ip())
@@ -595,7 +584,7 @@ impl Device {
         netmask: Netmask,
         destination: Option<Ipv4Addr>,
     ) -> io::Result<()> {
-        self.set_address_v4(address.into())?;
+        self.set_address_v4(address)?;
         self.set_netmask(netmask.netmask())?;
         if let Some(destination) = destination {
             self.set_destination(destination)?;
@@ -693,14 +682,6 @@ impl Device {
             .ok_or(io::Error::from(io::ErrorKind::NotFound))?;
         Ok(mac.bytes())
     }
-}
-
-unsafe fn ctl() -> io::Result<Fd> {
-    Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0))
-}
-
-unsafe fn ctl_v6() -> io::Result<Fd> {
-    Fd::new(libc::socket(AF_INET6, SOCK_DGRAM, 0))
 }
 
 unsafe fn name(fd: RawFd) -> io::Result<String> {

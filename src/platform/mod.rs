@@ -51,7 +51,7 @@ mod test {
         let dev = DeviceBuilder::new()
             .name("utun6")
             .ipv4("192.168.50.1".parse().unwrap(), 24, None)
-            .mtu(crate::DEFAULT_MTU)
+            .mtu(1400)
             .build_sync()
             .unwrap();
 
@@ -61,6 +61,6 @@ mod test {
             .into_iter()
             .any(|v| v == "192.168.50.1".parse::<Ipv4Addr>().unwrap()));
 
-        assert_eq!(crate::DEFAULT_MTU, dev.mtu().unwrap());
+        assert_eq!(1400, dev.mtu().unwrap());
     }
 }

@@ -9,10 +9,10 @@ use std::task::{Context, Poll};
 /// An async TUN device wrapper around a TUN device.
 pub struct AsyncDevice {
     inner: Arc<Device>,
-    recv_task_lock: Arc<Mutex<Option<blocking::Task<io::Result<(Vec<u8>, usize)>>>>>,
+    recv_task_lock: Arc<Mutex<Option<RecvTask>>>,
     send_task_lock: Arc<Mutex<Option<blocking::Task<io::Result<usize>>>>>,
 }
-
+type RecvTask = blocking::Task<io::Result<(Vec<u8>, usize)>>;
 impl Deref for AsyncDevice {
     type Target = Device;
     fn deref(&self) -> &Self::Target {

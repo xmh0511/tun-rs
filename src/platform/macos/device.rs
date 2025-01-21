@@ -3,24 +3,23 @@ use crate::{
     error::Error,
     platform::{
         macos::sys::*,
-        posix::{self, sockaddr_union, Fd},
+        posix::{self, sockaddr_union},
     },
     ToIpv4Netmask, ToIpv6Netmask,
 };
 
 //const OVERWRITE_SIZE: usize = std::mem::size_of::<libc::__c_anonymous_ifr_ifru>();
 
+use crate::platform::posix::device::{ctl, ctl_v6};
 use crate::platform::Tun;
 use getifaddrs::{self, Interface};
 use libc::{
-    self, c_char, c_short, c_uint, c_void, sockaddr, socklen_t, AF_INET, AF_INET6, AF_SYSTEM,
-    AF_SYS_CONTROL, IFF_RUNNING, IFF_UP, IFNAMSIZ, PF_SYSTEM, SOCK_DGRAM, SYSPROTO_CONTROL,
-    UTUN_OPT_IFNAME,
+    self, c_char, c_short, c_uint, c_void, sockaddr, socklen_t, AF_SYSTEM, AF_SYS_CONTROL,
+    IFF_RUNNING, IFF_UP, IFNAMSIZ, PF_SYSTEM, SOCK_DGRAM, SYSPROTO_CONTROL, UTUN_OPT_IFNAME,
 };
 use std::io::ErrorKind;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::{ffi::CStr, io, mem, net::IpAddr, os::unix::io::AsRawFd, ptr, sync::Mutex};
-
 #[derive(Clone, Copy, Debug)]
 struct Route {
     addr: IpAddr,
@@ -35,12 +34,6 @@ pub struct Device {
     alias_lock: Mutex<()>,
 }
 
-unsafe fn ctl() -> io::Result<Fd> {
-    Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0))
-}
-unsafe fn ctl_v6() -> io::Result<Fd> {
-    Fd::new(libc::socket(AF_INET6, SOCK_DGRAM, 0))
-}
 impl Device {
     /// Create a new `Device` for the given `Configuration`.
     pub fn new(config: Configuration) -> std::io::Result<Self> {
@@ -82,7 +75,7 @@ impl Device {
             };
 
             if let Err(err) = ctliocginfo(tun.inner, &mut info as *mut _ as *mut _) {
-                return Err(io::Error::from(err).into());
+                return Err(io::Error::from(err));
             }
 
             let addr = libc::sockaddr_ctl {
@@ -96,7 +89,7 @@ impl Device {
 
             let address = &addr as *const libc::sockaddr_ctl as *const sockaddr;
             if libc::connect(tun.inner, address, mem::size_of_val(&addr) as socklen_t) < 0 {
-                return Err(io::Error::last_os_error().into());
+                return Err(io::Error::last_os_error());
             }
 
             let mut tun_name = [0u8; 64];
@@ -105,13 +98,11 @@ impl Device {
             let optval = &mut tun_name as *mut _ as *mut c_void;
             let optlen = &mut name_len as *mut socklen_t;
             if libc::getsockopt(tun.inner, SYSPROTO_CONTROL, UTUN_OPT_IFNAME, optval, optlen) < 0 {
-                return Err(io::Error::last_os_error().into());
+                return Err(io::Error::last_os_error());
             }
 
-            let ctl = Some(posix::Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0))?);
-
             Device {
-                tun: posix::Tun::new(tun),
+                tun: Tun::new(tun),
                 alias_lock: Mutex::new(()),
             }
         };
@@ -195,7 +186,7 @@ impl Device {
                     req.ifra_mask = sockaddr_union::from((mask, 0)).addr;
 
                     if let Err(err) = siocaifaddr(ctl()?.as_raw_fd(), &req) {
-                        return Err(io::Error::from(err).into());
+                        return Err(io::Error::from(err));
                     }
                 }
                 IpAddr::V6(_) => {
@@ -214,7 +205,7 @@ impl Device {
                     req.in6_addrlifetime.ia6t_pltime = 0xffffffff_u32;
                     req.ifra_flags = IN6_IFF_NODAD;
                     if let Err(err) = siocaifaddr_in6(ctl_v6()?.as_raw_fd(), &req) {
-                        return Err(io::Error::from(err).into());
+                        return Err(io::Error::from(err));
                     }
                 }
             }
@@ -236,7 +227,7 @@ impl Device {
             let prefix_len =
                 ipnet::ip_mask_to_prefix(v.netmask).map_err(|_| Error::InvalidConfig)?;
             let network = ipnet::IpNet::new(v.addr, prefix_len)
-                .map_err(|e| Error::InvalidConfig)?
+                .map_err(|_e| Error::InvalidConfig)?
                 .network();
             // command: route -n delete -net 10.0.0.0/24 10.0.0.1
             let args = [
@@ -350,18 +341,12 @@ impl Device {
                 optlen,
             ) < 0
             {
-                return Err(io::Error::last_os_error().into());
+                return Err(io::Error::last_os_error());
             }
             Ok(CStr::from_ptr(tun_name.as_ptr() as *const c_char)
                 .to_string_lossy()
                 .into())
         }
-    }
-
-    pub fn if_index(&self) -> std::io::Result<u32> {
-        let if_name = self.name()?;
-        let index = Self::get_if_index(&if_name)?;
-        Ok(index)
     }
 
     pub fn enabled(&self, value: bool) -> std::io::Result<()> {
@@ -370,7 +355,7 @@ impl Device {
             let mut req = self.request()?;
 
             if let Err(err) = siocgifflags(ctl.as_raw_fd(), &mut req) {
-                return Err(io::Error::from(err).into());
+                return Err(io::Error::from(err));
             }
 
             if value {
@@ -380,18 +365,11 @@ impl Device {
             }
 
             if let Err(err) = siocsifflags(ctl.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
+                return Err(io::Error::from(err));
             }
 
             Ok(())
         }
-    }
-
-    pub fn addresses(&self) -> std::io::Result<Vec<IpAddr>> {
-        Ok(crate::device::get_if_addrs_by_name(self.name()?)?
-            .iter()
-            .map(|v| v.address)
-            .collect())
     }
 
     // /// Question on macOS
@@ -430,14 +408,14 @@ impl Device {
             let mut req = self.request()?;
 
             if let Err(err) = siocgifmtu(ctl.as_raw_fd(), &mut req) {
-                return Err(io::Error::from(err).into());
+                return Err(io::Error::from(err));
             }
 
             let r: u16 = req
                 .ifr_ifru
                 .ifru_mtu
                 .try_into()
-                .map_err(|e| std::io::Error::other(e))?;
+                .map_err(|e| io::Error::new(io::ErrorKind::Other,e))?;
             Ok(r)
         }
     }
@@ -449,7 +427,7 @@ impl Device {
             req.ifr_ifru.ifru_mtu = value as i32;
 
             if let Err(err) = siocsifmtu(ctl.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
+                return Err(io::Error::from(err));
             }
             Ok(())
         }
@@ -476,14 +454,14 @@ impl Device {
                     let mut req_v4 = self.request()?;
                     req_v4.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr;
                     if let Err(err) = siocdifaddr(ctl()?.as_raw_fd(), &req_v4) {
-                        return Err(io::Error::from(err).into());
+                        return Err(io::Error::from(err));
                     }
                 }
                 IpAddr::V6(addr) => {
                     let mut req_v6 = self.request_v6()?;
                     req_v6.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr6;
                     if let Err(err) = siocdifaddr_in6(ctl_v6()?.as_raw_fd(), &req_v6) {
-                        return Err(io::Error::from(err).into());
+                        return Err(io::Error::from(err));
                     }
                 }
             }
@@ -517,7 +495,7 @@ impl Device {
             req.in6_addrlifetime.ia6t_pltime = 0xffffffff_u32;
             req.ifra_flags = IN6_IFF_NODAD;
             if let Err(err) = siocaifaddr_in6(ctl_v6()?.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
+                return Err(io::Error::from(err));
             }
         }
         Ok(())

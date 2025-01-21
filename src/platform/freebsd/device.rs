@@ -7,9 +7,10 @@ use crate::{
     ToIpv4Netmask, ToIpv6Netmask,
 };
 
+use crate::platform::posix::device::{ctl, ctl_v6};
 use libc::{
-    self, c_char, c_short, fcntl, ifreq, kinfo_file, AF_INET, AF_INET6, AF_LINK, F_KINFO,
-    IFF_RUNNING, IFF_UP, IFNAMSIZ, KINFO_FILE_SIZE, O_RDWR, SOCK_DGRAM,
+    self, c_char, c_short, fcntl, ifreq, kinfo_file, AF_LINK, F_KINFO, IFF_RUNNING, IFF_UP,
+    IFNAMSIZ, KINFO_FILE_SIZE, O_RDWR,
 };
 use mac_address::mac_address_by_name;
 use std::io::ErrorKind;
@@ -30,12 +31,6 @@ pub struct Device {
     alias_lock: Mutex<()>,
 }
 
-unsafe fn ctl() -> io::Result<Fd> {
-    Fd::new(libc::socket(AF_INET, SOCK_DGRAM, 0))
-}
-unsafe fn ctl_v6() -> io::Result<Fd> {
-    Fd::new(libc::socket(AF_INET6, SOCK_DGRAM, 0))
-}
 impl Device {
     /// Create a new `Device` for the given `Configuration`.
     pub fn new(config: Configuration) -> std::io::Result<Self> {
@@ -163,7 +158,7 @@ impl Device {
                     req.mask = posix::sockaddr_union::from((mask, 0)).addr;
 
                     if let Err(err) = siocaifaddr(ctl.as_raw_fd(), &req) {
-                        return Err(io::Error::from(err).into());
+                        return Err(io::Error::from(err));
                     }
                 }
                 IpAddr::V6(_) => {
@@ -183,7 +178,7 @@ impl Device {
                     req.in6_addrlifetime.ia6t_pltime = 0xffffffff_u32;
                     req.ifra_flags = IN6_IFF_NODAD;
                     if let Err(err) = siocaifaddr_in6(ctl_v6()?.as_raw_fd(), &req) {
-                        return Err(io::Error::from(err).into());
+                        return Err(io::Error::from(err));
                     }
                 }
             }
@@ -294,7 +289,7 @@ impl Device {
             let mut path_info: kinfo_file = std::mem::zeroed();
             path_info.kf_structsize = KINFO_FILE_SIZE;
             if fcntl(self.tun.as_raw_fd(), F_KINFO, &mut path_info as *mut _) < 0 {
-                return Err(io::Error::last_os_error().into());
+                return Err(io::Error::last_os_error());
             }
             let dev_path = CStr::from_ptr(path_info.kf_path.as_ptr() as *const c_char)
                 .to_string_lossy()
@@ -327,17 +322,11 @@ impl Device {
                 .collect::<_>();
             req.ifr_ifru.ifru_data = tun_name.as_mut_ptr();
             if let Err(err) = siocsifname(ctl()?.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
+                return Err(io::Error::from(err));
             }
 
             Ok(())
         }
-    }
-
-    pub fn if_index(&self) -> std::io::Result<u32> {
-        let if_name = self.name()?;
-        let index = Self::get_if_index(&if_name)?;
-        Ok(index)
     }
 
     pub fn enabled(&self, value: bool) -> std::io::Result<()> {
@@ -345,7 +334,7 @@ impl Device {
             let mut req = self.request()?;
             let ctl = ctl()?;
             if let Err(err) = siocgifflags(ctl.as_raw_fd(), &mut req) {
-                return Err(io::Error::from(err).into());
+                return Err(io::Error::from(err));
             }
 
             if value {
@@ -355,18 +344,11 @@ impl Device {
             }
 
             if let Err(err) = siocsifflags(ctl.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
+                return Err(io::Error::from(err));
             }
 
             Ok(())
         }
-    }
-
-    pub fn addresses(&self) -> std::io::Result<Vec<IpAddr>> {
-        Ok(crate::device::get_if_addrs_by_name(self.name()?)?
-            .iter()
-            .map(|v| v.address)
-            .collect())
     }
 
     // fn broadcast(&self) -> Result<IpAddr> {
@@ -401,14 +383,14 @@ impl Device {
             let mut req = self.request()?;
 
             if let Err(err) = siocgifmtu(ctl()?.as_raw_fd(), &mut req) {
-                return Err(io::Error::from(err).into());
+                return Err(io::Error::from(err));
             }
 
             let r: u16 = req
                 .ifr_ifru
                 .ifru_mtu
                 .try_into()
-                .map_err(|e| std::io::Error::other(e))?;
+                .map_err(|e| io::Error::new(io::ErrorKind::Other,e))?;
             Ok(r)
         }
     }
@@ -419,7 +401,7 @@ impl Device {
             req.ifr_ifru.ifru_mtu = value as i32;
 
             if let Err(err) = siocsifmtu(ctl()?.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
+                return Err(io::Error::from(err));
             }
             Ok(())
         }
@@ -446,14 +428,14 @@ impl Device {
                     let mut req_v4 = self.request()?;
                     req_v4.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr;
                     if let Err(err) = siocdifaddr(ctl()?.as_raw_fd(), &req_v4) {
-                        return Err(io::Error::from(err).into());
+                        return Err(io::Error::from(err));
                     }
                 }
                 IpAddr::V6(addr) => {
                     let mut req_v6 = self.request_v6()?;
                     req_v6.ifr_ifru.ifru_addr = sockaddr_union::from((addr, 0)).addr6;
                     if let Err(err) = siocdifaddr_in6(ctl_v6()?.as_raw_fd(), &req_v6) {
-                        return Err(io::Error::from(err).into());
+                        return Err(io::Error::from(err));
                     }
                 }
             }
@@ -487,7 +469,7 @@ impl Device {
             req.in6_addrlifetime.ia6t_pltime = 0xffffffff_u32;
             req.ifra_flags = IN6_IFF_NODAD;
             if let Err(err) = siocaifaddr_in6(ctl_v6()?.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
+                return Err(io::Error::from(err));
             }
         }
         Ok(())
@@ -501,7 +483,7 @@ impl Device {
             req.ifr_ifru.ifru_addr.sa_data[0..ETHER_ADDR_LEN as usize]
                 .copy_from_slice(eth_addr.map(|c| c as i8).as_slice());
             if let Err(err) = siocsiflladdr(ctl()?.as_raw_fd(), &req) {
-                return Err(io::Error::from(err).into());
+                return Err(io::Error::from(err));
             }
             Ok(())
         }

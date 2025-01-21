@@ -1,3 +1,4 @@
+#[allow(unused_imports)]
 use std::net::Ipv4Addr;
 use std::sync::mpsc::Receiver;
 #[allow(unused_imports)]
@@ -5,6 +6,7 @@ use std::sync::Arc;
 
 #[allow(unused_imports)]
 use tun_rs::BoxError;
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",target_os = "macos"))]
 use tun_rs::DeviceBuilder;
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
 #[allow(unused_imports)]
@@ -68,7 +70,6 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
         println!("mtu ipv6 = {:?}", dev.mtu_v6());
         println!("version = {:?}", dev.version());
     }
-    let dev_t = dev.clone();
     let _join = std::thread::spawn(move || {
         let mut buf = [0; 4096];
         loop {
@@ -78,5 +79,6 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
         #[allow(unreachable_code)]
         Ok::<(), BoxError>(())
     });
+    _ = quit.recv();
     Ok(())
 }

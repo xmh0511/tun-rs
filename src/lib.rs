@@ -2,7 +2,6 @@
 #[cfg(any(feature = "async_std", feature = "async_tokio"))]
 pub use r#async::*;
 
-pub use crate::configuration::Layer;
 #[cfg(any(
     target_os = "windows",
     target_os = "linux",

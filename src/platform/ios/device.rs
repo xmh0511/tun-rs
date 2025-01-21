@@ -1,5 +1,3 @@
-#![allow(unused_variables)]
-
 use crate::platform::posix::Tun;
 
 /// A TUN device for iOS.

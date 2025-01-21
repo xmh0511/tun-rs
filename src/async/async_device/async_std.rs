@@ -14,13 +14,13 @@ impl AsyncFd {
     pub async fn readable(&self) -> io::Result<()> {
         self.0.readable().await
     }
-    pub fn poll_readable<'a>(&'a self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    pub fn poll_readable(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         self.0.poll_readable(cx)
     }
     pub async fn writable(&self) -> io::Result<()> {
         self.0.writable().await
     }
-    pub fn poll_writable<'a>(&'a self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    pub fn poll_writable(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         self.0.poll_writable(cx)
     }
     pub async fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
