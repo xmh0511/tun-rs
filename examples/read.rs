@@ -6,7 +6,12 @@ use std::sync::Arc;
 
 #[allow(unused_imports)]
 use tun_rs::BoxError;
-#[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",target_os = "macos"))]
+#[cfg(any(
+    target_os = "windows",
+    target_os = "linux",
+    target_os = "freebsd",
+    target_os = "macos"
+))]
 use tun_rs::DeviceBuilder;
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
 #[allow(unused_imports)]

@@ -390,7 +390,7 @@ impl Device {
                 .ifr_ifru
                 .ifru_mtu
                 .try_into()
-                .map_err(|e| io::Error::new(io::ErrorKind::Other,e))?;
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
             Ok(r)
         }
     }
