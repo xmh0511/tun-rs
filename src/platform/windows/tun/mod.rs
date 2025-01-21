@@ -1,8 +1,9 @@
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{io, ptr};
-
 use windows_sys::Win32::Foundation::{
-    GetLastError, ERROR_BUFFER_OVERFLOW, ERROR_NO_MORE_ITEMS, FALSE, WAIT_FAILED, WAIT_OBJECT_0,
+    GetLastError, ERROR_BUFFER_OVERFLOW, ERROR_HANDLE_EOF, ERROR_INVALID_DATA, ERROR_NO_MORE_ITEMS,
+    FALSE, WAIT_FAILED, WAIT_OBJECT_0,
 };
 use windows_sys::Win32::NetworkManagement::Ndis::NET_LUID_LH;
 use windows_sys::Win32::System::Threading::{
@@ -32,6 +33,9 @@ pub struct TunDevice {
 struct AdapterHandle {
     win_tun: wintun_raw::wintun,
     handle: wintun_raw::WINTUN_ADAPTER_HANDLE,
+    shutdown_state: AtomicBool,
+    shutdown_event: OwnedHandle,
+    ring_capacity: u32,
 }
 impl Drop for AdapterHandle {
     fn drop(&mut self) {
@@ -51,12 +55,46 @@ impl AdapterHandle {
             u16::from_be_bytes([v[2], v[3]])
         ))
     }
+    fn start_session(self) -> io::Result<SessionHandle> {
+        unsafe {
+            let session = self
+                .win_tun
+                .WintunStartSession(self.handle, self.ring_capacity);
+            if session.is_null() {
+                Err(io::Error::last_os_error())?
+            }
+            let read_event_handle = self.win_tun.WintunGetReadWaitEvent(session);
+            if read_event_handle.is_null() {
+                Err(io::Error::last_os_error())?
+            }
+            let read_event = OwnedHandle::from_raw_handle(read_event_handle);
+            let session = SessionHandle {
+                adapter: self,
+                handle: session,
+                read_event,
+            };
+            Ok(session)
+        }
+    }
+    fn shutdown(&self) -> io::Result<()> {
+        self.shutdown_state.store(true, Ordering::SeqCst);
+        unsafe {
+            if FALSE == SetEvent(self.shutdown_event.as_raw_handle()) {
+                return Err(io::Error::last_os_error());
+            }
+        }
+        Ok(())
+    }
+    fn is_shutdown(&self) -> bool {
+        self.shutdown_state.load(Ordering::SeqCst)
+    }
 }
+unsafe impl Send for AdapterHandle {}
+unsafe impl Sync for AdapterHandle {}
 struct SessionHandle {
     adapter: AdapterHandle,
     handle: wintun_raw::WINTUN_SESSION_HANDLE,
     read_event: OwnedHandle,
-    shutdown_event: OwnedHandle,
 }
 impl Drop for SessionHandle {
     fn drop(&mut self) {
@@ -65,9 +103,8 @@ impl Drop for SessionHandle {
         }
     }
 }
-unsafe impl Send for TunDevice {}
-
-unsafe impl Sync for TunDevice {}
+unsafe impl Send for SessionHandle {}
+unsafe impl Sync for SessionHandle {}
 impl TunDevice {
     pub fn create(
         wintun_path: &str,
@@ -92,6 +129,12 @@ impl TunDevice {
             Err(io::Error::new(io::ErrorKind::Other, "tunnel type too long"))?;
         }
         unsafe {
+            let shutdown_event_handle = CreateEventW(ptr::null_mut(), 0, 0, ptr::null_mut());
+            if shutdown_event_handle.is_null() {
+                Err(io::Error::last_os_error())?
+            }
+            let shutdown_event = OwnedHandle::from_raw_handle(shutdown_event_handle);
+
             let win_tun = wintun_raw::wintun::new(wintun_path)?;
 
             //SAFETY: guid is a unique integer so transmuting either all zeroes or the user's preferred
@@ -111,32 +154,19 @@ impl TunDevice {
             if adapter.is_null() {
                 Err(io::Error::last_os_error())?
             }
+            let mut luid: wintun_raw::NET_LUID = std::mem::zeroed();
+            win_tun.WintunGetAdapterLUID(adapter, &mut luid as *mut wintun_raw::NET_LUID);
+
             let adapter = AdapterHandle {
                 win_tun,
                 handle: adapter,
-            };
-            let mut luid: wintun_raw::NET_LUID = std::mem::zeroed();
-            adapter
-                .win_tun
-                .WintunGetAdapterLUID(adapter.handle, &mut luid as *mut wintun_raw::NET_LUID);
-            let session = adapter
-                .win_tun
-                .WintunStartSession(adapter.handle, ring_capacity);
-            if session.is_null() {
-                Err(io::Error::last_os_error())?
-            }
-            let shutdown_event =
-                OwnedHandle::from_raw_handle(CreateEventW(ptr::null_mut(), 0, 0, ptr::null_mut()));
-            let read_event =
-                OwnedHandle::from_raw_handle(adapter.win_tun.WintunGetReadWaitEvent(session));
-            let session = SessionHandle {
-                adapter,
-                handle: session,
-                read_event,
+                ring_capacity,
                 shutdown_event,
+                shutdown_state: AtomicBool::new(false),
             };
 
             let index = ffi::luid_to_index(&std::mem::transmute(luid))?;
+            let session = adapter.start_session()?;
 
             let tun = Self {
                 luid: std::mem::transmute(luid),
@@ -204,12 +234,15 @@ impl SessionHandle {
     }
     fn try_send(&self, buf: &[u8]) -> io::Result<usize> {
         assert!(buf.len() <= u32::MAX as _);
+        self.check_shutdown()?;
         let win_tun = &self.adapter.win_tun;
         let handle = self.handle;
         let bytes_ptr = unsafe { win_tun.WintunAllocateSendPacket(handle, buf.len() as u32) };
         if bytes_ptr.is_null() {
             match unsafe { GetLastError() } {
+                ERROR_HANDLE_EOF => Err(std::io::Error::from(io::ErrorKind::WriteZero)),
                 ERROR_BUFFER_OVERFLOW => Err(std::io::Error::from(io::ErrorKind::WouldBlock)),
+                ERROR_INVALID_DATA => Err(std::io::Error::from(io::ErrorKind::InvalidData)),
                 e => Err(io::Error::from_raw_os_error(e as i32)),
             }
         } else {
@@ -219,6 +252,7 @@ impl SessionHandle {
         }
     }
     fn try_recv(&self, buf: &mut [u8]) -> io::Result<usize> {
+        self.check_shutdown()?;
         let mut size = 0u32;
 
         let win_tun = &self.adapter.win_tun;
@@ -228,6 +262,7 @@ impl SessionHandle {
         if ptr.is_null() {
             // Wintun returns ERROR_NO_MORE_ITEMS instead of blocking if packets are not available
             return match unsafe { GetLastError() } {
+                ERROR_HANDLE_EOF => Err(std::io::Error::from(io::ErrorKind::UnexpectedEof)),
                 ERROR_NO_MORE_ITEMS => Err(std::io::Error::from(io::ErrorKind::WouldBlock)),
                 e => Err(io::Error::from_raw_os_error(e as i32)),
             };
@@ -243,10 +278,11 @@ impl SessionHandle {
         Ok(size)
     }
     fn wait_readable(&self) -> io::Result<()> {
+        self.check_shutdown()?;
         //Wait on both the read handle and the shutdown handle so that we stop when requested
         let handles = [
             self.read_event.as_raw_handle(),
-            self.shutdown_event.as_raw_handle(),
+            self.adapter.shutdown_event.as_raw_handle(),
         ];
         let result = unsafe {
             //SAFETY: We abide by the requirements of WaitForMultipleObjects, handles is a
@@ -270,10 +306,11 @@ impl SessionHandle {
         }
     }
     fn shutdown(&self) -> io::Result<()> {
-        unsafe {
-            if FALSE == SetEvent(self.shutdown_event.as_raw_handle()) {
-                return Err(io::Error::last_os_error());
-            }
+        self.adapter.shutdown()
+    }
+    fn check_shutdown(&self) -> io::Result<()> {
+        if self.adapter.is_shutdown() {
+            return Err(io::Error::from(io::ErrorKind::UnexpectedEof));
         }
         Ok(())
     }

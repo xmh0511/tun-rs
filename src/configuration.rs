@@ -42,7 +42,7 @@ pub struct Configuration {
     pub offload: Option<bool>,
     /// Enable multi queue support
     #[cfg(target_os = "linux")]
-    pub iff_multi_queue: Option<bool>,
+    pub multi_queue: Option<bool>,
 }
 
 impl Configuration {
@@ -177,8 +177,8 @@ impl DeviceBuilder {
         self
     }
     #[cfg(target_os = "linux")]
-    pub fn iff_multi_queue(mut self, iff_multi_queue: bool) -> Self {
-        self.config.iff_multi_queue = Some(iff_multi_queue);
+    pub fn multi_queue(mut self, multi_queue: bool) -> Self {
+        self.config.multi_queue = Some(multi_queue);
         self
     }
 

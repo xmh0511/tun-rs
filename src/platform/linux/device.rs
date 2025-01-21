@@ -65,21 +65,17 @@ impl Device {
                     dev_name.as_bytes_with_nul().len(),
                 );
             }
-            let iff_multi_queue = config.iff_multi_queue.unwrap_or(false);
+            let multi_queue = config.multi_queue.unwrap_or(false);
             let device_type: c_short = config.layer.unwrap_or(Layer::L3).into();
             let iff_no_pi = IFF_NO_PI as c_short;
             let iff_vnet_hdr = libc::IFF_VNET_HDR as c_short;
+            let iff_multi_queue = IFF_MULTI_QUEUE as c_short;
             let packet_information = config.packet_information.unwrap_or(false);
             let offload = config.offload.unwrap_or(false);
             req.ifr_ifru.ifru_flags = device_type
                 | if packet_information { 0 } else { iff_no_pi }
-                | if iff_multi_queue {
-                    IFF_MULTI_QUEUE as c_short
-                } else {
-                    0
-                }
+                | if multi_queue { iff_multi_queue } else { 0 }
                 | if offload { iff_vnet_hdr } else { 0 };
-
             #[allow(clippy::manual_c_str_literals)]
             let fd = libc::open(b"/dev/net/tun\0".as_ptr() as *const _, O_RDWR);
             let tun_fd = Fd::new(fd)?;
@@ -525,6 +521,21 @@ impl Device {
         let if_name = self.name()?;
         let index = Self::get_if_index(&if_name)?;
         Ok(index)
+    }
+    fn ifru_flags(&self) -> io::Result<i16> {
+        unsafe {
+            let ctl = ctl()?;
+            let mut req = self.request()?;
+
+            if let Err(err) = siocgifflags(ctl.as_raw_fd(), &mut req) {
+                return Err(io::Error::from(err));
+            }
+            Ok(req.ifr_ifru.ifru_flags)
+        }
+    }
+    pub fn is_running(&self) -> io::Result<bool> {
+        let flags = self.ifru_flags()?;
+        Ok(flags & (IFF_UP | IFF_RUNNING) as c_short == (IFF_UP | IFF_RUNNING) as c_short)
     }
 
     pub fn enabled(&self, value: bool) -> io::Result<()> {
