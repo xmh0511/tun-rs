@@ -122,7 +122,7 @@ impl TapDevice {
         get_version(self.handle.as_raw_handle())
     }
 
-    /// Retieve the mtu of the interface
+    // ///Retieve the mtu of the interface
     // pub fn get_mtu(&self) -> io::Result<u32> {
     //     let in_mtu: u32 = 0;
     //     let mut out_mtu = 0;

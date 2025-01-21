@@ -38,7 +38,8 @@ pub struct Configuration {
     pub packet_information: Option<bool>,
     #[cfg(target_os = "linux")]
     pub tx_queue_len: Option<u32>,
-    /// Enable/Disable TUN offloads
+    /// Enable/Disable TUN offloads.
+    /// After enabling, use `recv_multiple`/`send_multiple` for data transmission.
     #[cfg(target_os = "linux")]
     pub offload: Option<bool>,
     /// Enable multi queue support
@@ -172,6 +173,7 @@ impl DeviceBuilder {
         self.config.tx_queue_len = Some(tx_queue_len);
         self
     }
+    /// After enabling, use `recv_multiple`/`send_multiple` for data transmission.
     #[cfg(target_os = "linux")]
     pub fn offload(mut self, offload: bool) -> Self {
         self.config.offload = Some(offload);

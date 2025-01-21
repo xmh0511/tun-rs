@@ -164,12 +164,12 @@ impl TunDevice {
                 shutdown_event,
                 shutdown_state: AtomicBool::new(false),
             };
-
-            let index = ffi::luid_to_index(&std::mem::transmute(luid))?;
+            let luid = std::mem::transmute::<wintun_raw::_NET_LUID_LH, NET_LUID_LH>(luid);
+            let index = ffi::luid_to_index(&luid)?;
             let session = adapter.start_session()?;
 
             let tun = Self {
-                luid: std::mem::transmute(luid),
+                luid,
                 index,
                 session,
             };

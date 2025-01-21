@@ -76,8 +76,8 @@ impl Device {
                 | if packet_information { 0 } else { iff_no_pi }
                 | if multi_queue { iff_multi_queue } else { 0 }
                 | if offload { iff_vnet_hdr } else { 0 };
-            #[allow(clippy::manual_c_str_literals)]
-            let fd = libc::open(b"/dev/net/tun\0".as_ptr() as *const _, O_RDWR);
+
+            let fd = libc::open(c"/dev/net/tun".as_ptr() as *const _, O_RDWR, 0);
             let tun_fd = Fd::new(fd)?;
             if let Err(err) = tunsetiff(tun_fd.inner, &mut req as *mut _ as *mut _) {
                 return Err(io::Error::from(err));
@@ -149,7 +149,7 @@ impl Device {
         unsafe {
             let mut req = self.request()?;
             req.ifr_ifru.ifru_flags = flags;
-            let fd = libc::open(b"/dev/net/tun\0".as_ptr() as *const _, O_RDWR);
+            let fd = libc::open(c"/dev/net/tun".as_ptr() as *const _, O_RDWR);
             let tun_fd = Fd::new(fd)?;
             if let Err(err) = tunsetiff(tun_fd.inner, &mut req as *mut _ as *mut _) {
                 return Err(io::Error::from(err));
