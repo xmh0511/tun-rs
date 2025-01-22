@@ -1,7 +1,7 @@
 use crate::Device;
 use getifaddrs::Interface;
 #[cfg(unix)]
-use std::io::{self, IoSlice, IoSliceMut};
+use std::io::{IoSlice, IoSliceMut};
 use std::ops::Deref;
 #[cfg(unix)]
 use std::os::fd::{FromRawFd, IntoRawFd, RawFd};
@@ -60,7 +60,7 @@ impl SyncDevice {
     }
 
     #[cfg(all(unix, feature = "experimental"))]
-    pub fn shutdown(&self) -> io::Result<()> {
+    pub fn shutdown(&self) -> std::io::Result<()> {
         self.0.shutdown()
     }
     #[cfg(unix)]
