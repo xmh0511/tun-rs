@@ -57,6 +57,16 @@ impl SyncDevice {
     pub fn send_vectored(&self, bufs: &[IoSlice<'_>]) -> std::io::Result<usize> {
         self.0.send_vectored(bufs)
     }
+    #[cfg(unix)]
+    pub fn is_nonblocking(&self) -> std::io::Result<bool> {
+        self.0.is_nonblocking()
+    }
+
+    /// Moves this Device into or out of nonblocking mode.
+    #[cfg(unix)]
+    pub fn set_nonblocking(&self, nonblocking: bool) -> std::io::Result<()> {
+        self.0.set_nonblocking(nonblocking)
+    }
 }
 
 impl Deref for SyncDevice {

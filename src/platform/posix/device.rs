@@ -34,11 +34,11 @@ impl Device {
         let tun = Fd::new_unchecked(fd);
         Device::from_tun(Tun::new(tun))
     }
-    pub fn is_nonblocking(&self) -> io::Result<bool> {
+    pub(crate) fn is_nonblocking(&self) -> io::Result<bool> {
         self.tun.is_nonblocking()
     }
     /// Moves this Device into or out of nonblocking mode.
-    pub fn set_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
+    pub(crate) fn set_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
         self.tun.set_nonblocking(nonblocking)
     }
 
