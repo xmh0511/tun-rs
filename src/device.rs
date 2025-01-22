@@ -1,10 +1,10 @@
 use crate::Device;
 use getifaddrs::Interface;
 #[cfg(unix)]
-use std::io::{self, IoSlice, IoSliceMut};
+use std::io::{IoSlice, IoSliceMut};
 use std::ops::Deref;
 #[cfg(unix)]
-use std::os::fd::{FromRawFd, IntoRawFd, RawFd};
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, RawFd};
 
 #[allow(dead_code)]
 pub(crate) const ETHER_ADDR_LEN: u8 = 6;
@@ -16,26 +16,12 @@ pub(crate) fn get_if_addrs_by_name(if_name: String) -> std::io::Result<Vec<Inter
     Ok(ifs)
 }
 
-#[cfg(unix)]
-impl IntoRawFd for SyncDevice {
-    fn into_raw_fd(self) -> RawFd {
-        self.0.into_raw_fd()
-    }
-}
-
-#[cfg(unix)]
-impl FromRawFd for SyncDevice {
-    unsafe fn from_raw_fd(fd: RawFd) -> Self {
-        SyncDevice::from_fd(fd)
-    }
-}
-
 #[repr(transparent)]
 pub struct SyncDevice(pub(crate) Device);
 
 impl SyncDevice {
     /// # Safety
-    /// The fd passed in must be an owned file descriptor; in particular, it must be open and valid.
+    /// The fd passed in must be an owned file descriptor; in particular, it must be open.
     #[cfg(unix)]
     pub unsafe fn from_fd(fd: RawFd) -> Self {
         SyncDevice(Device::from_fd(fd))
@@ -77,5 +63,30 @@ impl Deref for SyncDevice {
     type Target = Device;
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+#[cfg(unix)]
+impl FromRawFd for SyncDevice {
+    unsafe fn from_raw_fd(fd: RawFd) -> Self {
+        SyncDevice::from_fd(fd)
+    }
+}
+#[cfg(unix)]
+impl AsRawFd for SyncDevice {
+    fn as_raw_fd(&self) -> RawFd {
+        self.0.as_raw_fd()
+    }
+}
+#[cfg(unix)]
+impl AsFd for SyncDevice {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        unsafe { BorrowedFd::borrow_raw(self.as_raw_fd()) }
+    }
+}
+#[cfg(unix)]
+impl IntoRawFd for SyncDevice {
+    fn into_raw_fd(self) -> RawFd {
+        self.0.into_raw_fd()
     }
 }

@@ -12,7 +12,7 @@ pub enum Layer {
     L3,
 }
 
-/// Configuration builder for a TUN interface.
+/// Configuration for a TUN/TAP interface.
 #[derive(Clone, Default, Debug)]
 pub struct Configuration {
     pub dev_name: Option<String>,
@@ -84,6 +84,7 @@ impl Configuration {
     }
 }
 
+/// Builder for a TUN/TAP interface.
 #[derive(Default)]
 pub struct DeviceBuilder {
     config: Configuration,

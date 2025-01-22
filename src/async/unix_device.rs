@@ -7,8 +7,7 @@ use crate::r#async::async_device::AsyncFd;
 use std::io;
 use std::io::IoSlice;
 use std::ops::Deref;
-use std::os::fd::IntoRawFd;
-use std::os::fd::{FromRawFd, RawFd};
+use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
 use std::task::{Context, Poll};
 
 /// An async TUN device wrapper around a TUN device.
@@ -24,6 +23,11 @@ impl FromRawFd for AsyncDevice {
 impl IntoRawFd for AsyncDevice {
     fn into_raw_fd(self) -> RawFd {
         self.into_fd().unwrap()
+    }
+}
+impl AsRawFd for AsyncDevice {
+    fn as_raw_fd(&self) -> RawFd {
+        self.inner.get_ref().as_raw_fd()
     }
 }
 
