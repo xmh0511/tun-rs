@@ -20,9 +20,10 @@ loop {
 ```
 # Example IOS/Android:
 ```rust
-use tun_rs::AsyncDevice;
+use tun_rs::SyncDevice;
+// use PacketTunnelProvider/VpnService create tun fd
 let fd = 7799;
-let dev = unsafe{AsyncDevice::from_fd(fd)};
+let dev = unsafe{SyncDevice::from_fd(fd)};
 let mut buf = [0;65535];
 loop {
     let len = dev.recv(&mut buf).unwrap();
