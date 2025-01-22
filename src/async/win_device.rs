@@ -19,6 +19,11 @@ impl Deref for AsyncDevice {
         &self.inner
     }
 }
+impl Drop for AsyncDevice {
+    fn drop(&mut self) {
+        _ = self.inner.shutdown();
+    }
+}
 impl AsyncDevice {
     /// Create a new `AsyncDevice` wrapping around a `Device`.
     pub fn new(device: Device) -> io::Result<AsyncDevice> {
@@ -128,8 +133,5 @@ impl AsyncDevice {
     }
     pub fn try_send(&self, buf: &[u8]) -> io::Result<usize> {
         self.inner.try_send(buf)
-    }
-    pub fn shutdown(&self) -> io::Result<()> {
-        self.inner.shutdown()
     }
 }
