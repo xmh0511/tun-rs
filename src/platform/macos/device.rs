@@ -106,6 +106,9 @@ impl Device {
                 alias_lock: Mutex::new(()),
             }
         };
+        device
+            .tun
+            .set_ignore_packet_info(!config.packet_information.unwrap_or(false));
         config.config(&device)?;
         Ok(device)
     }

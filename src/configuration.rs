@@ -34,7 +34,7 @@ pub struct Configuration {
     #[cfg(windows)]
     pub metric: Option<u16>,
     /// switch of Enable/Disable packet information for network driver
-    #[cfg(unix)]
+    #[cfg(any(target_os = "ios", target_os = "macos", target_os = "linux"))]
     pub packet_information: Option<bool>,
     #[cfg(target_os = "linux")]
     pub tx_queue_len: Option<u32>,
@@ -186,7 +186,7 @@ impl DeviceBuilder {
         self
     }
 
-    #[cfg(unix)]
+    #[cfg(any(target_os = "ios", target_os = "macos", target_os = "linux"))]
     pub fn packet_information(mut self, packet_information: bool) -> Self {
         self.config.packet_information = Some(packet_information);
         self
