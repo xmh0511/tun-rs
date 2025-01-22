@@ -46,7 +46,7 @@ impl SyncDevice {
     }
 
     #[cfg(all(unix, feature = "experimental"))]
-    pub fn shutdown(&self) -> io::Result<()> {
+    pub fn shutdown(&self) -> std::io::Result<()> {
         self.0.shutdown()
     }
     #[cfg(unix)]
