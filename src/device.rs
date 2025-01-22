@@ -1,8 +1,10 @@
 use crate::Device;
 use getifaddrs::Interface;
 #[cfg(unix)]
-use std::io::{IoSlice, IoSliceMut};
+use std::io::{self, IoSlice, IoSliceMut};
 use std::ops::Deref;
+#[cfg(unix)]
+use std::os::fd::{FromRawFd, IntoRawFd, RawFd};
 
 #[allow(dead_code)]
 pub(crate) const ETHER_ADDR_LEN: u8 = 6;
@@ -14,10 +16,30 @@ pub(crate) fn get_if_addrs_by_name(if_name: String) -> std::io::Result<Vec<Inter
     Ok(ifs)
 }
 
+#[cfg(unix)]
+impl IntoRawFd for SyncDevice {
+    fn into_raw_fd(self) -> RawFd {
+        self.0.into_raw_fd()
+    }
+}
+
+#[cfg(unix)]
+impl FromRawFd for SyncDevice {
+    unsafe fn from_raw_fd(fd: RawFd) -> Self {
+        SyncDevice::from_fd(fd)
+    }
+}
+
 #[repr(transparent)]
 pub struct SyncDevice(pub(crate) Device);
 
 impl SyncDevice {
+    /// # Safety
+    /// The fd passed in must be an owned file descriptor; in particular, it must be open and valid.
+    #[cfg(unix)]
+    pub unsafe fn from_fd(fd: RawFd) -> Self {
+        SyncDevice(Device::from_fd(fd))
+    }
     pub fn recv(&self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.0.recv(buf)
     }

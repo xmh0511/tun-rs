@@ -17,13 +17,13 @@ pub(crate) struct Fd {
 
 impl Fd {
     #[cfg(not(any(target_os = "ios", target_os = "android")))]
-    pub fn new(value: RawFd) -> io::Result<Self> {
+    pub(crate) fn new(value: RawFd) -> io::Result<Self> {
         if value < 0 {
             return Err(io::Error::last_os_error());
         }
-        Ok(Self::new_uncheck(value))
+        Ok(unsafe { Self::new_unchecked(value) })
     }
-    pub fn new_uncheck(value: RawFd) -> Self {
+    pub(crate) unsafe fn new_unchecked(value: RawFd) -> Self {
         Fd {
             inner: value,
             #[cfg(feature = "experimental")]
@@ -32,7 +32,7 @@ impl Fd {
             event_fd: EventFd::new().expect("failed to create event fd"),
         }
     }
-    pub fn is_nonblocking(&self) -> io::Result<bool> {
+    pub(crate) fn is_nonblocking(&self) -> io::Result<bool> {
         unsafe {
             let flags = fcntl(self.inner, F_GETFL);
             if flags == -1 {

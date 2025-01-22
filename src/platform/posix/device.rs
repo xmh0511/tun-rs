@@ -30,8 +30,8 @@ impl IntoRawFd for Device {
 impl Device {
     /// # Safety
     /// The fd passed in must be an owned file descriptor; in particular, it must be open.
-    pub unsafe fn from_fd(fd: RawFd) -> Self {
-        let tun = Fd::new_uncheck(fd);
+    pub(crate) unsafe fn from_fd(fd: RawFd) -> Self {
+        let tun = Fd::new_unchecked(fd);
         Device::from_tun(Tun::new(tun))
     }
     pub fn is_nonblocking(&self) -> io::Result<bool> {
