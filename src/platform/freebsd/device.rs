@@ -188,7 +188,7 @@ impl Device {
                 netmask: mask,
                 dest,
             };
-            if let Err(e) = self.set_route(None, new_route) {
+            if let Err(e) = self.add_route(new_route) {
                 log::warn!("{e:?}");
             }
 
@@ -222,26 +222,23 @@ impl Device {
         Ok(req)
     }
 
-    fn set_route(&self, _old_route: Option<Route>, new_route: Route) -> std::io::Result<()> {
-        if new_route.addr.is_ipv6() {
-            return Ok(());
-        }
+    fn add_route(&self, route: Route) -> std::io::Result<()> {
         let if_name = self.name()?;
         let prefix_len =
-            ipnet::ip_mask_to_prefix(new_route.netmask).map_err(|_| Error::InvalidConfig)?;
+            ipnet::ip_mask_to_prefix(route.netmask).map_err(|_| Error::InvalidConfig)?;
         let args = [
             "-n",
             "add",
-            if new_route.addr.is_ipv4() {
+            if route.addr.is_ipv4() {
                 "-net"
             } else {
                 "-inet6"
             },
-            &format!("{}/{}", new_route.addr, prefix_len),
+            &format!("{}/{}", route.addr, prefix_len),
             "-iface",
             &if_name,
         ];
-        run_command("route", &args)?;
+        crate::run_command("route", &args)?;
         log::info!("route {}", args.join(" "));
         Ok(())
     }
@@ -443,10 +440,6 @@ impl Device {
         }
     }
 
-    pub fn remove_address_v6(&self, addr: Ipv6Addr, _prefix: u8) -> io::Result<()> {
-        self.remove_address(IpAddr::V6(addr))
-    }
-
     pub fn add_address_v6<Netmask: ToIpv6Netmask>(
         &self,
         addr: Ipv6Addr,
@@ -470,6 +463,16 @@ impl Device {
             req.ifra_flags = IN6_IFF_NODAD;
             if let Err(err) = siocaifaddr_in6(ctl_v6()?.as_raw_fd(), &req) {
                 return Err(io::Error::from(err));
+            }
+            let Ok(dest) = self.calc_dest_addr(addr.into(), mask) else {
+                return Ok(());
+            };
+            if let Err(e) = self.add_route(Route {
+                addr: addr.into(),
+                netmask: mask,
+                dest,
+            }) {
+                log::warn!("{e:?}");
             }
         }
         Ok(())
@@ -504,20 +507,4 @@ impl From<Layer> for c_short {
             Layer::L3 => 3,
         }
     }
-}
-
-/// Runs a command and returns an error if the command fails, just convenience for users.
-#[doc(hidden)]
-pub fn run_command(command: &str, args: &[&str]) -> std::io::Result<Vec<u8>> {
-    let out = std::process::Command::new(command).args(args).output()?;
-    if !out.status.success() {
-        let err = String::from_utf8_lossy(if out.stderr.is_empty() {
-            &out.stdout
-        } else {
-            &out.stderr
-        });
-        let info = format!("{} failed with: \"{}\"", command, err);
-        return Err(std::io::Error::new(std::io::ErrorKind::Other, info));
-    }
-    Ok(out.stdout)
 }

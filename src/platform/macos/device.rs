@@ -171,57 +171,84 @@ impl Device {
     }
 
     /// Set the IPv4 alias of the device.
-    fn set_alias(&self, addr: IpAddr, dest: IpAddr, mask: IpAddr) -> std::io::Result<()> {
+    fn set_alias(&self, addr: Ipv4Addr, dest: Ipv4Addr, mask: Ipv4Addr) -> std::io::Result<()> {
         let _guard = self.alias_lock.lock().unwrap();
         let old_route = self.current_route();
         let tun_name = self.name()?;
         unsafe {
-            match addr {
-                IpAddr::V4(_) => {
-                    let mut req: ifaliasreq = mem::zeroed();
-                    ptr::copy_nonoverlapping(
-                        tun_name.as_ptr() as *const c_char,
-                        req.ifra_name.as_mut_ptr(),
-                        tun_name.len(),
-                    );
-                    req.ifra_addr = sockaddr_union::from((addr, 0)).addr;
-                    req.ifra_broadaddr = sockaddr_union::from((dest, 0)).addr;
-                    req.ifra_mask = sockaddr_union::from((mask, 0)).addr;
+            let mut req: ifaliasreq = mem::zeroed();
+            ptr::copy_nonoverlapping(
+                tun_name.as_ptr() as *const c_char,
+                req.ifra_name.as_mut_ptr(),
+                tun_name.len(),
+            );
+            req.ifra_addr = sockaddr_union::from((addr, 0)).addr;
+            req.ifra_broadaddr = sockaddr_union::from((dest, 0)).addr;
+            req.ifra_mask = sockaddr_union::from((mask, 0)).addr;
 
-                    if let Err(err) = siocaifaddr(ctl()?.as_raw_fd(), &req) {
-                        return Err(io::Error::from(err));
-                    }
-                }
-                IpAddr::V6(_) => {
-                    let IpAddr::V6(_) = mask else {
-                        return Err(std::io::Error::from(ErrorKind::InvalidInput));
-                    };
-                    let mut req: in6_ifaliasreq = mem::zeroed();
-                    ptr::copy_nonoverlapping(
-                        tun_name.as_ptr() as *const c_char,
-                        req.ifra_name.as_mut_ptr(),
-                        tun_name.len(),
-                    );
-                    req.ifra_addr = sockaddr_union::from((addr, 0)).addr6;
-                    req.ifra_prefixmask = sockaddr_union::from((mask, 0)).addr6;
-                    req.in6_addrlifetime.ia6t_vltime = 0xffffffff_u32;
-                    req.in6_addrlifetime.ia6t_pltime = 0xffffffff_u32;
-                    req.ifra_flags = IN6_IFF_NODAD;
-                    if let Err(err) = siocaifaddr_in6(ctl_v6()?.as_raw_fd(), &req) {
-                        return Err(io::Error::from(err));
-                    }
-                }
+            if let Err(err) = siocaifaddr(ctl()?.as_raw_fd(), &req) {
+                return Err(io::Error::from(err));
             }
             let new_route = Route {
-                addr,
-                netmask: mask,
-                dest,
+                addr: addr.into(),
+                netmask: mask.into(),
+                dest: dest.into(),
             };
             if let Err(e) = self.set_route(old_route, new_route) {
                 log::warn!("{e:?}");
             }
             Ok(())
         }
+    }
+
+    fn remove_route(&self, route: Route) -> std::io::Result<()> {
+        let if_name = self.name()?;
+        let prefix_len =
+            ipnet::ip_mask_to_prefix(route.netmask).map_err(|_| Error::InvalidConfig)?;
+        let network = ipnet::IpNet::new(route.addr, prefix_len)
+            .map_err(|_e| Error::InvalidConfig)?
+            .network();
+        // command: route -n delete -net 10.0.0.0/24 10.0.0.1
+        let args = [
+            "-n",
+            "delete",
+            if route.addr.is_ipv4() {
+                "-net"
+            } else {
+                "-inet6"
+            },
+            &format!("{}/{}", network, prefix_len),
+            "-iface",
+            &if_name,
+        ];
+        if crate::run_command("route", &args).is_err() {
+            log::error!("route {}", args.join(" "));
+        } else {
+            log::info!("route {}", args.join(" "));
+        }
+        Ok(())
+    }
+
+    fn add_route(&self, route: Route) -> std::io::Result<()> {
+        let if_name = self.name()?;
+        // command: route -n add -net 10.0.0.9/24 10.0.0.1
+        let prefix_len =
+            ipnet::ip_mask_to_prefix(route.netmask).map_err(|_| Error::InvalidConfig)?;
+        let args = [
+            "-n",
+            "add",
+            if route.addr.is_ipv4() {
+                "-net"
+            } else {
+                "-inet6"
+            },
+            &format!("{}/{}", route.addr, prefix_len),
+            "-iface",
+            &if_name,
+        ];
+        crate::run_command("route", &args)?;
+        log::info!("route {}", args.join(" "));
+        Ok(())
     }
 
     fn set_route(&self, old_route: Option<Route>, new_route: Route) -> std::io::Result<()> {
@@ -241,7 +268,7 @@ impl Device {
                 "-iface",
                 &if_name,
             ];
-            if run_command("route", &args).is_err() {
+            if crate::run_command("route", &args).is_err() {
                 log::error!("route {}", args.join(" "));
             } else {
                 log::info!("route {}", args.join(" "));
@@ -263,7 +290,7 @@ impl Device {
             "-iface",
             &if_name,
         ];
-        run_command("route", &args)?;
+        crate::run_command("route", &args)?;
         log::info!("route {}", args.join(" "));
         Ok(())
     }
@@ -442,11 +469,16 @@ impl Device {
         netmask: Netmask,
         destination: Option<Ipv4Addr>,
     ) -> std::io::Result<()> {
-        let addr: IpAddr = address.into();
-        let netmask = netmask.netmask().into();
-        let default_dest = self.calc_dest_addr(addr, netmask)?;
-        let dest = destination.map(|d| d.into()).unwrap_or(default_dest);
-        self.set_alias(addr, dest, netmask)?;
+        let netmask = netmask.netmask();
+        let default_dest = self.calc_dest_addr(address.into(), netmask.into())?;
+        let IpAddr::V4(default_dest) = default_dest else {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "invalid destination for address/netmask",
+            ));
+        };
+        let dest = destination.unwrap_or(default_dest);
+        self.set_alias(address, dest, netmask)?;
         Ok(())
     }
 
@@ -468,12 +500,25 @@ impl Device {
                     }
                 }
             }
+            if let Ok(addrs) = crate::device::get_if_addrs_by_name(self.name()?) {
+                addrs.iter().filter(|v| v.address == addr).for_each(|v| {
+                    let Some(netmask) = v.netmask else {
+                        return;
+                    };
+                    let Some(dest) = v.associated_address else {
+                        return;
+                    };
+                    if let Err(e) = self.remove_route(Route {
+                        addr,
+                        netmask,
+                        dest,
+                    }) {
+                        log::warn!("{e:?}");
+                    }
+                })
+            }
             Ok(())
         }
-    }
-
-    pub fn remove_address_v6(&self, addr: Ipv6Addr, _prefix: u8) -> io::Result<()> {
-        self.remove_address(IpAddr::V6(addr))
     }
 
     pub fn add_address_v6<Netmask: ToIpv6Netmask>(
@@ -500,6 +545,16 @@ impl Device {
             if let Err(err) = siocaifaddr_in6(ctl_v6()?.as_raw_fd(), &req) {
                 return Err(io::Error::from(err));
             }
+            let Ok(dest) = self.calc_dest_addr(addr.into(), mask) else {
+                return Ok(());
+            };
+            if let Err(e) = self.add_route(Route {
+                addr: addr.into(),
+                netmask: mask,
+                dest: dest.into(),
+            }) {
+                log::warn!("{e:?}");
+            }
         }
         Ok(())
     }
@@ -511,20 +566,4 @@ impl Device {
     pub fn set_ignore_packet_info(&self, ign: bool) {
         self.tun.set_ignore_packet_info(ign)
     }
-}
-
-/// Runs a command and returns an error if the command fails, just convenience for users.
-#[doc(hidden)]
-pub fn run_command(command: &str, args: &[&str]) -> std::io::Result<Vec<u8>> {
-    let out = std::process::Command::new(command).args(args).output()?;
-    if !out.status.success() {
-        let err = String::from_utf8_lossy(if out.stderr.is_empty() {
-            &out.stdout
-        } else {
-            &out.stderr
-        });
-        let info = format!("{} failed with: \"{}\"", command, err);
-        return Err(std::io::Error::new(std::io::ErrorKind::Other, info));
-    }
-    Ok(out.stdout)
 }
