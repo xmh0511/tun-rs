@@ -551,7 +551,7 @@ impl Device {
             if let Err(e) = self.add_route(Route {
                 addr: addr.into(),
                 netmask: mask,
-                dest: dest.into(),
+                dest,
             }) {
                 log::warn!("{e:?}");
             }
