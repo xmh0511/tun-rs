@@ -35,7 +35,7 @@ First, add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-tun_rs = "1"
+tun-rs = "1"
 ```
 
 If you want to use the TUN interface with asynchronous runtimes, you need to enable the `async`(aliased
@@ -44,10 +44,10 @@ as `async_tokio`), or `async_std` feature:
 ```toml
 [dependencies]
 # tokio
-tun_rs = { version = "1", features = ["async"] }
+tun-rs = { version = "1", features = ["async"] }
 
 # async-std
-tun_rs = { version = "1", features = ["async_std"] }
+tun-rs = { version = "1", features = ["async_std"] }
 ```
 
 Example
