@@ -71,7 +71,7 @@ fn test_udp() {
     assert!(test_udp_v6_c.load(Ordering::SeqCst));
 }
 
-#[cfg(any(feature = "async_tokio", feature = "async_std"))]
+#[cfg(feature = "async_tokio")]
 #[tokio::test]
 async fn test_udp() {
     let test_msg = "test udp";
