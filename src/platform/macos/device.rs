@@ -1,6 +1,5 @@
 use crate::{
     configuration::Configuration,
-    error::Error,
     platform::{
         macos::sys::*,
         posix::{self, sockaddr_union},
@@ -164,9 +163,10 @@ impl Device {
     }
 
     pub(crate) fn calc_dest_addr(&self, addr: IpAddr, netmask: IpAddr) -> std::io::Result<IpAddr> {
-        let prefix_len = ipnet::ip_mask_to_prefix(netmask).map_err(|_| Error::InvalidConfig)?;
+        let prefix_len = ipnet::ip_mask_to_prefix(netmask)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
         Ok(ipnet::IpNet::new(addr, prefix_len)
-            .map_err(|_| Error::InvalidConfig)?
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?
             .broadcast())
     }
 
@@ -203,10 +203,10 @@ impl Device {
 
     fn remove_route(&self, route: Route) -> std::io::Result<()> {
         let if_name = self.name()?;
-        let prefix_len =
-            ipnet::ip_mask_to_prefix(route.netmask).map_err(|_| Error::InvalidConfig)?;
+        let prefix_len = ipnet::ip_mask_to_prefix(route.netmask)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
         let network = ipnet::IpNet::new(route.addr, prefix_len)
-            .map_err(|_e| Error::InvalidConfig)?
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?
             .network();
         // command: route -n delete -net 10.0.0.0/24 10.0.0.1
         let args = [
@@ -232,8 +232,8 @@ impl Device {
     fn add_route(&self, route: Route) -> std::io::Result<()> {
         let if_name = self.name()?;
         // command: route -n add -net 10.0.0.9/24 10.0.0.1
-        let prefix_len =
-            ipnet::ip_mask_to_prefix(route.netmask).map_err(|_| Error::InvalidConfig)?;
+        let prefix_len = ipnet::ip_mask_to_prefix(route.netmask)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
         let args = [
             "-n",
             "add",
@@ -254,10 +254,10 @@ impl Device {
     fn set_route(&self, old_route: Option<Route>, new_route: Route) -> std::io::Result<()> {
         let if_name = self.name()?;
         if let Some(v) = old_route {
-            let prefix_len =
-                ipnet::ip_mask_to_prefix(v.netmask).map_err(|_| Error::InvalidConfig)?;
+            let prefix_len = ipnet::ip_mask_to_prefix(v.netmask)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
             let network = ipnet::IpNet::new(v.addr, prefix_len)
-                .map_err(|_e| Error::InvalidConfig)?
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?
                 .network();
             // command: route -n delete -net 10.0.0.0/24 10.0.0.1
             let args = [
@@ -276,8 +276,8 @@ impl Device {
         }
 
         // command: route -n add -net 10.0.0.9/24 10.0.0.1
-        let prefix_len =
-            ipnet::ip_mask_to_prefix(new_route.netmask).map_err(|_| Error::InvalidConfig)?;
+        let prefix_len = ipnet::ip_mask_to_prefix(new_route.netmask)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
         let args = [
             "-n",
             "add",
@@ -536,7 +536,7 @@ impl Device {
             );
             req.ifra_addr = sockaddr_union::from((addr, 0)).addr6;
             let network_addr = ipnet::IpNet::new(addr.into(), netmask.prefix())
-                .map_err(|e| Error::String(e.to_string()))?;
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
             let mask = network_addr.netmask();
             req.ifra_prefixmask = sockaddr_union::from((mask, 0)).addr6;
             req.in6_addrlifetime.ia6t_vltime = 0xffffffff_u32;

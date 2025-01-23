@@ -6,7 +6,7 @@ use crate::device::ETHER_ADDR_LEN;
 use crate::platform::windows::netsh;
 use crate::platform::windows::tap::TapDevice;
 use crate::platform::windows::tun::TunDevice;
-use crate::{Error, Layer, ToIpv4Netmask, ToIpv6Netmask};
+use crate::{Layer, ToIpv4Netmask, ToIpv6Netmask};
 use getifaddrs::Interface;
 use network_interface::NetworkInterfaceConfig;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
@@ -41,7 +41,7 @@ impl Device {
         let layer = config.layer.unwrap_or(Layer::L3);
         let mut count = 0;
         let interfaces = network_interface::NetworkInterface::show().map_err(|e| {
-            Error::String(format!(
+            std::io::Error::other(format!(
                 "Failed to retrieve the network interface list. {e:?}"
             ))
         })?;
@@ -65,7 +65,7 @@ impl Device {
                     if config.dev_name.is_none() {
                         continue;
                     }
-                    Err(Error::String(format!(
+                    Err(std::io::Error::other(format!(
                         "The network adapter [{name}] already exists."
                     )))?
                 }

@@ -5,7 +5,6 @@ use std::sync::mpsc::Receiver;
 use std::sync::Arc;
 
 #[allow(unused_imports)]
-use tun_rs::BoxError;
 #[cfg(any(
     target_os = "windows",
     target_os = "linux",
@@ -17,7 +16,7 @@ use tun_rs::DeviceBuilder;
 #[allow(unused_imports)]
 use tun_rs::Layer;
 
-fn main() -> Result<(), BoxError> {
+fn main() -> Result<(), std::io::Error> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("trace")).init();
     let (tx, rx) = std::sync::mpsc::channel();
 
@@ -41,7 +40,7 @@ fn main_entry(_quit: Receiver<()>) -> Result<(), BoxError> {
     target_os = "macos",
     target_os = "freebsd",
 ))]
-fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
+fn main_entry(quit: Receiver<()>) -> Result<(), std::io::Error> {
     #[allow(unused_imports)]
     use std::net::IpAddr;
     let dev = Arc::new(
@@ -71,7 +70,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
     println!("mtu = {:?}", dev.mtu());
     #[cfg(windows)]
     {
-        dev.set_mtu_v6(2000).unwrap();
+        dev.set_mtu_v6(2000)?;
         println!("mtu ipv6 = {:?}", dev.mtu_v6());
         println!("version = {:?}", dev.version());
     }
@@ -82,7 +81,7 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
             println!("{:?}", &buf[0..amount]);
         }
         #[allow(unreachable_code)]
-        Ok::<(), BoxError>(())
+        std::io::Result::Ok(())
     });
     _ = quit.recv();
     Ok(())

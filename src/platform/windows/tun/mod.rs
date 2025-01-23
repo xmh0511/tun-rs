@@ -112,7 +112,7 @@ impl TunDevice {
         tunnel_type: &str,
         guid: u128,
         ring_capacity: u32,
-    ) -> crate::error::Result<Self> {
+    ) -> std::io::Result<Self> {
         let range = MIN_RING_CAPACITY..=MAX_RING_CAPACITY;
         if !range.contains(&ring_capacity) {
             Err(io::Error::new(
@@ -135,7 +135,8 @@ impl TunDevice {
             }
             let shutdown_event = OwnedHandle::from_raw_handle(shutdown_event_handle);
 
-            let win_tun = wintun_raw::wintun::new(wintun_path)?;
+            let win_tun =
+                wintun_raw::wintun::new(wintun_path).map_err(|e| std::io::Error::other(e))?;
 
             //SAFETY: guid is a unique integer so transmuting either all zeroes or the user's preferred
             //guid to the wintun_raw guid type is safe and will allow the windows kernel to see our GUID

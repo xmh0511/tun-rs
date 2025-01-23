@@ -1,7 +1,6 @@
 use crate::{
     configuration::{Configuration, Layer},
     device::ETHER_ADDR_LEN,
-    error::Error,
     platform::freebsd::sys::*,
     platform::posix::{self, sockaddr_union, Fd, Tun},
     ToIpv4Netmask, ToIpv6Netmask,
@@ -131,9 +130,10 @@ impl Device {
     // }
 
     fn calc_dest_addr(&self, addr: IpAddr, netmask: IpAddr) -> std::io::Result<IpAddr> {
-        let prefix_len = ipnet::ip_mask_to_prefix(netmask).map_err(|_| Error::InvalidConfig)?;
+        let prefix_len = ipnet::ip_mask_to_prefix(netmask)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
         Ok(ipnet::IpNet::new(addr, prefix_len)
-            .map_err(|_| Error::InvalidConfig)?
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?
             .broadcast())
     }
 
@@ -224,8 +224,8 @@ impl Device {
 
     fn add_route(&self, route: Route) -> std::io::Result<()> {
         let if_name = self.name()?;
-        let prefix_len =
-            ipnet::ip_mask_to_prefix(route.netmask).map_err(|_| Error::InvalidConfig)?;
+        let prefix_len = ipnet::ip_mask_to_prefix(route.netmask)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
         let args = [
             "-n",
             "add",
@@ -294,7 +294,10 @@ impl Device {
             let path = PathBuf::from(dev_path);
             let device_name = path
                 .file_name()
-                .ok_or(Error::InvalidConfig)?
+                .ok_or(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "invalid device name",
+                ))?
                 .to_string_lossy()
                 .to_string();
             Ok(device_name)
@@ -455,7 +458,7 @@ impl Device {
             );
             req.ifra_addr = sockaddr_union::from((addr, 0)).addr6;
             let network_addr = ipnet::IpNet::new(addr.into(), netmask.prefix())
-                .map_err(|e| Error::String(e.to_string()))?;
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
             let mask = network_addr.netmask();
             req.ifra_prefixmask = sockaddr_union::from((mask, 0)).addr6;
             req.in6_addrlifetime.ia6t_vltime = 0xffffffff_u32;
@@ -495,7 +498,10 @@ impl Device {
     pub fn mac_address(&self) -> std::io::Result<[u8; ETHER_ADDR_LEN as usize]> {
         let mac = mac_address_by_name(&self.name()?)
             .map_err(|e| io::Error::other(e.to_string()))?
-            .ok_or(Error::InvalidConfig)?;
+            .ok_or(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "invalid mac address",
+            ))?;
         Ok(mac.bytes())
     }
 }
