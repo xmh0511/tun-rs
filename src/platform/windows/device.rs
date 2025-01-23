@@ -44,11 +44,7 @@ impl Device {
             .map(|v| v.name)
             .collect();
         let device = if layer == Layer::L3 {
-            let default_wintun_file = "wintun.dll".to_string();
-            let wintun_file = config
-                .wintun_file
-                .as_deref()
-                .unwrap_or(&default_wintun_file);
+            let wintun_file = config.wintun_file.as_deref().unwrap_or("wintun.dll");
             let ring_capacity = config
                 .ring_capacity
                 .unwrap_or(crate::platform::windows::tun::MAX_RING_CAPACITY);
@@ -62,7 +58,7 @@ impl Device {
                     if config.dev_name.is_none() {
                         continue;
                     }
-                    Err(std::io::Error::new(
+                    Err(io::Error::new(
                         io::ErrorKind::Other,
                         format!("The network adapter [{name}] already exists."),
                     ))?
