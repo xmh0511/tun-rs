@@ -201,7 +201,7 @@ impl DeviceBuilder {
     }
     #[cfg(any(feature = "async_std", feature = "async_tokio"))]
     pub fn build_async(self) -> io::Result<crate::AsyncDevice> {
-        let device = crate::AsyncDevice::new(Device::new(self.config)?)?;
+        let device = crate::AsyncDevice::new_dev(Device::new(self.config)?)?;
         Ok(device)
     }
 }

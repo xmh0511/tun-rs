@@ -4,6 +4,7 @@ use crate::platform::Device;
 #[cfg(target_os = "linux")]
 use crate::platform::GROTable;
 use crate::r#async::async_device::AsyncFd;
+use crate::SyncDevice;
 use std::io;
 use std::io::{IoSlice, IoSliceMut};
 use std::ops::Deref;
@@ -40,8 +41,11 @@ impl Deref for AsyncDevice {
 }
 
 impl AsyncDevice {
+    pub fn new(device: SyncDevice) -> io::Result<AsyncDevice> {
+        AsyncDevice::new_dev(device.0)
+    }
     /// Create a new `AsyncDevice` wrapping around a `Device`.
-    pub fn new(device: Device) -> io::Result<AsyncDevice> {
+    pub(crate) fn new_dev(device: Device) -> io::Result<AsyncDevice> {
         Ok(AsyncDevice {
             inner: AsyncFd::new(device)?,
         })
@@ -51,7 +55,7 @@ impl AsyncDevice {
     /// This method is safe if the provided fd is valid
     /// Construct a AsyncDevice from an existing file descriptor
     pub unsafe fn from_fd(fd: RawFd) -> io::Result<AsyncDevice> {
-        AsyncDevice::new(Device::from_fd(fd))
+        AsyncDevice::new_dev(Device::from_fd(fd))
     }
     pub fn into_fd(self) -> io::Result<RawFd> {
         Ok(self.inner.into_device()?.into_raw_fd())
@@ -120,7 +124,7 @@ impl AsyncDevice {
 #[cfg(target_os = "linux")]
 impl AsyncDevice {
     pub fn try_clone(&self) -> io::Result<Self> {
-        AsyncDevice::new(self.inner.get_ref().try_clone()?)
+        AsyncDevice::new_dev(self.inner.get_ref().try_clone()?)
     }
     /// Recv a packet from tun device.
     /// If offload is enabled. This method can be used to obtain processed data.

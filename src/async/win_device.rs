@@ -1,4 +1,5 @@
 use crate::platform::Device;
+use crate::SyncDevice;
 use std::future::Future;
 use std::io;
 use std::ops::Deref;
@@ -25,8 +26,11 @@ impl Drop for AsyncDevice {
     }
 }
 impl AsyncDevice {
+    pub fn new(device: SyncDevice) -> io::Result<AsyncDevice> {
+        AsyncDevice::new_dev(device.0)
+    }
     /// Create a new `AsyncDevice` wrapping around a `Device`.
-    pub fn new(device: Device) -> io::Result<AsyncDevice> {
+    pub(crate) fn new_dev(device: Device) -> io::Result<AsyncDevice> {
         let inner = Arc::new(device);
 
         Ok(AsyncDevice {
