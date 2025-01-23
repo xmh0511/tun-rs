@@ -1,7 +1,7 @@
 use crate::platform::Device;
 use ::async_io::Async;
 use std::io;
-use std::io::IoSlice;
+use std::io::{IoSlice, IoSliceMut};
 use std::task::{Context, Poll};
 pub struct AsyncFd(Async<Device>);
 impl AsyncFd {
@@ -31,6 +31,9 @@ impl AsyncFd {
     }
     pub async fn send_vectored(&self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
         self.0.write_with(|device| device.send_vectored(bufs)).await
+    }
+    pub async fn recv_vectored(&self, bufs: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
+        self.0.read_with(|device| device.recv_vectored(bufs)).await
     }
 
     pub fn get_ref(&self) -> &Device {

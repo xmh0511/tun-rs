@@ -5,7 +5,7 @@ use crate::platform::Device;
 use crate::platform::GROTable;
 use crate::r#async::async_device::AsyncFd;
 use std::io;
-use std::io::IoSlice;
+use std::io::{IoSlice, IoSliceMut};
 use std::ops::Deref;
 use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd, RawFd};
 use std::task::{Context, Poll};
@@ -111,6 +111,9 @@ impl AsyncDevice {
     }
     pub async fn send_vectored(&self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
         self.inner.send_vectored(bufs).await
+    }
+    pub async fn recv_vectored(&self, bufs: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
+        self.inner.recv_vectored(bufs).await
     }
 }
 

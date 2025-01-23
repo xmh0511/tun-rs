@@ -47,11 +47,17 @@ impl AsyncFd {
     pub async fn send(&self, _buf: &[u8]) -> std::io::Result<usize> {
         unreachable!()
     }
-    pub fn send_vectored<'a>(
+    pub async fn send_vectored<'a>(
         &'a self,
         _bufs: &'a [std::io::IoSlice<'_>],
     ) -> impl std::future::Future<Output = std::io::Result<usize>> {
-        async { unreachable!() }
+        unreachable!()
+    }
+    pub async fn recv_vectored(
+        &self,
+        bufs: &mut [std::io::IoSliceMut<'_>],
+    ) -> std::io::Result<usize> {
+        unreachable!()
     }
 
     pub fn get_ref(&self) -> &crate::platform::Device {

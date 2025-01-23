@@ -2,7 +2,7 @@ use crate::platform::Device;
 use ::tokio::io::unix::AsyncFd as TokioAsyncFd;
 use ::tokio::io::Interest;
 use std::io;
-use std::io::{Error, IoSlice};
+use std::io::{Error, IoSlice, IoSliceMut};
 use std::pin::Pin;
 use std::task::{ready, Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
@@ -51,6 +51,13 @@ impl AsyncFd {
     pub async fn send_vectored(&self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
         self.0
             .async_io(Interest::WRITABLE, |device| device.send_vectored(bufs))
+            .await
+    }
+    pub async fn recv_vectored(&self, bufs: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
+        self.0
+            .async_io(Interest::READABLE.add(Interest::ERROR), |device| {
+                device.recv_vectored(bufs)
+            })
             .await
     }
 
