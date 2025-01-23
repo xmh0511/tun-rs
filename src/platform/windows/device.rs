@@ -8,7 +8,6 @@ use crate::platform::windows::tap::TapDevice;
 use crate::platform::windows::tun::TunDevice;
 use crate::{Layer, ToIpv4Netmask, ToIpv6Netmask};
 use getifaddrs::Interface;
-use network_interface::NetworkInterfaceConfig;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 pub(crate) enum Driver {
@@ -37,15 +36,13 @@ fn hash_name(input_str: &str) -> u128 {
 
 impl Device {
     /// Create a new `Device` for the given `Configuration`.
-    pub fn new(config: Configuration) -> std::io::Result<Self> {
+    pub fn new(config: Configuration) -> io::Result<Self> {
         let layer = config.layer.unwrap_or(Layer::L3);
         let mut count = 0;
-        let interfaces = network_interface::NetworkInterface::show().map_err(|e| {
-            std::io::Error::other(format!(
-                "Failed to retrieve the network interface list. {e:?}"
-            ))
-        })?;
-        let interfaces: HashSet<String> = interfaces.into_iter().map(|v| v.name).collect();
+        let interfaces: HashSet<String> = Self::get_all_adapter_address()?
+            .into_iter()
+            .map(|v| v.name)
+            .collect();
         let device = if layer == Layer::L3 {
             let default_wintun_file = "wintun.dll".to_string();
             let wintun_file = config
@@ -65,9 +62,10 @@ impl Device {
                     if config.dev_name.is_none() {
                         continue;
                     }
-                    Err(std::io::Error::other(format!(
-                        "The network adapter [{name}] already exists."
-                    )))?
+                    Err(std::io::Error::new(
+                        io::ErrorKind::Other,
+                        format!("The network adapter [{name}] already exists."),
+                    ))?
                 }
                 let guid = config.device_guid.unwrap_or_else(|| hash_name(name));
                 match TunDevice::create(wintun_file, name, name, guid, ring_capacity) {
@@ -151,7 +149,7 @@ impl Device {
             Driver::Tap(tap) => tap.down(),
         }
     }
-    fn get_all_adapter_address(&self) -> std::io::Result<Vec<Interface>> {
+    fn get_all_adapter_address() -> io::Result<Vec<Interface>> {
         Ok(getifaddrs::getifaddrs()?.collect())
     }
 
@@ -192,8 +190,7 @@ impl Device {
 
     pub fn addresses(&self) -> io::Result<Vec<IpAddr>> {
         let index = self.if_index()?;
-        let r = self
-            .get_all_adapter_address()?
+        let r = Self::get_all_adapter_address()?
             .into_iter()
             .filter(|v| v.index == Some(index))
             .map(|v| v.address)

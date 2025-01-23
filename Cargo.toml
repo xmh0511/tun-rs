@@ -35,7 +35,6 @@ getifaddrs = "0.1.5"
 nix = { version = "0.29", features = ["ioctl"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-network-interface = "2.0.0"
 encoding_rs = "0.8.34"
 
 scopeguard = "1.2.0"

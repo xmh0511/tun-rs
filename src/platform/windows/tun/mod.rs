@@ -135,8 +135,8 @@ impl TunDevice {
             }
             let shutdown_event = OwnedHandle::from_raw_handle(shutdown_event_handle);
 
-            let win_tun =
-                wintun_raw::wintun::new(wintun_path).map_err(|e| std::io::Error::other(e))?;
+            let win_tun = wintun_raw::wintun::new(wintun_path)
+                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 
             //SAFETY: guid is a unique integer so transmuting either all zeroes or the user's preferred
             //guid to the wintun_raw guid type is safe and will allow the windows kernel to see our GUID
