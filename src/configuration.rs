@@ -14,7 +14,7 @@ pub enum Layer {
 
 /// Configuration for a TUN/TAP interface.
 #[derive(Clone, Default, Debug)]
-pub struct Configuration {
+pub(crate) struct Configuration {
     pub dev_name: Option<String>,
     pub enabled: Option<bool>,
     pub mtu: Option<u16>,

@@ -38,7 +38,7 @@ pub struct Device {
 
 impl Device {
     /// Create a new `Device` for the given `Configuration`.
-    pub fn new(config: Configuration) -> std::io::Result<Self> {
+    pub(crate) fn new(config: Configuration) -> std::io::Result<Self> {
         let dev_name = match config.dev_name.as_ref() {
             Some(tun_name) => {
                 let tun_name = CString::new(tun_name.clone())?;
