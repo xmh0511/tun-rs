@@ -1,6 +1,6 @@
 /*!
 # Example:
-```rust
+```no_run
 use tun_rs::DeviceBuilder;
 use std::net::Ipv4Addr;
 let dev = DeviceBuilder::new()
@@ -11,7 +11,7 @@ let dev = DeviceBuilder::new()
                 64,
             )
             .mtu(1400)
-            .build_sync()?;
+            .build_sync().unwrap();
 let mut buf = [0;65535];
 loop {
     let len = dev.recv(&mut buf).unwrap();
@@ -19,7 +19,7 @@ loop {
 }
 ```
 # Example IOS/Android:
-```rust
+```no_run
 use tun_rs::SyncDevice;
 // use PacketTunnelProvider/VpnService create tun fd
 let fd = 7799;
