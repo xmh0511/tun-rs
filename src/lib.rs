@@ -20,17 +20,17 @@ loop {
 ```
 # Example IOS/Android:
 ```no_run
-use tun_rs::SyncDevice;
-// use PacketTunnelProvider/VpnService create tun fd
-let fd = 7799;
 #[cfg(unix)]
 {
-let dev = unsafe{SyncDevice::from_fd(fd)};
-let mut buf = [0;65535];
-loop {
-    let len = dev.recv(&mut buf).unwrap();
-    println!("buf= {:?}",&buf[..len]);
-}
+    use tun_rs::SyncDevice;
+    // use PacketTunnelProvider/VpnService create tun fd
+    let fd = 7799;
+    let dev = unsafe{SyncDevice::from_fd(fd)};
+    let mut buf = [0;65535];
+    loop {
+        let len = dev.recv(&mut buf).unwrap();
+        println!("buf= {:?}",&buf[..len]);
+    }
 }
 ```
 */
