@@ -12,9 +12,9 @@ protocol = "sparse"
 # target = ["x86_64-apple-darwin"]
 # target = ["x86_64-unknown-freebsd"]
 
-
-[target.'cfg(unix)']
-runner = 'sudo -E'
+#
+#[target.'cfg(unix)']
+#runner = 'sudo -E'
 
 # [target.'cfg(windows)']
 # runner = "powershell -Command Start-Process -Verb runAs -FilePath"

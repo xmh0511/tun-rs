@@ -3,7 +3,6 @@ use std::net::IpAddr;
 use std::os::windows::process::CommandExt;
 use std::process::{Command, Output};
 
-use crate::IntoAddress;
 use encoding_rs::GBK;
 use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
 
@@ -91,7 +90,7 @@ pub fn set_interface_ip(
             .arg(format!("address={}", address).as_str())
             .arg(format!("mask={}", netmask).as_str())
     } else {
-        let prefix_len = ipnet::ip_mask_to_prefix(netmask.into_address()?)
+        let prefix_len = ipnet::ip_mask_to_prefix(netmask)
             .map_err(|_| io::Error::from(io::ErrorKind::InvalidData))?;
         binding
             .arg("interface")
@@ -111,6 +110,13 @@ pub fn set_interface_ip(
 pub fn set_interface_mtu(index: u32, mtu: u32) -> io::Result<()> {
     let cmd = format!(
         "netsh interface ipv4 set subinterface {}  mtu={} store=persistent",
+        index, mtu
+    );
+    exe_cmd(&cmd)
+}
+pub fn set_interface_mtu_v6(index: u32, mtu: u32) -> io::Result<()> {
+    let cmd = format!(
+        "netsh interface ipv6 set subinterface {}  mtu={} store=persistent",
         index, mtu
     );
     exe_cmd(&cmd)

@@ -1,8 +1,8 @@
-use std::io;
-
 use crate::platform::windows::ffi;
 use crate::platform::windows::ffi::decode_utf16;
 use scopeguard::{guard, ScopeGuard};
+use std::io;
+use std::os::windows::io::{FromRawHandle, OwnedHandle};
 use windows_sys::Win32::Storage::FileSystem::FILE_FLAG_OVERLAPPED;
 use windows_sys::{
     core::GUID,
@@ -12,7 +12,7 @@ use windows_sys::{
             DIF_REGISTERDEVICE, DIF_REGISTER_COINSTALLERS, DIF_REMOVE, DIGCF_PRESENT, DIREG_DRV,
             SPDIT_COMPATDRIVER, SPDRP_HARDWAREID,
         },
-        Foundation::{GENERIC_READ, GENERIC_WRITE, HANDLE, TRUE},
+        Foundation::{GENERIC_READ, GENERIC_WRITE, TRUE},
         NetworkManagement::Ndis::NET_LUID_LH,
         Storage::FileSystem::{
             FILE_ATTRIBUTE_SYSTEM, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
@@ -289,16 +289,17 @@ pub fn delete_interface(component_id: &str, luid: &NET_LUID_LH) -> io::Result<()
 }
 
 /// Open an handle to an interface
-pub fn open_interface(luid: &NET_LUID_LH) -> io::Result<HANDLE> {
+pub fn open_interface(luid: &NET_LUID_LH) -> io::Result<OwnedHandle> {
     let guid = ffi::luid_to_guid(luid).and_then(|guid| ffi::string_from_guid(&guid))?;
 
     let path = format!(r"\\.\Global\{}.tap", guid);
 
-    ffi::create_file(
+    let handle = ffi::create_file(
         &path,
         GENERIC_READ | GENERIC_WRITE,
         FILE_SHARE_READ | FILE_SHARE_WRITE,
         OPEN_EXISTING,
         FILE_ATTRIBUTE_SYSTEM | FILE_FLAG_OVERLAPPED,
-    )
+    )?;
+    unsafe { Ok(OwnedHandle::from_raw_handle(handle)) }
 }

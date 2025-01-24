@@ -1,40 +1,89 @@
-use std::{fmt, io};
-
-#[allow(unused_imports)]
-use packet::{builder::Builder, icmp, ip, Packet};
-use packet::{ether, PacketMut};
-
 #[allow(unused_imports)]
 use async_ctrlc::CtrlC;
 #[allow(unused_imports)]
 use async_std::prelude::FutureExt;
-
+#[allow(unused_imports)]
+use packet::{ether, icmp, ip, Builder, Packet, PacketMut};
+#[allow(unused_imports)]
+use std::net::Ipv4Addr;
+#[allow(unused_imports)]
+use std::sync::Arc;
+#[allow(unused_imports)]
+use std::{fmt, io};
+#[allow(unused_imports)]
+use tokio::sync::mpsc::Receiver;
+#[allow(unused_imports)]
+use tun_rs::DeviceBuilder;
 #[allow(unused_imports)]
 use tun_rs::Layer;
-#[allow(unused_imports)]
-use tun_rs::{self, AbstractDevice, BoxError, Configuration};
 
-#[async_std::main]
-async fn main() -> Result<(), BoxError> {
+#[cfg(feature = "async_tokio")]
+#[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
+#[tokio::main]
+async fn main() -> std::io::Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("trace")).init();
+    let (tx, mut quit) = tokio::sync::mpsc::channel::<()>(1);
 
-    main_entry().await?;
+    ctrlc2::set_async_handler(async move {
+        tx.send(()).await.expect("Signal error");
+    })
+    .await;
+    let dev = Arc::new(
+        DeviceBuilder::new()
+            .ipv4(Ipv4Addr::from([10, 0, 0, 9]), 24, None)
+            .layer(Layer::L2)
+            .build_async()?,
+    );
+    let mut buf = vec![0; 65536];
+    loop {
+        tokio::select! {
+            _ = quit.recv() => {
+                println!("Quit...");
+                break;
+            }
+            len = dev.recv(&mut buf) => {
+                let mut pkt: Vec<u8> = buf[..len?].to_vec();
+                match ether::Packet::new(&mut pkt){
+                    Ok(mut packet) => {
+                        match packet.protocol(){
+                            ether::Protocol::Ipv4=>{
+                                if ping(&mut packet)?{
+                                    dev.send(packet.as_ref()).await?;
+                                }
+                            }
+                            ether::Protocol::Arp=>{
+                                if arp(&mut packet)?{
+                                    if pkt.len() < 60 {
+                                        pkt.resize(60,0);
+                                    }
+                                    dev.send(&pkt).await?;
+                                }
+                            }
+                            protocol=>{
+                                 println!("ignore ether protocol: {:?}", protocol)
+                            }
+                        }
+                    }
+                    Err(err) => {
+                         println!("Received an invalid packet: {:?}", err)
+                    }
+                }
+            }
+        }
+    }
     Ok(())
 }
-#[cfg(any(target_os = "ios", target_os = "android", target_os = "macos"))]
-async fn main_entry() -> Result<(), BoxError> {
-    unimplemented!()
-}
+
+#[cfg(feature = "async_std")]
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
-async fn main_entry() -> Result<(), BoxError> {
-    let mut config = Configuration::default();
-
-    config
-        .address_with_prefix((10, 0, 0, 101), 24)
-        .layer(Layer::L2)
-        .up();
-
-    let dev = tun_rs::create_as_async(&config)?;
+#[async_std::main]
+async fn main() -> std::io::Result<()> {
+    let dev = Arc::new(
+        DeviceBuilder::new()
+            .ipv4(Ipv4Addr::from([10, 0, 0, 9]), 24, None)
+            .layer(Layer::L2)
+            .build_async()?,
+    );
     let mut buf = vec![0; 65536];
     let ctrlc = CtrlC::new().expect("cannot create Ctrl+C handler?");
     ctrlc
@@ -66,7 +115,7 @@ async fn main_entry() -> Result<(), BoxError> {
                         }
                     }
                 }
-                Ok::<(), BoxError>(())
+                Ok::<(), std::io::Error>(())
             }
             .await;
         })
@@ -74,7 +123,14 @@ async fn main_entry() -> Result<(), BoxError> {
     println!("Quit...");
     Ok(())
 }
-pub fn ping(packet: &mut ether::Packet<&mut Vec<u8>>) -> Result<bool, BoxError> {
+
+#[cfg(any(target_os = "ios", target_os = "android", target_os = "macos"))]
+fn main() -> std::io::Result<()> {
+    unimplemented!()
+}
+
+#[allow(dead_code)]
+pub fn ping(packet: &mut ether::Packet<&mut Vec<u8>>) -> std::io::Result<bool> {
     let source = packet.source();
     let destination = packet.destination();
 
@@ -84,20 +140,35 @@ pub fn ping(packet: &mut ether::Packet<&mut Vec<u8>>) -> Result<bool, BoxError> 
                 if let Ok(icmp) = icmp.echo() {
                     println!("{:?} - {:?}", icmp.sequence(), pkt.destination());
                     let reply = ip::v4::Builder::default()
-                        .id(0x42)?
-                        .ttl(64)?
-                        .source(pkt.destination())?
-                        .destination(pkt.source())?
-                        .icmp()?
-                        .echo()?
-                        .reply()?
-                        .identifier(icmp.identifier())?
-                        .sequence(icmp.sequence())?
-                        .payload(icmp.payload())?
-                        .build()?;
+                        .id(0x42)
+                        .map_err(std::io::Error::other)?
+                        .ttl(64)
+                        .map_err(std::io::Error::other)?
+                        .source(pkt.destination())
+                        .map_err(std::io::Error::other)?
+                        .destination(pkt.source())
+                        .map_err(std::io::Error::other)?
+                        .icmp()
+                        .map_err(std::io::Error::other)?
+                        .echo()
+                        .map_err(std::io::Error::other)?
+                        .reply()
+                        .map_err(std::io::Error::other)?
+                        .identifier(icmp.identifier())
+                        .map_err(std::io::Error::other)?
+                        .sequence(icmp.sequence())
+                        .map_err(std::io::Error::other)?
+                        .payload(icmp.payload())
+                        .map_err(std::io::Error::other)?
+                        .build()
+                        .map_err(std::io::Error::other)?;
                     packet.payload_mut().copy_from_slice(&reply);
-                    packet.set_destination(source)?;
-                    packet.set_source(destination)?;
+                    packet
+                        .set_destination(source)
+                        .map_err(std::io::Error::other)?;
+                    packet
+                        .set_source(destination)
+                        .map_err(std::io::Error::other)?;
                     return Ok(true);
                 }
             }
@@ -107,7 +178,9 @@ pub fn ping(packet: &mut ether::Packet<&mut Vec<u8>>) -> Result<bool, BoxError> 
     }
     Ok(false)
 }
-pub fn arp(packet: &mut ether::Packet<&mut Vec<u8>>) -> Result<bool, BoxError> {
+
+#[allow(dead_code)]
+pub fn arp(packet: &mut ether::Packet<&mut Vec<u8>>) -> std::io::Result<bool> {
     const MAC: [u8; 6] = [0xf, 0xf, 0xf, 0xf, 0xe, 0x9];
     let sender_h = packet.source();
     let mut arp_packet = ArpPacket::new(packet.payload_mut())?;
@@ -125,8 +198,12 @@ pub fn arp(packet: &mut ether::Packet<&mut Vec<u8>>) -> Result<bool, BoxError> {
     arp_packet.set_target_protocol_addr(&sender_p);
     arp_packet.set_sender_protocol_addr(&target_p);
     arp_packet.set_sender_hardware_addr(&MAC);
-    packet.set_destination(sender_h)?;
-    packet.set_source(MAC.into())?;
+    packet
+        .set_destination(sender_h)
+        .map_err(std::io::Error::other)?;
+    packet
+        .set_source(MAC.into())
+        .map_err(std::io::Error::other)?;
     Ok(true)
 }
 

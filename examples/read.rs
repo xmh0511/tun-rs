@@ -1,14 +1,21 @@
+#[allow(unused_imports)]
+use std::net::Ipv4Addr;
 use std::sync::mpsc::Receiver;
 #[allow(unused_imports)]
 use std::sync::Arc;
-#[allow(unused_imports)]
-use tun_rs::{AbstractDevice, BoxError};
 
+#[allow(unused_imports)]
+#[cfg(any(
+    target_os = "windows",
+    target_os = "linux",
+    target_os = "freebsd",
+    target_os = "macos"
+))]
+use tun_rs::DeviceBuilder;
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
 #[allow(unused_imports)]
 use tun_rs::Layer;
-
-fn main() -> Result<(), BoxError> {
+fn main() -> Result<(), std::io::Error> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("trace")).init();
     let (tx, rx) = std::sync::mpsc::channel();
 
@@ -32,27 +39,40 @@ fn main_entry(_quit: Receiver<()>) -> Result<(), BoxError> {
     target_os = "macos",
     target_os = "freebsd",
 ))]
-fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
+fn main_entry(quit: Receiver<()>) -> Result<(), std::io::Error> {
     #[allow(unused_imports)]
     use std::net::IpAddr;
+    let dev = Arc::new(
+        DeviceBuilder::new()
+            .name("utun7")
+            .ipv4(Ipv4Addr::new(10, 0, 0, 12), 24, None)
+            // .ipv4(Ipv4Addr::new(10, 0, 0, 2), Ipv4Addr::new(255, 255, 255, 0), None)
+            .ipv6(
+                "CDCD:910A:2222:5498:8475:1111:3900:2021".parse().unwrap(),
+                64,
+            )
+            // .iff_multi_queue(true)
+            .mtu(1400)
+            // .ipv6(
+            //     "CDCD:910A:2222:5498:8475:1111:3900:2021".parse().unwrap(),
+            //     "FFFF:FFFF:FFFF:FFFF:0000:0000:0000:0000".parse::<Ipv6Addr>().unwrap(),
+            // )
+            // .ipv6_tuple(vec![( "CDCD:910A:2222:5498:8475:1111:3900:2022".parse().unwrap(),64),
+            //                ( "CDCD:910A:2222:5498:8475:1111:3900:2023".parse().unwrap(),64)])
+            .build_sync()?,
+    );
+    // // linux multi queue
+    // let device = dev.try_clone().unwrap();
+    // println!("clone {:?}", device.name());
 
-    let mut config = tun_rs::Configuration::default();
-
-    // #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
-    // config.layer(Layer::L2);
-
-    config
-        .address_with_prefix_multi(&[
-            ("CDCD:910A:2222:5498:8475:1111:3900:2020", 64),
-            ("10.0.0.2", 24u8),
-        ])
-        .name("tun66")
-        //.destination((10, 0, 0, 1))
-        .up();
-
-    let dev = Arc::new(tun_rs::create(&config)?);
     println!("if_index = {:?}", dev.if_index());
-    let dev_t = dev.clone();
+    println!("mtu = {:?}", dev.mtu());
+    #[cfg(windows)]
+    {
+        dev.set_mtu_v6(2000)?;
+        println!("mtu ipv6 = {:?}", dev.mtu_v6());
+        println!("version = {:?}", dev.version());
+    }
     let _join = std::thread::spawn(move || {
         let mut buf = [0; 4096];
         loop {
@@ -60,38 +80,8 @@ fn main_entry(quit: Receiver<()>) -> Result<(), BoxError> {
             println!("{:?}", &buf[0..amount]);
         }
         #[allow(unreachable_code)]
-        Ok::<(), BoxError>(())
+        std::io::Result::Ok(())
     });
-    //dev_t.set_network_address((10, 0, 0, 88), (255, 255, 255, 0), None)?;
-    // dev_t.set_network_address(
-    //     "CDCD:910A:2222:5498:8475:1111:3900:2024"
-    //         .parse::<IpAddr>()
-    //         .unwrap(),
-    //     "ffff:ffff:ffff:ffff::".parse::<IpAddr>().unwrap(),
-    //     None,
-    // )?;
-    dev_t.add_address_v6(
-        "CDCD:910A:2222:5498:8475:1111:3900:2024"
-            .parse::<IpAddr>()
-            .unwrap(),
-        64,
-    )?;
-    // dev_t.add_address_v6(
-    //     "CDCD:910A:2222:5498:8475:1111:3900:2020"
-    //         .parse::<IpAddr>()
-    //         .unwrap(),
-    //     64,
-    // )?;
-    std::thread::sleep(std::time::Duration::from_secs(6));
-    dev_t.remove_network_address(vec![(
-        "CDCD:910A:2222:5498:8475:1111:3900:2024"
-            .parse::<IpAddr>()
-            .unwrap(),
-        64,
-    )])?;
-    quit.recv().expect("Quit error.");
-    println!("recv quit!!!!!");
-    println!("{:#?}", dev_t.addresses()?);
-    dev_t.enabled(false)?;
+    _ = quit.recv();
     Ok(())
 }

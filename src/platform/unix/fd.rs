@@ -4,12 +4,11 @@ use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 #[cfg(feature = "experimental")]
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use libc::{self, fcntl, F_GETFL, F_SETFL, O_NONBLOCK};
+use libc::{self, fcntl, F_GETFL, O_NONBLOCK};
 
 /// POSIX file descriptor support for `io` traits.
 pub(crate) struct Fd {
     pub(crate) inner: RawFd,
-    close_fd_on_drop: bool,
     #[cfg(feature = "experimental")]
     is_shutdown: AtomicBool,
     #[cfg(feature = "experimental")]
@@ -17,23 +16,35 @@ pub(crate) struct Fd {
 }
 
 impl Fd {
-    pub fn new(value: RawFd, close_fd_on_drop: bool) -> io::Result<Self> {
+    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    pub(crate) fn new(value: RawFd) -> io::Result<Self> {
         if value < 0 {
-            return Err(io::Error::from(io::ErrorKind::InvalidInput));
+            return Err(io::Error::last_os_error());
         }
-        Ok(Fd {
+        Ok(unsafe { Self::new_unchecked(value) })
+    }
+    pub(crate) unsafe fn new_unchecked(value: RawFd) -> Self {
+        Fd {
             inner: value,
-            close_fd_on_drop,
             #[cfg(feature = "experimental")]
             is_shutdown: AtomicBool::new(false),
             #[cfg(feature = "experimental")]
-            event_fd: EventFd::new()?,
-        })
+            event_fd: EventFd::new().expect("failed to create event fd"),
+        }
     }
-
+    pub(crate) fn is_nonblocking(&self) -> io::Result<bool> {
+        unsafe {
+            let flags = fcntl(self.inner, F_GETFL);
+            if flags == -1 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok((flags & O_NONBLOCK) != 0)
+        }
+    }
     /// Enable non-blocking mode
-    pub fn set_nonblock(&self) -> io::Result<()> {
-        match unsafe { fcntl(self.inner, F_SETFL, fcntl(self.inner, F_GETFL) | O_NONBLOCK) } {
+    pub fn set_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
+        let mut nonblocking = nonblocking as libc::c_int;
+        match unsafe { libc::ioctl(self.as_raw_fd(), libc::FIONBIO, &mut nonblocking) } {
             0 => Ok(()),
             _ => Err(io::Error::last_os_error()),
         }
@@ -124,20 +135,11 @@ impl Fd {
 }
 #[cfg(feature = "experimental")]
 impl Fd {
-    fn is_fd_nonblocking(&self) -> io::Result<bool> {
-        unsafe {
-            let flags = fcntl(self.inner, F_GETFL);
-            if flags == -1 {
-                return Err(io::Error::last_os_error());
-            }
-            Ok((flags & O_NONBLOCK) != 0)
-        }
-    }
     pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
         if self.is_shutdown.load(Ordering::Relaxed) {
             return Err(io::Error::new(io::ErrorKind::ConnectionAborted, "close"));
         }
-        if self.is_fd_nonblocking()? {
+        if self.is_nonblocking()? {
             return self.read0(buf);
         }
         self.wait()?;
@@ -147,7 +149,7 @@ impl Fd {
         if self.is_shutdown.load(Ordering::Relaxed) {
             return Err(io::Error::new(io::ErrorKind::ConnectionAborted, "close"));
         }
-        if self.is_fd_nonblocking()? {
+        if self.is_nonblocking()? {
             return self.readv0(bufs);
         }
         self.wait()?;
@@ -275,7 +277,7 @@ impl IntoRawFd for Fd {
 
 impl Drop for Fd {
     fn drop(&mut self) {
-        if self.close_fd_on_drop && self.inner >= 0 {
+        if self.inner >= 0 {
             unsafe { libc::close(self.inner) };
         }
     }

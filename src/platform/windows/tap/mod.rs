@@ -1,5 +1,6 @@
 use crate::platform::windows::{ffi, netsh};
-use std::{io, net, time};
+use std::os::windows::io::{AsRawHandle, OwnedHandle};
+use std::{io, time};
 use windows_sys::Win32::Foundation::HANDLE;
 use windows_sys::Win32::NetworkManagement::Ndis::NET_LUID_LH;
 use windows_sys::Win32::System::Ioctl::{FILE_ANY_ACCESS, FILE_DEVICE_UNKNOWN, METHOD_BUFFERED};
@@ -8,16 +9,18 @@ mod iface;
 
 pub struct TapDevice {
     luid: NET_LUID_LH,
-    handle: HANDLE,
+    handle: OwnedHandle,
     component_id: String,
     index: u32,
+    need_delete: bool,
 }
 unsafe impl Send for TapDevice {}
 unsafe impl Sync for TapDevice {}
 impl Drop for TapDevice {
     fn drop(&mut self) {
-        let _ = ffi::close_handle(self.handle);
-        let _ = iface::delete_interface(&self.component_id, &self.luid);
+        if self.need_delete {
+            let _ = iface::delete_interface(&self.component_id, &self.luid);
+        }
     }
 }
 fn get_version(handle: HANDLE) -> io::Result<[u64; 3]> {
@@ -39,6 +42,7 @@ impl TapDevice {
             // If we surpassed 2 seconds just return
             let now = time::Instant::now();
             if now - start > time::Duration::from_secs(3) {
+                let _ = iface::delete_interface(component_id, &luid);
                 return Err(io::Error::new(
                     io::ErrorKind::TimedOut,
                     "Interface timed out",
@@ -51,9 +55,8 @@ impl TapDevice {
                     continue;
                 }
                 Ok(handle) => {
-                    if get_version(handle).is_err() {
+                    if get_version(handle.as_raw_handle()).is_err() {
                         std::thread::sleep(time::Duration::from_millis(200));
-                        let _ = ffi::close_handle(handle);
                         continue;
                     }
                     break handle;
@@ -64,7 +67,6 @@ impl TapDevice {
         let index = match ffi::luid_to_index(&luid) {
             Ok(index) => index,
             Err(e) => {
-                let _ = ffi::close_handle(handle);
                 let _ = iface::delete_interface(component_id, &luid);
                 Err(e)?
             }
@@ -74,6 +76,7 @@ impl TapDevice {
             handle,
             index,
             component_id: component_id.to_owned(),
+            need_delete: true,
         })
     }
 
@@ -89,13 +92,8 @@ impl TapDevice {
             luid,
             handle,
             component_id: component_id.to_owned(),
+            need_delete: false,
         })
-    }
-
-    /// Sets the status of the interface to connected.
-    /// Equivalent to `.set_status(true)`
-    pub fn up(&self) -> io::Result<()> {
-        self.set_status(true)
     }
 
     /// Sets the status of the interface to disconnected.
@@ -107,7 +105,13 @@ impl TapDevice {
     /// Retieve the mac of the interface
     pub fn get_mac(&self) -> io::Result<[u8; 6]> {
         let mut mac = [0; 6];
-        ffi::device_io_control(self.handle, TAP_IOCTL_GET_MAC, &(), &mut mac).map(|_| mac)
+        ffi::device_io_control(
+            self.handle.as_raw_handle(),
+            TAP_IOCTL_GET_MAC,
+            &(),
+            &mut mac,
+        )
+        .map(|_| mac)
     }
     pub fn set_mac(&self, _mac: &[u8; 6]) -> io::Result<()> {
         Err(io::Error::from(io::ErrorKind::Unsupported))?
@@ -115,28 +119,17 @@ impl TapDevice {
 
     /// Retrieve the version of the driver
     pub fn get_version(&self) -> io::Result<[u64; 3]> {
-        get_version(self.handle)
+        get_version(self.handle.as_raw_handle())
     }
 
-    /// Retieve the mtu of the interface
-    pub fn get_mtu(&self) -> io::Result<u32> {
-        let in_mtu: u32 = 0;
-        let mut out_mtu = 0;
-        ffi::device_io_control(self.handle, TAP_IOCTL_GET_MTU, &in_mtu, &mut out_mtu)
-            .map(|_| out_mtu)
-    }
-    pub fn set_mtu(&self, mtu: u16) -> io::Result<()> {
-        netsh::set_interface_mtu(self.index, mtu as _)
-    }
-    pub fn get_address(&self) -> io::Result<net::IpAddr> {
-        unimplemented!()
-    }
-    pub fn get_netmask(&self) -> io::Result<net::IpAddr> {
-        unimplemented!()
-    }
-    pub fn get_destination(&self) -> io::Result<net::IpAddr> {
-        unimplemented!()
-    }
+    // ///Retieve the mtu of the interface
+    // pub fn get_mtu(&self) -> io::Result<u32> {
+    //     let in_mtu: u32 = 0;
+    //     let mut out_mtu = 0;
+    //     ffi::device_io_control(self.handle, TAP_IOCTL_GET_MTU, &in_mtu, &mut out_mtu)
+    //         .map(|_| out_mtu)
+    // }
+
     /// Retrieve the name of the interface
     pub fn get_name(&self) -> io::Result<String> {
         ffi::luid_to_alias(&self.luid)
@@ -166,23 +159,23 @@ impl TapDevice {
         let status: u32 = if status { 1 } else { 0 };
         let mut out_status: u32 = 0;
         ffi::device_io_control(
-            self.handle,
+            self.handle.as_raw_handle(),
             TAP_IOCTL_SET_MEDIA_STATUS,
             &status,
             &mut out_status,
         )
     }
     pub fn try_read(&self, buf: &mut [u8]) -> io::Result<usize> {
-        ffi::try_read_file(self.handle, buf).map(|res| res as _)
+        ffi::try_read_file(self.handle.as_raw_handle(), buf).map(|res| res as _)
     }
     pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
-        ffi::read_file(self.handle, buf).map(|res| res as _)
+        ffi::read_file(self.handle.as_raw_handle(), buf).map(|res| res as _)
     }
     pub fn write(&self, buf: &[u8]) -> io::Result<usize> {
-        ffi::write_file(self.handle, buf).map(|res| res as _)
+        ffi::write_file(self.handle.as_raw_handle(), buf).map(|res| res as _)
     }
     pub fn try_write(&self, buf: &[u8]) -> io::Result<usize> {
-        ffi::try_write_file(self.handle, buf).map(|res| res as _)
+        ffi::try_write_file(self.handle.as_raw_handle(), buf).map(|res| res as _)
     }
 }
 
@@ -195,6 +188,6 @@ const fn CTL_CODE(DeviceType: u32, Function: u32, Method: u32, Access: u32) -> u
 const TAP_IOCTL_GET_MAC: u32 = CTL_CODE(FILE_DEVICE_UNKNOWN, 1, METHOD_BUFFERED, FILE_ANY_ACCESS);
 const TAP_IOCTL_GET_VERSION: u32 =
     CTL_CODE(FILE_DEVICE_UNKNOWN, 2, METHOD_BUFFERED, FILE_ANY_ACCESS);
-const TAP_IOCTL_GET_MTU: u32 = CTL_CODE(FILE_DEVICE_UNKNOWN, 3, METHOD_BUFFERED, FILE_ANY_ACCESS);
+// const TAP_IOCTL_GET_MTU: u32 = CTL_CODE(FILE_DEVICE_UNKNOWN, 3, METHOD_BUFFERED, FILE_ANY_ACCESS);
 const TAP_IOCTL_SET_MEDIA_STATUS: u32 =
     CTL_CODE(FILE_DEVICE_UNKNOWN, 6, METHOD_BUFFERED, FILE_ANY_ACCESS);
