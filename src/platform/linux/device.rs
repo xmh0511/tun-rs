@@ -31,14 +31,14 @@ use std::{
 const OVERWRITE_SIZE: usize = mem::size_of::<libc::__c_anonymous_ifr_ifru>();
 
 /// A TUN device using the TUN/TAP Linux driver.
-pub struct Device {
+pub(crate) struct DeviceInner {
     pub(crate) tun: Tun,
     pub(crate) vnet_hdr: bool,
     pub(crate) udp_gso: bool,
     flags: c_short,
 }
 
-impl Device {
+impl DeviceInner {
     /// Create a new `Device` for the given `Configuration`.
     pub(crate) fn new(config: DeviceConfig) -> std::io::Result<Self> {
         let dev_name = match config.dev_name.as_ref() {
@@ -102,7 +102,7 @@ impl Device {
                 (false, false)
             };
 
-            let device = Device {
+            let device = DeviceInner {
                 tun: Tun::new(tun_fd),
                 vnet_hdr,
                 udp_gso,
@@ -140,7 +140,7 @@ impl Device {
     ///
     /// # Description
     /// When multi-queue is enabled, create a new queue by duplicating an existing one.
-    pub fn try_clone(&self) -> io::Result<Device> {
+    pub fn try_clone(&self) -> io::Result<DeviceInner> {
         let flags = self.flags;
         if flags & (IFF_MULTI_QUEUE as c_short) != IFF_MULTI_QUEUE as c_short {
             return Err(io::Error::new(
@@ -156,7 +156,7 @@ impl Device {
             if let Err(err) = tunsetiff(tun_fd.inner, &mut req as *mut _ as *mut _) {
                 return Err(io::Error::from(err));
             }
-            let dev = Device {
+            let dev = DeviceInner {
                 tun: Tun::new(tun_fd),
                 vnet_hdr: self.vnet_hdr,
                 udp_gso: self.udp_gso,
@@ -438,7 +438,7 @@ impl Device {
     }
 }
 
-impl Device {
+impl DeviceInner {
     /// Prepare a new request.
     unsafe fn request(&self) -> io::Result<ifreq> {
         request(&self.name()?)

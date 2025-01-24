@@ -53,14 +53,14 @@ pub(crate) fn get_if_addrs_by_name(if_name: String) -> std::io::Result<Vec<Inter
 }
 
 #[repr(transparent)]
-pub struct SyncDevice(pub(crate) Device);
+pub struct SyncDevice(pub(crate) DeviceInner);
 
 impl SyncDevice {
     /// # Safety
     /// The fd passed in must be an owned file descriptor; in particular, it must be open.
     #[cfg(unix)]
     pub unsafe fn from_fd(fd: RawFd) -> Self {
-        SyncDevice(Device::from_fd(fd))
+        SyncDevice(DeviceInner::from_fd(fd))
     }
     pub fn recv(&self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.0.recv(buf)
@@ -106,7 +106,7 @@ impl SyncDevice {
 }
 
 impl Deref for SyncDevice {
-    type Target = Device;
+    type Target = DeviceInner;
     fn deref(&self) -> &Self::Target {
         &self.0
     }

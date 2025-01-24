@@ -25,12 +25,12 @@ struct Route {
 }
 
 /// A TUN device using the TUN macOS driver.
-pub struct Device {
+pub(crate) struct DeviceInner {
     pub(crate) tun: Tun,
     alias_lock: Mutex<()>,
 }
 
-impl Device {
+impl DeviceInner {
     /// Create a new `Device` for the given `Configuration`.
     pub(crate) fn new(config: DeviceConfig) -> std::io::Result<Self> {
         let id = if let Some(tun_name) = config.dev_name.as_ref() {
@@ -97,7 +97,7 @@ impl Device {
                 return Err(io::Error::last_os_error());
             }
 
-            Device {
+            DeviceInner {
                 tun: Tun::new(tun),
                 alias_lock: Mutex::new(()),
             }

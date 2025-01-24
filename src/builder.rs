@@ -1,4 +1,4 @@
-use crate::platform::Device;
+use crate::platform::DeviceInner;
 use crate::platform::SyncDevice;
 use std::io;
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -48,7 +48,7 @@ pub(crate) struct DeviceConfig {
 }
 
 impl DeviceConfig {
-    pub(crate) fn config(self, device: &Device) -> io::Result<()> {
+    pub(crate) fn config(self, device: &DeviceInner) -> io::Result<()> {
         if let Some(mtu) = self.mtu {
             device.set_mtu(mtu)?;
         }
@@ -196,12 +196,12 @@ impl DeviceBuilder {
         self
     }
     pub fn build_sync(self) -> io::Result<SyncDevice> {
-        let device = Device::new(self.config)?;
+        let device = DeviceInner::new(self.config)?;
         Ok(SyncDevice(device))
     }
     #[cfg(any(feature = "async_std", feature = "async_tokio"))]
     pub fn build_async(self) -> io::Result<crate::AsyncDevice> {
-        let device = crate::AsyncDevice::new_dev(Device::new(self.config)?)?;
+        let device = crate::AsyncDevice::new_dev(DeviceInner::new(self.config)?)?;
         Ok(device)
     }
 }

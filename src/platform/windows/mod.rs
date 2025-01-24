@@ -11,4 +11,4 @@ pub mod async_device;
 #[cfg(any(feature = "async_std", feature = "async_tokio"))]
 pub use async_device::*;
 
-pub use device::Device;
+pub(crate) use device::DeviceInner;

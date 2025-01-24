@@ -1,4 +1,4 @@
-use super::Device;
+use super::DeviceInner;
 use crate::SyncDevice;
 use std::future::Future;
 use std::io;
@@ -9,13 +9,13 @@ use std::task::{Context, Poll};
 
 /// An async TUN device wrapper around a TUN device.
 pub struct AsyncDevice {
-    inner: Arc<Device>,
+    inner: Arc<DeviceInner>,
     recv_task_lock: Arc<Mutex<Option<RecvTask>>>,
     send_task_lock: Arc<Mutex<Option<blocking::Task<io::Result<usize>>>>>,
 }
 type RecvTask = blocking::Task<io::Result<(Vec<u8>, usize)>>;
 impl Deref for AsyncDevice {
-    type Target = Device;
+    type Target = DeviceInner;
     fn deref(&self) -> &Self::Target {
         &self.inner
     }
@@ -30,7 +30,7 @@ impl AsyncDevice {
         AsyncDevice::new_dev(device.0)
     }
     /// Create a new `AsyncDevice` wrapping around a `Device`.
-    pub(crate) fn new_dev(device: Device) -> io::Result<AsyncDevice> {
+    pub(crate) fn new_dev(device: DeviceInner) -> io::Result<AsyncDevice> {
         let inner = Arc::new(device);
 
         Ok(AsyncDevice {

@@ -10,9 +10,9 @@ mod fd;
 pub(crate) use self::fd::Fd;
 
 mod tun;
-pub use self::tun::Tun;
+pub(crate) use self::tun::Tun;
 
-pub mod device;
+pub(crate) mod device;
 
 #[cfg_attr(docsrs, doc(cfg(any(feature = "async_std", feature = "async_tokio"))))]
 #[cfg(any(feature = "async_std", feature = "async_tokio"))]

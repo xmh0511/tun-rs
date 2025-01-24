@@ -3,7 +3,7 @@ pub mod sys;
 mod checksum;
 mod device;
 pub(crate) mod offload;
-pub use device::Device;
+pub(crate) use device::DeviceInner;
 pub use offload::ExpandBuffer;
 pub use offload::GROTable;
 pub use offload::IDEAL_BATCH_SIZE;

@@ -1,3 +1,3 @@
 mod device;
 
-pub use device::Device;
+pub(crate) use device::DeviceInner;
