@@ -200,10 +200,10 @@ pub fn arp(packet: &mut ether::Packet<&mut Vec<u8>>) -> std::io::Result<bool> {
     arp_packet.set_sender_hardware_addr(&MAC);
     packet
         .set_destination(sender_h)
-        .map_err(|e| std::io::Error::other(e))?;
+        .map_err(std::io::Error::other)?;
     packet
         .set_source(MAC.into())
-        .map_err(|e| std::io::Error::other(e))?;
+        .map_err(std::io::Error::other)?;
     Ok(true)
 }
 
