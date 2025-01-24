@@ -2,75 +2,90 @@
 use pnet_packet::icmp::IcmpTypes;
 #[allow(unused_imports)]
 use pnet_packet::ip::IpNextHeaderProtocols;
-#[allow(unused_imports)]
 use pnet_packet::Packet;
+#[allow(unused_imports)]
 use std::net::Ipv4Addr;
 #[allow(unused_imports)]
-use std::sync::{mpsc::Receiver, Arc};
+use std::sync::Arc;
 #[allow(unused_imports)]
-use tun_rs::{DeviceBuilder, SyncDevice};
+use tun_rs::DeviceBuilder;
+use tun_rs::{AsyncDevice, SyncDevice};
 
-fn main() -> std::io::Result<()> {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("trace")).init();
-    let (tx, rx) = std::sync::mpsc::channel();
-
-    let handle = ctrlc2::set_handler(move || {
-        tx.send(()).expect("Signal error.");
-        true
-    })
-    .expect("Error setting Ctrl-C handler");
-
-    main_entry(rx)?;
-    handle.join().unwrap();
-    Ok(())
-}
-#[cfg(any(target_os = "ios", target_os = "android",))]
-fn main_entry(_quit: Receiver<()>) -> std::io::Result<()> {
-    unimplemented!()
-}
+#[cfg(feature = "async_tokio")]
 #[cfg(any(
     target_os = "windows",
     target_os = "linux",
     target_os = "macos",
     target_os = "freebsd",
 ))]
-fn main_entry(quit: Receiver<()>) -> std::io::Result<()> {
+#[tokio::main]
+async fn main() -> std::io::Result<()> {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("trace")).init();
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<()>(1);
+
+    ctrlc2::set_async_handler(async move {
+        tx.send(()).await.expect("Signal error");
+    })
+    .await;
+
     let dev = Arc::new(
         DeviceBuilder::new()
             .ipv4(Ipv4Addr::from([10, 0, 0, 9]), 24, None)
-            .build_sync()?,
+            .build_async()?,
     );
 
-    #[cfg(target_os = "macos")]
-    dev.set_ignore_packet_info(true);
+    let size = dev.mtu()? as usize + tun_rs::PACKET_INFORMATION_LENGTH;
+    let mut buf = vec![0; size];
+    loop {
+        tokio::select! {
+            _ = rx.recv() => {
+                println!("Quit...");
+                break;
+            }
+            len = dev.recv(&mut buf) => {
+                println!("len = {len:?}");
+                //println!("pkt: {:?}", &buf[..len?]);
+                handle_pkt(&buf[..len], &dev).await.unwrap();
+            }
+        };
+    }
+    Ok(())
+}
 
-    let mut buf = [0; 4096];
-
-    #[cfg(feature = "experimental")]
-    let dev2 = dev.clone();
-    #[cfg(feature = "experimental")]
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_secs(5));
-        dev2.shutdown().unwrap();
-    });
-
-    std::thread::spawn(move || {
-        loop {
-            let amount = dev.recv(&mut buf);
-            println!("amount == {amount:?}");
-            let amount = amount?;
-            let pkt = &buf[0..amount];
-            handle_pkt(pkt, &dev).unwrap();
-        }
-        #[allow(unreachable_code)]
-        Ok::<(), std::io::Error>(())
-    });
-    quit.recv().expect("Quit error.");
+#[cfg(feature = "async_std")]
+#[cfg(any(
+    target_os = "windows",
+    target_os = "linux",
+    target_os = "macos",
+    target_os = "freebsd",
+))]
+#[async_std::main]
+async fn main() -> std::io::Result<()> {
+    use async_ctrlc::CtrlC;
+    use async_std::prelude::FutureExt;
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("trace")).init();
+    let dev = Arc::new(
+        DeviceBuilder::new()
+            .ipv4(Ipv4Addr::from([10, 0, 0, 9]), 24, None)
+            .build_async()?,
+    );
+    let size = dev.mtu()? as usize + tun_rs::PACKET_INFORMATION_LENGTH;
+    let mut buf = vec![0; size];
+    let ctrlc = CtrlC::new().expect("cannot create Ctrl+C handler?");
+    ctrlc
+        .race(async {
+            while let Ok(len) = dev.recv(&mut buf).await {
+                println!("len = {len}");
+                //println!("pkt: {:?}", &buf[..len]);
+                handle_pkt(&buf[..len], &dev).await.unwrap();
+            }
+        })
+        .await;
     Ok(())
 }
 
 #[allow(dead_code)]
-fn handle_pkt(pkt: &[u8], dev: &SyncDevice) -> std::io::Result<()> {
+async fn handle_pkt(pkt: &[u8], dev: &AsyncDevice) -> std::io::Result<()> {
     match pnet_packet::ipv4::Ipv4Packet::new(pkt) {
         Some(ip_pkt) => {
             match ip_pkt.get_next_level_protocol() {
@@ -99,7 +114,7 @@ fn handle_pkt(pkt: &[u8], dev: &SyncDevice) -> std::io::Result<()> {
                             res.set_version(ip_pkt.get_version());
                             res.set_checksum(pnet_packet::ipv4::checksum(&res.to_immutable()));
                             println!("{:?}", buf);
-                            dev.send(&buf)?;
+                            dev.send(&buf).await?;
                         }
                         _ => {}
                     }
