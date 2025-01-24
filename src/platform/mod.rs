@@ -24,13 +24,16 @@ pub mod ios;
 pub mod android;
 
 #[cfg(unix)]
+pub(crate) use crate::platform::DeviceInner;
+
+#[cfg(unix)]
 #[cfg(any(feature = "async_std", feature = "async_tokio"))]
 pub use crate::platform::unix::{async_device, async_device::*};
 
 #[cfg(target_os = "windows")]
 pub mod windows;
 #[cfg(target_os = "windows")]
-use self::windows::DeviceInner;
+pub(crate) use self::windows::DeviceInner;
 
 #[cfg(target_os = "windows")]
 #[cfg(any(feature = "async_std", feature = "async_tokio"))]

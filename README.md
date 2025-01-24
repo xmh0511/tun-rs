@@ -55,24 +55,22 @@ Example
 The following example creates and configures a TUN interface and reads packets from it synchronously.
 
 ```rust
-fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
-    let mut config = tun_rs::Configuration::default();
-    config
-        .address_with_prefix((10, 0, 0, 9), 24u8)
-        //.destination((10, 0, 0, 1))
-        .up();
+use tun_rs::DeviceBuilder;
+use std::net::Ipv4Addr;
 
-    let dev = tun_rs::create(&config)?;
-    // let shared = Arc::new(dev);
-    dev.add_address_v6(
-        "CDCD:910A:2222:5498:8475:1111:3900:2024"
-            .parse::<IpAddr>()
-            .unwrap(),
-        64
-    )?;
-    //dev_t.remove_network_address(vec![(ip,prefix)])?;
+fn main() -> std::io::Result<()> {
+    let dev = DeviceBuilder::new()
+        .name("utun6")
+        .ipv4(Ipv4Addr::new(10, 0, 0, 1), 24, None)
+        .ipv6(
+            "CDCD:910A:2222:5498:8475:1111:3900:2021".parse().unwrap(),
+            64,
+        )
+        // .iff_multi_queue(true)
+        .mtu(1400)
+        .build_sync()?;
+    
     let mut buf = [0; 4096];
-
     loop {
         let amount = dev.recv(&mut buf)?;
         println!("{:?}", &buf[0..amount]);
@@ -83,16 +81,15 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync + 'static>> {
 An example of asynchronously reading packets from an interface
 
 ````rust
+use tun_rs::DeviceBuilder;
+use std::net::Ipv4Addr;
+
 #[tokio::main]
-async fn main(mut quit: Receiver<()>) -> Result<(), BoxError> {
-    let mut config = tun_rs::Configuration::default();
-
-    config
-        .address_with_prefix((10, 0, 0, 9), 24)
-        .mtu(tun_rs::DEFAULT_MTU)
-        .up();
-
-    let dev = Arc::new(tun_rs::create_as_async(&config)?);
+async fn main() -> std::io::Result<()>  {
+    let dev = DeviceBuilder::new()
+        .name("utun6")
+        .ipv4(Ipv4Addr::new(10, 0, 0, 1), 24, None)
+        .build_async()?;
     // ignore the head 4bytes packet information for calling `recv` and `send` on macOS
     #[cfg(target_os = "macos")]
     dev.set_ignore_packet_info(true);
@@ -110,11 +107,30 @@ async fn main(mut quit: Receiver<()>) -> Result<(), BoxError> {
 **Offload** is supported on the Linux platform, enable it via the config
 
 ````rust
-#[cfg(target_os = "linux")]
-config
-.platform_config( | config| {
-config.offload(true);
-});
+use tun_rs::DeviceBuilder;
+use std::net::Ipv4Addr;
+
+fn main() -> std::io::Result<()> {
+    let builder = DeviceBuilder::new()
+        .name("utun6")
+        .ipv4(Ipv4Addr::new(10, 0, 0, 1), 24, None)
+        .ipv6(
+            "CDCD:910A:2222:5498:8475:1111:3900:2021".parse().unwrap(),
+            64,
+        )
+        .mtu(1400);
+    
+    #[cfg(target_os = "linux")]
+    let builder = builder.offload(true);
+    
+    let dev = builder.build_sync()?;
+
+    let mut buf = [0; 4096];
+    loop {
+        let amount = dev.recv(&mut buf)?;
+        println!("{:?}", &buf[0..amount]);
+    }
+}
 ````
 
 1. [Synchronous example](https://github.com/xmh0511/tun-rs/blob/main/examples/read-offload.rs)
