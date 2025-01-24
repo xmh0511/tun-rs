@@ -45,7 +45,8 @@ async fn main() -> std::io::Result<()> {
                 break;
             }
             len = dev.recv(&mut buf) => {
-                println!("len = {len:?}");
+                let len = len?;
+                println!("len = {len}");
                 //println!("pkt: {:?}", &buf[..len?]);
                 handle_pkt(&buf[..len], &dev).await.unwrap();
             }
