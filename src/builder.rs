@@ -1,4 +1,4 @@
-use crate::platform::DeviceInner;
+use crate::platform::windows::DeviceInner;
 use crate::platform::SyncDevice;
 use std::io;
 use std::net::{Ipv4Addr, Ipv6Addr};

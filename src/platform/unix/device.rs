@@ -1,5 +1,5 @@
-use crate::platform::unix::Fd;
-use crate::platform::{DeviceInner, Tun};
+use crate::platform::unix::{Fd, Tun};
+use crate::platform::DeviceInner;
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
 use libc::{AF_INET, AF_INET6, SOCK_DGRAM};
 use std::io;

@@ -5,7 +5,7 @@ pub mod unix;
 pub mod linux;
 
 #[cfg(target_os = "linux")]
-pub(crate) use self::linux::*;
+pub use self::linux::*;
 
 #[cfg(target_os = "freebsd")]
 pub mod freebsd;
@@ -15,25 +15,26 @@ pub(crate) use self::freebsd::*;
 #[cfg(target_os = "macos")]
 pub mod macos;
 #[cfg(target_os = "macos")]
-pub(crate) use self::macos::*;
+pub use self::macos::*;
 
 #[cfg(target_os = "ios")]
 pub mod ios;
-#[cfg(target_os = "ios")]
-pub(crate) use self::ios::*;
 
 #[cfg(target_os = "android")]
 pub mod android;
-#[cfg(target_os = "android")]
-pub(crate) use self::android::*;
 
 #[cfg(unix)]
-pub(crate) use crate::platform::unix::*;
+#[cfg(any(feature = "async_std", feature = "async_tokio"))]
+pub use crate::platform::unix::{async_device, async_device::*};
 
 #[cfg(target_os = "windows")]
 pub mod windows;
 #[cfg(target_os = "windows")]
-pub(crate) use self::windows::*;
+use self::windows::DeviceInner;
+
+#[cfg(target_os = "windows")]
+#[cfg(any(feature = "async_std", feature = "async_tokio"))]
+pub use self::windows::{async_device, async_device::*};
 
 use getifaddrs::Interface;
 #[cfg(unix)]
