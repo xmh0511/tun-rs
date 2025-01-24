@@ -4,6 +4,7 @@ use pnet_packet::icmp::IcmpTypes;
 use pnet_packet::ip::IpNextHeaderProtocols;
 #[allow(unused_imports)]
 use pnet_packet::Packet;
+#[allow(unused_imports)]
 use std::net::Ipv4Addr;
 #[allow(unused_imports)]
 use std::sync::{mpsc::Receiver, Arc};
@@ -71,6 +72,7 @@ fn main_entry(quit: Receiver<()>) -> std::io::Result<()> {
 
 #[allow(dead_code)]
 fn handle_pkt(pkt: &[u8], dev: &SyncDevice) -> std::io::Result<()> {
+    #[allow(clippy::single_match)]
     match pnet_packet::ipv4::Ipv4Packet::new(pkt) {
         Some(ip_pkt) => {
             match ip_pkt.get_next_level_protocol() {

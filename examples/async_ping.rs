@@ -2,6 +2,7 @@
 use pnet_packet::icmp::IcmpTypes;
 #[allow(unused_imports)]
 use pnet_packet::ip::IpNextHeaderProtocols;
+#[allow(unused_imports)]
 use pnet_packet::Packet;
 #[allow(unused_imports)]
 use std::net::Ipv4Addr;
@@ -9,6 +10,7 @@ use std::net::Ipv4Addr;
 use std::sync::Arc;
 #[allow(unused_imports)]
 use tun_rs::DeviceBuilder;
+#[allow(unused_imports)]
 use tun_rs::{AsyncDevice, SyncDevice};
 
 #[cfg(feature = "async_tokio")]
@@ -84,8 +86,14 @@ async fn main() -> std::io::Result<()> {
     Ok(())
 }
 
+#[cfg(any(target_os = "ios", target_os = "android",))]
+fn main(_quit: std::sync::mpsc::Receiver<()>) -> std::io::Result<()> {
+    unimplemented!()
+}
+
 #[allow(dead_code)]
 async fn handle_pkt(pkt: &[u8], dev: &AsyncDevice) -> std::io::Result<()> {
+    #[allow(clippy::single_match)]
     match pnet_packet::ipv4::Ipv4Packet::new(pkt) {
         Some(ip_pkt) => {
             match ip_pkt.get_next_level_protocol() {

@@ -1,11 +1,11 @@
 [package]
 name = "tun-rs"
-version = "1.5.0"
+version = "2.0.0"
 edition = "2021"
 authors = ["xmh0511, vnt-dev"]
 license = "Apache-2.0"
 description = "A cross-platform infrastructure of Tun/Tap device creation and handling."
-repository = "https://github.com/xmh0511/tun-rs"
+repository = "https://github.com/tun-rs/tun-rs"
 keywords = ["tun", "tap", "network", "tunnel", "cross-platform"]
 
 [lib]
@@ -74,6 +74,7 @@ serde_json = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "time"] }
 async-std = { version = "1", features = ["attributes", "unstable"] }
 async-ctrlc = "1.2.0"
+packet = "0.1"
 
 [features]
 async = ["async_tokio"]

@@ -133,8 +133,7 @@ fn main() -> std::io::Result<()> {
 }
 ````
 
-1. [Synchronous example](https://github.com/xmh0511/tun-rs/blob/main/examples/read-offload.rs)
-2. [Asynchronous example](https://github.com/xmh0511/tun-rs/blob/main/examples/ping-tun-offload-tokio.rs)
+More examples are [here](https://github.com/tun-rs/tun-rs/tree/main/examples)
 
 Linux
 -----

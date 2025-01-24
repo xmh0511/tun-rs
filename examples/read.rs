@@ -15,7 +15,6 @@ use tun_rs::DeviceBuilder;
 #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd",))]
 #[allow(unused_imports)]
 use tun_rs::Layer;
-
 fn main() -> Result<(), std::io::Error> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("trace")).init();
     let (tx, rx) = std::sync::mpsc::channel();
