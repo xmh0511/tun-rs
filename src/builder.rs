@@ -14,7 +14,7 @@ pub enum Layer {
 
 /// Configuration for a TUN/TAP interface.
 #[derive(Clone, Default, Debug)]
-pub(crate) struct Configuration {
+pub(crate) struct DeviceConfig {
     pub dev_name: Option<String>,
     pub enabled: Option<bool>,
     pub mtu: Option<u16>,
@@ -47,7 +47,7 @@ pub(crate) struct Configuration {
     pub multi_queue: Option<bool>,
 }
 
-impl Configuration {
+impl DeviceConfig {
     pub(crate) fn config(self, device: &Device) -> io::Result<()> {
         if let Some(mtu) = self.mtu {
             device.set_mtu(mtu)?;
@@ -87,7 +87,7 @@ impl Configuration {
 /// Builder for a TUN/TAP interface.
 #[derive(Default)]
 pub struct DeviceBuilder {
-    config: Configuration,
+    config: DeviceConfig,
 }
 
 impl DeviceBuilder {

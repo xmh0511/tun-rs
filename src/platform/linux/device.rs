@@ -6,7 +6,7 @@ use crate::platform::linux::offload::{
 use crate::platform::posix::device::{ctl, ctl_v6};
 use crate::platform::{ExpandBuffer, GROTable};
 use crate::{
-    configuration::{Configuration, Layer},
+    builder::{DeviceConfig, Layer},
     device::ETHER_ADDR_LEN,
     platform::linux::sys::*,
     platform::posix::{ipaddr_to_sockaddr, sockaddr_union, Fd, Tun},
@@ -38,7 +38,7 @@ pub struct Device {
 
 impl Device {
     /// Create a new `Device` for the given `Configuration`.
-    pub(crate) fn new(config: Configuration) -> std::io::Result<Self> {
+    pub(crate) fn new(config: DeviceConfig) -> std::io::Result<Self> {
         let dev_name = match config.dev_name.as_ref() {
             Some(tun_name) => {
                 let tun_name = CString::new(tun_name.clone())?;

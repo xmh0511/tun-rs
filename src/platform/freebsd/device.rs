@@ -1,5 +1,5 @@
 use crate::{
-    configuration::{Configuration, Layer},
+    builder::{DeviceConfig, Layer},
     device::ETHER_ADDR_LEN,
     platform::freebsd::sys::*,
     platform::posix::{self, sockaddr_union, Fd, Tun},
@@ -32,7 +32,7 @@ pub struct Device {
 
 impl Device {
     /// Create a new `Device` for the given `Configuration`.
-    pub(crate) fn new(config: Configuration) -> std::io::Result<Self> {
+    pub(crate) fn new(config: DeviceConfig) -> std::io::Result<Self> {
         let layer = config.layer.unwrap_or(Layer::L3);
         let device_prefix = if layer == Layer::L3 {
             "tun".to_string()

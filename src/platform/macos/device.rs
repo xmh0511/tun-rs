@@ -1,5 +1,5 @@
 use crate::{
-    configuration::Configuration,
+    builder::DeviceConfig,
     platform::{
         macos::sys::*,
         posix::{self, sockaddr_union},
@@ -35,7 +35,7 @@ pub struct Device {
 
 impl Device {
     /// Create a new `Device` for the given `Configuration`.
-    pub(crate) fn new(config: Configuration) -> std::io::Result<Self> {
+    pub(crate) fn new(config: DeviceConfig) -> std::io::Result<Self> {
         let id = if let Some(tun_name) = config.dev_name.as_ref() {
             if tun_name.len() > IFNAMSIZ {
                 return Err(std::io::Error::new(

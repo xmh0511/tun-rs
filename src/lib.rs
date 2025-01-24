@@ -45,7 +45,7 @@ pub use r#async::*;
     target_os = "macos",
     target_os = "freebsd"
 ))]
-pub use crate::configuration::*;
+pub use crate::builder::*;
 pub use crate::platform::Device;
 
 mod device;
@@ -59,7 +59,7 @@ pub mod r#async;
     target_os = "macos",
     target_os = "freebsd"
 ))]
-mod configuration;
+mod builder;
 pub mod platform;
 pub const PACKET_INFORMATION_LENGTH: usize = 4;
 
