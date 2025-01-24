@@ -19,9 +19,13 @@ pub use self::macos::*;
 
 #[cfg(target_os = "ios")]
 pub mod ios;
+#[cfg(target_os = "ios")]
+pub(crate) use self::ios::DeviceInner;
 
 #[cfg(target_os = "android")]
 pub mod android;
+#[cfg(target_os = "android")]
+pub(crate) use self::android::DeviceInner;
 
 #[cfg(unix)]
 pub(crate) use crate::platform::DeviceInner;
