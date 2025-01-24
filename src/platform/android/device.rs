@@ -1,7 +1,7 @@
 use crate::platform::unix::Tun;
 
 /// A TUN device for Android.
-pub(crate) struct DeviceInner {
+pub struct DeviceInner {
     pub(crate) tun: Tun,
 }
 impl DeviceInner {

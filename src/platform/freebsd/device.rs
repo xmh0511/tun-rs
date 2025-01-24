@@ -27,7 +27,7 @@ struct Route {
 }
 
 /// A TUN device using the TUN/TAP Linux driver.
-pub(crate) struct DeviceInner {
+pub struct DeviceInner {
     pub(crate) tun: Tun,
     alias_lock: Mutex<()>,
 }
