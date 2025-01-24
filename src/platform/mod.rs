@@ -5,35 +5,35 @@ pub mod unix;
 pub mod linux;
 
 #[cfg(target_os = "linux")]
-pub use self::linux::*;
+pub(crate) use self::linux::*;
 
 #[cfg(target_os = "freebsd")]
 pub mod freebsd;
 #[cfg(target_os = "freebsd")]
-pub use self::freebsd::*;
+pub(crate) use self::freebsd::*;
 
 #[cfg(target_os = "macos")]
 pub mod macos;
 #[cfg(target_os = "macos")]
-pub use self::macos::*;
+pub(crate) use self::macos::*;
 
 #[cfg(target_os = "ios")]
 pub mod ios;
 #[cfg(target_os = "ios")]
-pub use self::ios::*;
+pub(crate) use self::ios::*;
 
 #[cfg(target_os = "android")]
 pub mod android;
 #[cfg(target_os = "android")]
-pub use self::android::*;
+pub(crate) use self::android::*;
 
 #[cfg(unix)]
-pub use crate::platform::unix::*;
+pub(crate) use crate::platform::unix::*;
 
 #[cfg(target_os = "windows")]
 pub mod windows;
 #[cfg(target_os = "windows")]
-pub use self::windows::*;
+pub(crate) use self::windows::*;
 
 use getifaddrs::Interface;
 #[cfg(unix)]
