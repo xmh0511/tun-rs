@@ -1,16 +1,13 @@
 use crate::{
     builder::DeviceConfig,
-    platform::{
-        macos::sys::*,
-        posix::{self, sockaddr_union},
-    },
+    platform::{macos::sys::*, unix::sockaddr_union},
     ToIpv4Netmask, ToIpv6Netmask,
 };
 
 //const OVERWRITE_SIZE: usize = std::mem::size_of::<libc::__c_anonymous_ifr_ifru>();
 
-use crate::platform::posix::device::{ctl, ctl_v6};
-use crate::platform::Tun;
+use crate::platform::unix::device::{ctl, ctl_v6};
+use crate::platform::unix::Tun;
 use getifaddrs::{self, Interface};
 use libc::{
     self, c_char, c_short, c_uint, c_void, sockaddr, socklen_t, AF_SYSTEM, AF_SYS_CONTROL,
@@ -60,7 +57,7 @@ impl Device {
 
         let device = unsafe {
             let fd = libc::socket(PF_SYSTEM, SOCK_DGRAM, SYSPROTO_CONTROL);
-            let tun = posix::Fd::new(fd).map_err(|_| io::Error::last_os_error())?;
+            let tun = crate::platform::unix::Fd::new(fd).map_err(|_| io::Error::last_os_error())?;
 
             let mut info = ctl_info {
                 ctl_id: 0,
@@ -144,7 +141,7 @@ impl Device {
     }
 
     fn current_route(&self) -> Option<Route> {
-        let addr = crate::device::get_if_addrs_by_name(self.name().ok()?).ok()?;
+        let addr = crate::platform::get_if_addrs_by_name(self.name().ok()?).ok()?;
         let addr = addr
             .into_iter()
             .filter(|v| v.address.is_ipv4())
@@ -500,7 +497,7 @@ impl Device {
                     }
                 }
             }
-            if let Ok(addrs) = crate::device::get_if_addrs_by_name(self.name()?) {
+            if let Ok(addrs) = crate::platform::get_if_addrs_by_name(self.name()?) {
                 addrs.iter().filter(|v| v.address == addr).for_each(|v| {
                     let Some(netmask) = v.netmask else {
                         return;

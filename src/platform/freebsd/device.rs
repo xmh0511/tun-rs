@@ -1,12 +1,14 @@
 use crate::{
     builder::{DeviceConfig, Layer},
-    device::ETHER_ADDR_LEN,
     platform::freebsd::sys::*,
-    platform::posix::{self, sockaddr_union, Fd, Tun},
+    platform::{
+        unix::{sockaddr_union, Fd, Tun},
+        ETHER_ADDR_LEN,
+    },
     ToIpv4Netmask, ToIpv6Netmask,
 };
 
-use crate::platform::posix::device::{ctl, ctl_v6};
+use crate::platform::unix::device::{ctl, ctl_v6};
 use libc::{
     self, c_char, c_short, fcntl, ifreq, kinfo_file, AF_LINK, F_KINFO, IFF_RUNNING, IFF_UP,
     IFNAMSIZ, KINFO_FILE_SIZE, O_RDWR,
@@ -153,9 +155,9 @@ impl Device {
                         tun_name.len(),
                     );
 
-                    req.addr = posix::sockaddr_union::from((addr, 0)).addr;
-                    req.dstaddr = posix::sockaddr_union::from((dest, 0)).addr;
-                    req.mask = posix::sockaddr_union::from((mask, 0)).addr;
+                    req.addr = crate::platform::unix::sockaddr_union::from((addr, 0)).addr;
+                    req.dstaddr = crate::platform::unix::sockaddr_union::from((dest, 0)).addr;
+                    req.mask = crate::platform::unix::sockaddr_union::from((mask, 0)).addr;
 
                     if let Err(err) = siocaifaddr(ctl.as_raw_fd(), &req) {
                         return Err(io::Error::from(err));
@@ -370,7 +372,7 @@ impl Device {
     //     unsafe {
     //         let ctl = ctl()?;
     //         let mut req = self.request()?;
-    //         req.ifr_ifru.ifru_broadaddr = posix::sockaddr_union::from((value, 0)).addr;
+    //         req.ifr_ifru.ifru_broadaddr = unix::sockaddr_union::from((value, 0)).addr;
     //         if let Err(err) = siocsifbrdaddr(ctl.as_raw_fd(), &req) {
     //             return Err(io::Error::from(err).into());
     //         }

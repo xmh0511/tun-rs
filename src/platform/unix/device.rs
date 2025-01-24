@@ -1,4 +1,4 @@
-use crate::platform::posix::Fd;
+use crate::platform::unix::Fd;
 use crate::platform::{Device, Tun};
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
 use libc::{AF_INET, AF_INET6, SOCK_DGRAM};
@@ -70,7 +70,7 @@ impl Device {
         unsafe { Ok(libc::if_nametoindex(if_name.as_ptr())) }
     }
     pub fn addresses(&self) -> io::Result<Vec<std::net::IpAddr>> {
-        Ok(crate::device::get_if_addrs_by_name(self.name()?)?
+        Ok(crate::platform::get_if_addrs_by_name(self.name()?)?
             .iter()
             .map(|v| v.address)
             .collect())

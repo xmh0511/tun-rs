@@ -1,4 +1,4 @@
-use crate::platform::Device;
+use super::Device;
 use crate::SyncDevice;
 use std::future::Future;
 use std::io;

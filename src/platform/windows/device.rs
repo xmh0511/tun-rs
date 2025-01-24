@@ -2,10 +2,10 @@ use std::collections::HashSet;
 use std::io;
 
 use crate::builder::DeviceConfig;
-use crate::device::ETHER_ADDR_LEN;
 use crate::platform::windows::netsh;
 use crate::platform::windows::tap::TapDevice;
 use crate::platform::windows::tun::TunDevice;
+use crate::platform::ETHER_ADDR_LEN;
 use crate::{Layer, ToIpv4Netmask, ToIpv6Netmask};
 use getifaddrs::Interface;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};

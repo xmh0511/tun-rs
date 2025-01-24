@@ -1,4 +1,4 @@
-use crate::platform::posix::Fd;
+use crate::platform::unix::Fd;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 use crate::PACKET_INFORMATION_LENGTH as PIL;
 use std::io::{self, IoSlice, IoSliceMut, Read, Write};
@@ -90,7 +90,7 @@ impl Tun {
     #[inline]
     pub(crate) fn send_vectored(&self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
         if self.ignore_packet_info() {
-            if crate::platform::posix::fd::max_iov() - 1 < bufs.len() {
+            if crate::platform::unix::fd::max_iov() - 1 < bufs.len() {
                 return Err(io::Error::from(io::ErrorKind::InvalidInput));
             }
             let buf = bufs
@@ -99,7 +99,7 @@ impl Tun {
                 .map_or(&[][..], |b| &**b);
             let ipv6 = is_ipv6(buf)?;
             let head = generate_packet_information(ipv6);
-            let mut iov_block = [IoSlice::new(&head); crate::platform::posix::fd::max_iov()];
+            let mut iov_block = [IoSlice::new(&head); crate::platform::unix::fd::max_iov()];
             for (index, buf) in bufs.iter().enumerate() {
                 iov_block[index + 1] = *buf
             }
@@ -133,13 +133,13 @@ impl Tun {
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     pub(crate) fn recv_vectored(&self, bufs: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
         if self.ignore_packet_info() {
-            if crate::platform::posix::fd::max_iov() - 1 < bufs.len() {
+            if crate::platform::unix::fd::max_iov() - 1 < bufs.len() {
                 return Err(io::Error::from(io::ErrorKind::InvalidInput));
             }
             let offset = bufs.len() + 1;
             let mut head = [0u8; PIL];
             let mut iov_block: [std::mem::MaybeUninit<IoSliceMut>;
-                crate::platform::posix::fd::max_iov()] =
+                crate::platform::unix::fd::max_iov()] =
                 unsafe { std::mem::MaybeUninit::uninit().assume_init() };
             iov_block[0] = std::mem::MaybeUninit::new(IoSliceMut::new(&mut head));
             for (index, buf) in bufs.iter_mut().enumerate() {

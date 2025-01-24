@@ -1,3 +1,5 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 /*!
 # Example:
 ```no_run
@@ -35,10 +37,6 @@ loop {
 ```
 */
 
-#![cfg_attr(docsrs, feature(doc_cfg))]
-#[cfg(any(feature = "async_std", feature = "async_tokio"))]
-pub use r#async::*;
-
 #[cfg(any(
     target_os = "windows",
     target_os = "linux",
@@ -46,13 +44,8 @@ pub use r#async::*;
     target_os = "freebsd"
 ))]
 pub use crate::builder::*;
-pub use crate::platform::Device;
+pub use crate::platform::*;
 
-mod device;
-pub use device::SyncDevice;
-
-#[cfg(any(feature = "async_std", feature = "async_tokio"))]
-pub mod r#async;
 #[cfg(any(
     target_os = "windows",
     target_os = "linux",

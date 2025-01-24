@@ -1,5 +1,5 @@
-use crate::device::SyncDevice;
-use crate::Device;
+use crate::platform::Device;
+use crate::platform::SyncDevice;
 use std::io;
 use std::net::{Ipv4Addr, Ipv6Addr};
 

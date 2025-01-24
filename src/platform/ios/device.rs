@@ -1,4 +1,4 @@
-use crate::platform::posix::Tun;
+use crate::platform::unix::Tun;
 
 /// A TUN device for iOS.
 pub struct Device {

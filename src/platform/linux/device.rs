@@ -3,13 +3,15 @@ use crate::platform::linux::offload::{
     VIRTIO_NET_HDR_GSO_NONE, VIRTIO_NET_HDR_GSO_TCPV4, VIRTIO_NET_HDR_GSO_TCPV6,
     VIRTIO_NET_HDR_GSO_UDP_L4, VIRTIO_NET_HDR_LEN,
 };
-use crate::platform::posix::device::{ctl, ctl_v6};
+use crate::platform::unix::device::{ctl, ctl_v6};
 use crate::platform::{ExpandBuffer, GROTable};
 use crate::{
     builder::{DeviceConfig, Layer},
-    device::ETHER_ADDR_LEN,
     platform::linux::sys::*,
-    platform::posix::{ipaddr_to_sockaddr, sockaddr_union, Fd, Tun},
+    platform::{
+        unix::{ipaddr_to_sockaddr, sockaddr_union, Fd, Tun},
+        ETHER_ADDR_LEN,
+    },
     ToIpv4Netmask, ToIpv6Netmask,
 };
 use libc::{
@@ -601,7 +603,7 @@ impl Device {
                 }
             }
             IpAddr::V6(addr_v6) => {
-                let addrs = crate::device::get_if_addrs_by_name(self.name()?)?;
+                let addrs = crate::platform::get_if_addrs_by_name(self.name()?)?;
                 for x in addrs {
                     if x.address == addr {
                         if let Some(netmask) = x.netmask {
