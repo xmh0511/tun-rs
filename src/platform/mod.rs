@@ -3,6 +3,8 @@ pub mod unix;
 
 #[cfg(target_os = "linux")]
 pub mod linux;
+#[cfg(target_os = "linux")]
+pub(crate) use self::linux::DeviceInner;
 
 #[cfg(target_os = "linux")]
 pub use self::linux::*;
@@ -10,12 +12,12 @@ pub use self::linux::*;
 #[cfg(target_os = "freebsd")]
 pub mod freebsd;
 #[cfg(target_os = "freebsd")]
-pub(crate) use self::freebsd::*;
+pub(crate) use self::freebsd::DeviceInner;
 
 #[cfg(target_os = "macos")]
 pub mod macos;
 #[cfg(target_os = "macos")]
-pub use self::macos::*;
+pub(crate) use self::macos::DeviceInner;
 
 #[cfg(target_os = "ios")]
 pub mod ios;
@@ -26,9 +28,6 @@ pub(crate) use self::ios::DeviceInner;
 pub mod android;
 #[cfg(target_os = "android")]
 pub(crate) use self::android::DeviceInner;
-
-#[cfg(unix)]
-pub(crate) use crate::platform::DeviceInner;
 
 #[cfg(unix)]
 #[cfg(any(feature = "async_std", feature = "async_tokio"))]

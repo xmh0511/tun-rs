@@ -1,4 +1,4 @@
-pub mod sys;
+mod sys;
 
 mod checksum;
 mod device;
