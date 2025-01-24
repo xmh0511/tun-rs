@@ -141,34 +141,34 @@ pub fn ping(packet: &mut ether::Packet<&mut Vec<u8>>) -> std::io::Result<bool> {
                     println!("{:?} - {:?}", icmp.sequence(), pkt.destination());
                     let reply = ip::v4::Builder::default()
                         .id(0x42)
-                        .map_err(|e| std::io::Error::other(e))?
+                        .map_err(std::io::Error::other)?
                         .ttl(64)
-                        .map_err(|e| std::io::Error::other(e))?
+                        .map_err(std::io::Error::other)?
                         .source(pkt.destination())
-                        .map_err(|e| std::io::Error::other(e))?
+                        .map_err(std::io::Error::other)?
                         .destination(pkt.source())
-                        .map_err(|e| std::io::Error::other(e))?
+                        .map_err(std::io::Error::other)?
                         .icmp()
-                        .map_err(|e| std::io::Error::other(e))?
+                        .map_err(std::io::Error::other)?
                         .echo()
-                        .map_err(|e| std::io::Error::other(e))?
+                        .map_err(std::io::Error::other)?
                         .reply()
-                        .map_err(|e| std::io::Error::other(e))?
+                        .map_err(std::io::Error::other)?
                         .identifier(icmp.identifier())
-                        .map_err(|e| std::io::Error::other(e))?
+                        .map_err(std::io::Error::other)?
                         .sequence(icmp.sequence())
-                        .map_err(|e| std::io::Error::other(e))?
+                        .map_err(std::io::Error::other)?
                         .payload(icmp.payload())
-                        .map_err(|e| std::io::Error::other(e))?
+                        .map_err(std::io::Error::other)?
                         .build()
-                        .map_err(|e| std::io::Error::other(e))?;
+                        .map_err(std::io::Error::other)?;
                     packet.payload_mut().copy_from_slice(&reply);
                     packet
                         .set_destination(source)
-                        .map_err(|e| std::io::Error::other(e))?;
+                        .map_err(std::io::Error::other)?;
                     packet
                         .set_source(destination)
-                        .map_err(|e| std::io::Error::other(e))?;
+                        .map_err(std::io::Error::other)?;
                     return Ok(true);
                 }
             }

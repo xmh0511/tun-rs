@@ -57,17 +57,17 @@ async fn main() -> std::io::Result<()> {
                                 if let Ok(icmp) = icmp.echo() {
                                     println!("{:?} - {:?}", icmp.sequence(), pkt.destination());
                                     let reply = ip::v4::Builder::default()
-                                        .id(0x42).map_err(|e| std::io::Error::other(e))?
-                                        .ttl(64).map_err(|e| std::io::Error::other(e))?
-                                        .source(pkt.destination()).map_err(|e| std::io::Error::other(e))?
-                                        .destination(pkt.source()).map_err(|e| std::io::Error::other(e))?
-                                        .icmp().map_err(|e| std::io::Error::other(e))?
-                                        .echo().map_err(|e| std::io::Error::other(e))?
-                                        .reply().map_err(|e| std::io::Error::other(e))?
-                                        .identifier(icmp.identifier()).map_err(|e| std::io::Error::other(e))?
-                                        .sequence(icmp.sequence()).map_err(|e| std::io::Error::other(e))?
-                                        .payload(icmp.payload()).map_err(|e| std::io::Error::other(e))?
-                                        .build().map_err(|e| std::io::Error::other(e))?;
+                                        .id(0x42).map_err(std::io::Error::other)?
+                                        .ttl(64).map_err(std::io::Error::other)?
+                                        .source(pkt.destination()).map_err(std::io::Error::other)?
+                                        .destination(pkt.source()).map_err(std::io::Error::other)?
+                                        .icmp().map_err(std::io::Error::other)?
+                                        .echo().map_err(std::io::Error::other)?
+                                        .reply().map_err(std::io::Error::other)?
+                                        .identifier(icmp.identifier()).map_err(std::io::Error::other)?
+                                        .sequence(icmp.sequence()).map_err(std::io::Error::other)?
+                                        .payload(icmp.payload()).map_err(std::io::Error::other)?
+                                        .build().map_err(std::io::Error::other)?;
                                     let mut buf = BytesMut::with_capacity(VIRTIO_NET_HDR_LEN+1500);
                                     buf.resize(VIRTIO_NET_HDR_LEN,0);
                                     buf.extend_from_slice(&reply);
@@ -120,27 +120,27 @@ async fn main() -> std::io::Result<()> {
                                     println!("{:?} - {:?}", icmp.sequence(), pkt.destination());
                                     let reply = ip::v4::Builder::default()
                                         .id(0x42)
-                                        .map_err(|e| std::io::Error::other(e))?
+                                        .map_err(std::io::Error::other)?
                                         .ttl(64)
-                                        .map_err(|e| std::io::Error::other(e))?
+                                        .map_err(std::io::Error::other)?
                                         .source(pkt.destination())
-                                        .map_err(|e| std::io::Error::other(e))?
+                                        .map_err(std::io::Error::other)?
                                         .destination(pkt.source())
-                                        .map_err(|e| std::io::Error::other(e))?
+                                        .map_err(std::io::Error::other)?
                                         .icmp()
-                                        .map_err(|e| std::io::Error::other(e))?
+                                        .map_err(std::io::Error::other)?
                                         .echo()
-                                        .map_err(|e| std::io::Error::other(e))?
+                                        .map_err(std::io::Error::other)?
                                         .reply()
-                                        .map_err(|e| std::io::Error::other(e))?
+                                        .map_err(std::io::Error::other)?
                                         .identifier(icmp.identifier())
-                                        .map_err(|e| std::io::Error::other(e))?
+                                        .map_err(std::io::Error::other)?
                                         .sequence(icmp.sequence())
-                                        .map_err(|e| std::io::Error::other(e))?
+                                        .map_err(std::io::Error::other)?
                                         .payload(icmp.payload())
-                                        .map_err(|e| std::io::Error::other(e))?
+                                        .map_err(std::io::Error::other)?
                                         .build()
-                                        .map_err(|e| std::io::Error::other(e))?;
+                                        .map_err(std::io::Error::other)?;
                                     let mut buf =
                                         BytesMut::with_capacity(VIRTIO_NET_HDR_LEN + 1500);
                                     buf.resize(VIRTIO_NET_HDR_LEN, 0);
