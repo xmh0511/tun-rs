@@ -124,7 +124,7 @@ async fn main() -> std::io::Result<()> {
     Ok(())
 }
 
-#[cfg(any(target_os = "ios", target_os = "android",))]
+#[cfg(any(target_os = "ios", target_os = "android", target_os = "macos"))]
 fn main() -> std::io::Result<()> {
     unimplemented!()
 }
