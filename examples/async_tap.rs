@@ -125,7 +125,7 @@ async fn main() -> std::io::Result<()> {
 }
 
 #[cfg(any(target_os = "ios", target_os = "android",))]
-fn main(_quit: std::sync::mpsc::Receiver<()>) -> std::io::Result<()> {
+fn main() -> std::io::Result<()> {
     unimplemented!()
 }
 

@@ -86,3 +86,15 @@ experimental = []
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+
+[[example]]
+name = "async_ping"
+required-features = ["async_tokio"]
+
+[[example]]
+name = "ping_offload"
+required-features = ["async_tokio"]
+
+[[example]]
+name = "async_tap"
+required-features = ["async_tokio"]
