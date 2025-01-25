@@ -159,7 +159,7 @@ mod test {
     fn create() {
         let dev = DeviceBuilder::new()
             .name("utun6")
-            .ipv4("192.168.50.1".parse().unwrap(), 24, None)
+            .ipv4("192.168.50.1", 24, None)
             .mtu(1400)
             .build_sync()
             .unwrap();

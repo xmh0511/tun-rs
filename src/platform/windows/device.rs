@@ -1,14 +1,15 @@
 use std::collections::HashSet;
 use std::io;
+use std::net::IpAddr;
+
+use getifaddrs::Interface;
 
 use crate::builder::DeviceConfig;
 use crate::platform::windows::netsh;
 use crate::platform::windows::tap::TapDevice;
 use crate::platform::windows::tun::TunDevice;
 use crate::platform::ETHER_ADDR_LEN;
-use crate::{Layer, ToIpv4Netmask, ToIpv6Netmask};
-use getifaddrs::Interface;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use crate::{Layer, ToIpv4Address, ToIpv4Netmask, ToIpv6Address, ToIpv6Netmask};
 
 pub(crate) enum Driver {
     Tun(TunDevice),
@@ -193,20 +194,17 @@ impl DeviceImpl {
         Ok(r)
     }
 
-    pub fn set_network_address<Netmask: ToIpv4Netmask>(
+    pub fn set_network_address<IPv4: ToIpv4Address, Netmask: ToIpv4Netmask>(
         &self,
-        address: Ipv4Addr,
+        address: IPv4,
         netmask: Netmask,
-        destination: Option<Ipv4Addr>,
+        destination: Option<IPv4>,
     ) -> io::Result<()> {
-        let netmask = ipnet::Ipv4Net::new(address, netmask.prefix())
-            .map_err(|_| io::Error::from(io::ErrorKind::InvalidData))?
-            .netmask();
         netsh::set_interface_ip(
             self.if_index()?,
-            address.into(),
-            netmask.into(),
-            destination.map(|v| v.into()),
+            address.ipv4()?.into(),
+            netmask.netmask()?.into(),
+            destination.map(|v| v.ipv4()).transpose()?.map(|v| v.into()),
         )
     }
 
@@ -214,15 +212,13 @@ impl DeviceImpl {
         netsh::delete_interface_ip(self.if_index()?, addr)
     }
 
-    pub fn add_address_v6<Netmask: ToIpv6Netmask>(
+    pub fn add_address_v6<IPv6: ToIpv6Address, Netmask: ToIpv6Netmask>(
         &self,
-        addr: Ipv6Addr,
+        addr: IPv6,
         netmask: Netmask,
     ) -> io::Result<()> {
-        let network_addr = ipnet::Ipv6Net::new(addr, netmask.prefix())
-            .map_err(|_| io::Error::from(io::ErrorKind::InvalidData))?;
-        let mask = network_addr.netmask();
-        netsh::set_interface_ip(self.if_index()?, addr.into(), mask.into(), None)
+        let mask = netmask.netmask()?;
+        netsh::set_interface_ip(self.if_index()?, addr.ipv6()?.into(), mask.into(), None)
     }
     pub fn mtu(&self) -> io::Result<u16> {
         let index = self.if_index()?;

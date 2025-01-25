@@ -12,7 +12,7 @@ use crate::{
         unix::{ipaddr_to_sockaddr, sockaddr_union, Fd, Tun},
         ETHER_ADDR_LEN,
     },
-    ToIpv4Netmask, ToIpv6Netmask,
+    ToIpv4Address, ToIpv4Netmask, ToIpv6Address, ToIpv6Netmask,
 };
 use libc::{
     self, c_char, c_short, ifreq, in6_ifreq, ARPHRD_ETHER, IFF_MULTI_QUEUE, IFF_NO_PI, IFF_RUNNING,
@@ -579,16 +579,16 @@ impl DeviceImpl {
         }
     }
 
-    pub fn set_network_address<Netmask: ToIpv4Netmask>(
+    pub fn set_network_address<IPv4: ToIpv4Address, Netmask: ToIpv4Netmask>(
         &self,
-        address: Ipv4Addr,
+        address: IPv4,
         netmask: Netmask,
-        destination: Option<Ipv4Addr>,
+        destination: Option<IPv4>,
     ) -> io::Result<()> {
-        self.set_address_v4(address)?;
-        self.set_netmask(netmask.netmask())?;
+        self.set_address_v4(address.ipv4()?)?;
+        self.set_netmask(netmask.netmask()?)?;
         if let Some(destination) = destination {
-            self.set_destination(destination)?;
+            self.set_destination(destination.ipv4()?)?;
         }
         Ok(())
     }
@@ -616,9 +616,9 @@ impl DeviceImpl {
         Ok(())
     }
 
-    pub fn add_address_v6<Netmask: ToIpv6Netmask>(
+    pub fn add_address_v6<IPv6: ToIpv6Address, Netmask: ToIpv6Netmask>(
         &self,
-        addr: Ipv6Addr,
+        addr: IPv6,
         netmask: Netmask,
     ) -> io::Result<()> {
         unsafe {
@@ -626,10 +626,11 @@ impl DeviceImpl {
             let ctl = ctl_v6()?;
             let mut ifrv6: in6_ifreq = mem::zeroed();
             ifrv6.ifr6_ifindex = if_index as i32;
-            ifrv6.ifr6_prefixlen = netmask.prefix() as u32;
-            ifrv6.ifr6_addr = sockaddr_union::from(std::net::SocketAddr::new(addr.into(), 0))
-                .addr6
-                .sin6_addr;
+            ifrv6.ifr6_prefixlen = netmask.prefix()? as u32;
+            ifrv6.ifr6_addr =
+                sockaddr_union::from(std::net::SocketAddr::new(addr.ipv6()?.into(), 0))
+                    .addr6
+                    .sin6_addr;
             if let Err(err) = siocsifaddr_in6(ctl.as_raw_fd(), &ifrv6) {
                 return Err(io::Error::from(err));
             }

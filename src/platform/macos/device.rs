@@ -1,7 +1,7 @@
 use crate::{
     builder::DeviceConfig,
     platform::{macos::sys::*, unix::sockaddr_union},
-    ToIpv4Netmask, ToIpv6Netmask,
+    ToIpv4Address, ToIpv4Netmask, ToIpv6Address, ToIpv6Netmask,
 };
 
 //const OVERWRITE_SIZE: usize = std::mem::size_of::<libc::__c_anonymous_ifr_ifru>();
@@ -14,7 +14,7 @@ use libc::{
     IFF_RUNNING, IFF_UP, IFNAMSIZ, PF_SYSTEM, SOCK_DGRAM, SYSPROTO_CONTROL, UTUN_OPT_IFNAME,
 };
 use std::io::ErrorKind;
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::Ipv4Addr;
 use std::{ffi::CStr, io, mem, net::IpAddr, os::unix::io::AsRawFd, ptr, sync::Mutex};
 #[derive(Clone, Copy, Debug)]
 struct Route {
@@ -32,18 +32,18 @@ pub struct DeviceImpl {
 
 impl DeviceImpl {
     /// Create a new `Device` for the given `Configuration`.
-    pub(crate) fn new(config: DeviceConfig) -> std::io::Result<Self> {
+    pub(crate) fn new(config: DeviceConfig) -> io::Result<Self> {
         let id = if let Some(tun_name) = config.dev_name.as_ref() {
             if tun_name.len() > IFNAMSIZ {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
+                return Err(io::Error::new(
+                    ErrorKind::InvalidInput,
                     "device name too long",
                 ));
             }
 
             if !tun_name.starts_with("utun") {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
+                return Err(io::Error::new(
+                    ErrorKind::InvalidInput,
                     "device name must start with utun",
                 ));
             }
@@ -459,21 +459,25 @@ impl DeviceImpl {
         }
     }
 
-    pub fn set_network_address<Netmask: ToIpv4Netmask>(
+    pub fn set_network_address<IPv4: ToIpv4Address, Netmask: ToIpv4Netmask>(
         &self,
-        address: Ipv4Addr,
+        address: IPv4,
         netmask: Netmask,
-        destination: Option<Ipv4Addr>,
-    ) -> std::io::Result<()> {
-        let netmask = netmask.netmask();
+        destination: Option<IPv4>,
+    ) -> io::Result<()> {
+        let netmask = netmask.netmask()?;
+        let address = address.ipv4()?;
         let default_dest = self.calc_dest_addr(address.into(), netmask.into())?;
         let IpAddr::V4(default_dest) = default_dest else {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
+            return Err(io::Error::new(
+                ErrorKind::InvalidInput,
                 "invalid destination for address/netmask",
             ));
         };
-        let dest = destination.unwrap_or(default_dest);
+        let dest = destination
+            .map(|v| v.ipv4())
+            .transpose()?
+            .unwrap_or(default_dest);
         self.set_alias(address, dest, netmask)?;
         Ok(())
     }
@@ -517,11 +521,12 @@ impl DeviceImpl {
         }
     }
 
-    pub fn add_address_v6<Netmask: ToIpv6Netmask>(
+    pub fn add_address_v6<IPv6: ToIpv6Address, Netmask: ToIpv6Netmask>(
         &self,
-        addr: Ipv6Addr,
+        addr: IPv6,
         netmask: Netmask,
-    ) -> std::io::Result<()> {
+    ) -> io::Result<()> {
+        let addr = addr.ipv6()?;
         unsafe {
             let tun_name = self.name()?;
             let mut req: in6_ifaliasreq = mem::zeroed();
@@ -531,8 +536,8 @@ impl DeviceImpl {
                 tun_name.len(),
             );
             req.ifra_addr = sockaddr_union::from((addr, 0)).addr6;
-            let network_addr = ipnet::IpNet::new(addr.into(), netmask.prefix())
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+            let network_addr = ipnet::IpNet::new(addr.into(), netmask.prefix()?)
+                .map_err(|e| io::Error::new(ErrorKind::InvalidInput, e))?;
             let mask = network_addr.netmask();
             req.ifra_prefixmask = sockaddr_union::from((mask, 0)).addr6;
             req.in6_addrlifetime.ia6t_vltime = 0xffffffff_u32;

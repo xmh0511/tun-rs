@@ -13,11 +13,8 @@ use tun_rs::DeviceBuilder;
 fn test_udp() {
     let test_msg = "test udp";
     let device = DeviceBuilder::new()
-        .ipv4("10.26.1.100".parse().unwrap(), 24, None)
-        .ipv6(
-            "CDCD:910A:2222:5498:8475:1112:1900:2025".parse().unwrap(),
-            64,
-        )
+        .ipv4("10.26.1.100", 24, None)
+        .ipv6("CDCD:910A:2222:5498:8475:1112:1900:2025", 64)
         .build_sync()
         .unwrap();
     let device = Arc::new(device);
@@ -77,11 +74,8 @@ fn test_udp() {
 async fn test_udp() {
     let test_msg = "test udp";
     let device = DeviceBuilder::new()
-        .ipv4("10.26.1.100".parse().unwrap(), 24, None)
-        .ipv6(
-            "CDCD:910A:2222:5498:8475:1112:1900:2025".parse().unwrap(),
-            64,
-        )
+        .ipv4("10.26.1.100", 24, None)
+        .ipv6("CDCD:910A:2222:5498:8475:1112:1900:2025", 64)
         .build_async()
         .unwrap();
     let device = Arc::new(device);

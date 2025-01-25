@@ -1,6 +1,8 @@
-use crate::platform::{DeviceImpl, SyncDevice};
 use std::io;
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::str::FromStr;
+
+use crate::platform::{DeviceImpl, SyncDevice};
 
 /// TUN interface OSI layer of operation.
 #[derive(Clone, Copy, Default, Debug, Eq, PartialEq)]
@@ -34,7 +36,11 @@ pub(crate) struct DeviceConfig {
     #[cfg(target_os = "linux")]
     pub multi_queue: Option<bool>,
 }
-
+type IPV4 = (
+    io::Result<Ipv4Addr>,
+    io::Result<u8>,
+    Option<io::Result<Ipv4Addr>>,
+);
 /// Builder for a TUN/TAP interface.
 #[derive(Default)]
 pub struct DeviceBuilder {
@@ -43,8 +49,8 @@ pub struct DeviceBuilder {
     mtu: Option<u16>,
     #[cfg(windows)]
     mtu_v6: Option<u16>,
-    ipv4: Option<(Ipv4Addr, u8, Option<Ipv4Addr>)>,
-    ipv6: Option<Vec<(Ipv6Addr, u8)>>,
+    ipv4: Option<IPV4>,
+    ipv6: Option<Vec<(io::Result<Ipv6Addr>, io::Result<u8>)>>,
     layer: Option<Layer>,
     #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
     mac_addr: Option<[u8; 6]>,
@@ -92,34 +98,41 @@ impl DeviceBuilder {
         self.mac_addr = Some(mac_addr);
         self
     }
-    pub fn ipv4<Netmask: ToIpv4Netmask>(
+    pub fn ipv4<IPv4: ToIpv4Address, Netmask: ToIpv4Netmask>(
         mut self,
-        address: Ipv4Addr,
+        address: IPv4,
         mask: Netmask,
-        destination: Option<Ipv4Addr>,
+        destination: Option<IPv4>,
     ) -> Self {
-        self.ipv4 = Some((address, mask.prefix(), destination));
+        self.ipv4 = Some((address.ipv4(), mask.prefix(), destination.map(|v| v.ipv4())));
         self
     }
-    pub fn ipv6<Netmask: ToIpv6Netmask>(mut self, address: Ipv6Addr, mask: Netmask) -> Self {
+    pub fn ipv6<IPv6: ToIpv6Address, Netmask: ToIpv6Netmask>(
+        mut self,
+        address: IPv6,
+        mask: Netmask,
+    ) -> Self {
         if let Some(v) = &mut self.ipv6 {
-            v.push((address, mask.prefix()));
+            v.push((address.ipv6(), mask.prefix()));
         } else {
-            self.ipv6 = Some(vec![(address, mask.prefix())]);
+            self.ipv6 = Some(vec![(address.ipv6(), mask.prefix())]);
         }
 
         self
     }
-    pub fn ipv6_tuple<Netmask: ToIpv6Netmask>(mut self, addrs: Vec<(Ipv6Addr, Netmask)>) -> Self {
+    pub fn ipv6_tuple<IPv6: ToIpv6Address, Netmask: ToIpv6Netmask>(
+        mut self,
+        addrs: Vec<(IPv6, Netmask)>,
+    ) -> Self {
         if let Some(v) = &mut self.ipv6 {
             for (address, mask) in addrs {
-                v.push((address, mask.prefix()));
+                v.push((address.ipv6(), mask.prefix()));
             }
         } else {
             self.ipv6 = Some(
                 addrs
                     .into_iter()
-                    .map(|(ip, mask)| (ip, mask.prefix()))
+                    .map(|(ip, mask)| (ip.ipv6(), mask.prefix()))
                     .collect(),
             );
         }
@@ -216,12 +229,17 @@ impl DeviceBuilder {
             }
         }
 
-        if let Some((address, netmask, destination)) = self.ipv4 {
-            device.set_network_address(address, netmask, destination)?;
+        if let Some((address, prefix, destination)) = self.ipv4 {
+            let prefix = prefix?;
+            let address = address?;
+            let destination = destination.transpose()?;
+            device.set_network_address(address, prefix, destination)?;
         }
         if let Some(ipv6) = self.ipv6 {
-            for (ip, prefix) in ipv6 {
-                device.add_address_v6(ip, prefix)?;
+            for (address, prefix) in ipv6 {
+                let prefix = prefix?;
+                let address = address?;
+                device.add_address_v6(address, prefix)?;
             }
         }
         device.enabled(self.enabled.unwrap_or(true))?;
@@ -239,33 +257,178 @@ impl DeviceBuilder {
         Ok(device)
     }
 }
+
+pub trait ToIpv4Address {
+    fn ipv4(&self) -> io::Result<Ipv4Addr>;
+}
+impl ToIpv4Address for Ipv4Addr {
+    fn ipv4(&self) -> io::Result<Ipv4Addr> {
+        Ok(*self)
+    }
+}
+impl ToIpv4Address for IpAddr {
+    fn ipv4(&self) -> io::Result<Ipv4Addr> {
+        match self {
+            IpAddr::V4(ip) => Ok(*ip),
+            IpAddr::V6(_) => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid address",
+            )),
+        }
+    }
+}
+impl ToIpv4Address for String {
+    fn ipv4(&self) -> io::Result<Ipv4Addr> {
+        self.as_str().ipv4()
+    }
+}
+impl ToIpv4Address for &str {
+    fn ipv4(&self) -> io::Result<Ipv4Addr> {
+        match Ipv4Addr::from_str(self) {
+            Ok(ip) => Ok(ip),
+            Err(_e) => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid IPv4 str",
+            )),
+        }
+    }
+}
+
+pub trait ToIpv6Address {
+    fn ipv6(&self) -> io::Result<Ipv6Addr>;
+}
+
+impl ToIpv6Address for Ipv6Addr {
+    fn ipv6(&self) -> io::Result<Ipv6Addr> {
+        Ok(*self)
+    }
+}
+impl ToIpv6Address for IpAddr {
+    fn ipv6(&self) -> io::Result<Ipv6Addr> {
+        match self {
+            IpAddr::V4(_) => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid address",
+            )),
+            IpAddr::V6(ip) => Ok(*ip),
+        }
+    }
+}
+impl ToIpv6Address for String {
+    fn ipv6(&self) -> io::Result<Ipv6Addr> {
+        self.as_str().ipv6()
+    }
+}
+impl ToIpv6Address for &str {
+    fn ipv6(&self) -> io::Result<Ipv6Addr> {
+        match Ipv6Addr::from_str(self) {
+            Ok(ip) => Ok(ip),
+            Err(_e) => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid IPv6 str",
+            )),
+        }
+    }
+}
+
 pub trait ToIpv4Netmask {
-    fn prefix(&self) -> u8;
-    fn netmask(&self) -> Ipv4Addr {
-        let ip = u32::MAX.checked_shl(32 - self.prefix() as u32).unwrap_or(0);
-        Ipv4Addr::from(ip)
+    fn prefix(&self) -> io::Result<u8>;
+    fn netmask(&self) -> io::Result<Ipv4Addr> {
+        let ip = u32::MAX
+            .checked_shl(32 - self.prefix()? as u32)
+            .unwrap_or(0);
+        Ok(Ipv4Addr::from(ip))
     }
 }
+
 impl ToIpv4Netmask for u8 {
-    fn prefix(&self) -> u8 {
-        *self
+    fn prefix(&self) -> io::Result<u8> {
+        if *self > 32 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid IP prefix length",
+            ));
+        }
+        Ok(*self)
     }
 }
+
 impl ToIpv4Netmask for Ipv4Addr {
-    fn prefix(&self) -> u8 {
-        u32::from_be_bytes(self.octets()).count_ones() as u8
+    fn prefix(&self) -> io::Result<u8> {
+        let ip = u32::from_be_bytes(self.octets());
+        if ip.leading_ones() != ip.count_ones() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid netmask",
+            ));
+        }
+        Ok(ip.leading_ones() as u8)
     }
 }
+impl ToIpv4Netmask for String {
+    fn prefix(&self) -> io::Result<u8> {
+        ToIpv4Netmask::prefix(&self.as_str())
+    }
+}
+impl ToIpv4Netmask for &str {
+    fn prefix(&self) -> io::Result<u8> {
+        match Ipv4Addr::from_str(self) {
+            Ok(ip) => ip.prefix(),
+            Err(_e) => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid netmask str",
+            )),
+        }
+    }
+}
+
 pub trait ToIpv6Netmask {
-    fn prefix(self) -> u8;
-}
-impl ToIpv6Netmask for u8 {
-    fn prefix(self) -> u8 {
-        self
+    fn prefix(&self) -> io::Result<u8>;
+    fn netmask(&self) -> io::Result<Ipv6Addr> {
+        let ip = u128::MAX
+            .checked_shl(32 - self.prefix()? as u32)
+            .unwrap_or(0);
+        Ok(Ipv6Addr::from(ip))
     }
 }
+
+impl ToIpv6Netmask for u8 {
+    fn prefix(&self) -> io::Result<u8> {
+        if *self > 128 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid IP prefix length",
+            ));
+        }
+        Ok(*self)
+    }
+}
+
 impl ToIpv6Netmask for Ipv6Addr {
-    fn prefix(self) -> u8 {
-        u128::from_be_bytes(self.octets()).count_ones() as u8
+    fn prefix(&self) -> io::Result<u8> {
+        let ip = u128::from_be_bytes(self.octets());
+        if ip.leading_ones() != ip.count_ones() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid netmask",
+            ));
+        }
+        Ok(ip.leading_ones() as u8)
+    }
+}
+impl ToIpv6Netmask for String {
+    fn prefix(&self) -> io::Result<u8> {
+        ToIpv6Netmask::prefix(&self.as_str())
+    }
+}
+impl ToIpv6Netmask for &str {
+    fn prefix(&self) -> io::Result<u8> {
+        match Ipv6Addr::from_str(self) {
+            Ok(ip) => ip.prefix(),
+            Err(_e) => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "invalid netmask str",
+            )),
+        }
     }
 }
