@@ -15,28 +15,17 @@ pub enum Layer {
 #[derive(Clone, Default, Debug)]
 pub(crate) struct DeviceConfig {
     pub dev_name: Option<String>,
-    pub enabled: Option<bool>,
-    pub mtu: Option<u16>,
-    #[cfg(windows)]
-    pub mtu_v6: Option<u16>,
-    pub ipv4: Option<(Ipv4Addr, u8, Option<Ipv4Addr>)>,
-    pub ipv6: Option<Vec<(Ipv6Addr, u8)>>,
+    #[allow(dead_code)]
     pub layer: Option<Layer>,
-    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
-    pub mac_addr: Option<[u8; 6]>,
     #[cfg(windows)]
     pub device_guid: Option<u128>,
     #[cfg(windows)]
     pub wintun_file: Option<String>,
     #[cfg(windows)]
     pub ring_capacity: Option<u32>,
-    #[cfg(windows)]
-    pub metric: Option<u16>,
     /// switch of Enable/Disable packet information for network driver
     #[cfg(any(target_os = "ios", target_os = "macos", target_os = "linux"))]
     pub packet_information: Option<bool>,
-    #[cfg(target_os = "linux")]
-    pub tx_queue_len: Option<u32>,
     /// Enable/Disable TUN offloads.
     /// After enabling, use `recv_multiple`/`send_multiple` for data transmission.
     #[cfg(target_os = "linux")]
@@ -46,7 +35,164 @@ pub(crate) struct DeviceConfig {
     pub multi_queue: Option<bool>,
 }
 
-impl DeviceConfig {
+/// Builder for a TUN/TAP interface.
+#[derive(Default)]
+pub struct DeviceBuilder {
+    dev_name: Option<String>,
+    enabled: Option<bool>,
+    mtu: Option<u16>,
+    #[cfg(windows)]
+    mtu_v6: Option<u16>,
+    ipv4: Option<(Ipv4Addr, u8, Option<Ipv4Addr>)>,
+    ipv6: Option<Vec<(Ipv6Addr, u8)>>,
+    layer: Option<Layer>,
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+    mac_addr: Option<[u8; 6]>,
+    #[cfg(windows)]
+    device_guid: Option<u128>,
+    #[cfg(windows)]
+    wintun_file: Option<String>,
+    #[cfg(windows)]
+    ring_capacity: Option<u32>,
+    #[cfg(windows)]
+    metric: Option<u16>,
+    /// switch of Enable/Disable packet information for network driver
+    #[cfg(any(target_os = "ios", target_os = "macos", target_os = "linux"))]
+    packet_information: Option<bool>,
+    #[cfg(target_os = "linux")]
+    tx_queue_len: Option<u32>,
+    /// Enable/Disable TUN offloads.
+    /// After enabling, use `recv_multiple`/`send_multiple` for data transmission.
+    #[cfg(target_os = "linux")]
+    offload: Option<bool>,
+    /// Enable multi queue support
+    #[cfg(target_os = "linux")]
+    multi_queue: Option<bool>,
+}
+
+impl DeviceBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    pub fn name<S: Into<String>>(mut self, dev_name: S) -> Self {
+        self.dev_name = Some(dev_name.into());
+        self
+    }
+    pub fn mtu(mut self, mtu: u16) -> Self {
+        self.mtu = Some(mtu);
+        self
+    }
+    #[cfg(windows)]
+    pub fn mtu_v6(mut self, mtu: u16) -> Self {
+        self.mtu = Some(mtu);
+        self
+    }
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
+    pub fn mac_addr(mut self, mac_addr: [u8; 6]) -> Self {
+        self.mac_addr = Some(mac_addr);
+        self
+    }
+    pub fn ipv4<Netmask: ToIpv4Netmask>(
+        mut self,
+        address: Ipv4Addr,
+        mask: Netmask,
+        destination: Option<Ipv4Addr>,
+    ) -> Self {
+        self.ipv4 = Some((address, mask.prefix(), destination));
+        self
+    }
+    pub fn ipv6<Netmask: ToIpv6Netmask>(mut self, address: Ipv6Addr, mask: Netmask) -> Self {
+        if let Some(v) = &mut self.ipv6 {
+            v.push((address, mask.prefix()));
+        } else {
+            self.ipv6 = Some(vec![(address, mask.prefix())]);
+        }
+
+        self
+    }
+    pub fn ipv6_tuple<Netmask: ToIpv6Netmask>(mut self, addrs: Vec<(Ipv6Addr, Netmask)>) -> Self {
+        if let Some(v) = &mut self.ipv6 {
+            for (address, mask) in addrs {
+                v.push((address, mask.prefix()));
+            }
+        } else {
+            self.ipv6 = Some(
+                addrs
+                    .into_iter()
+                    .map(|(ip, mask)| (ip, mask.prefix()))
+                    .collect(),
+            );
+        }
+        self
+    }
+    pub fn layer(mut self, layer: Layer) -> Self {
+        self.layer = Some(layer);
+        self
+    }
+    #[cfg(windows)]
+    pub fn device_guid(mut self, device_guid: u128) -> Self {
+        self.device_guid = Some(device_guid);
+        self
+    }
+    #[cfg(windows)]
+    pub fn wintun_file(mut self, wintun_file: String) -> Self {
+        self.wintun_file = Some(wintun_file);
+        self
+    }
+    #[cfg(windows)]
+    pub fn ring_capacity(mut self, ring_capacity: u32) -> Self {
+        self.ring_capacity = Some(ring_capacity);
+        self
+    }
+    #[cfg(windows)]
+    pub fn metric(mut self, metric: u16) -> Self {
+        self.metric = Some(metric);
+        self
+    }
+    #[cfg(target_os = "linux")]
+    pub fn tx_queue_len(mut self, tx_queue_len: u32) -> Self {
+        self.tx_queue_len = Some(tx_queue_len);
+        self
+    }
+    /// After enabling, use `recv_multiple`/`send_multiple` for data transmission.
+    #[cfg(target_os = "linux")]
+    pub fn offload(mut self, offload: bool) -> Self {
+        self.offload = Some(offload);
+        self
+    }
+    #[cfg(target_os = "linux")]
+    pub fn multi_queue(mut self, multi_queue: bool) -> Self {
+        self.multi_queue = Some(multi_queue);
+        self
+    }
+
+    #[cfg(any(target_os = "ios", target_os = "macos", target_os = "linux"))]
+    pub fn packet_information(mut self, packet_information: bool) -> Self {
+        self.packet_information = Some(packet_information);
+        self
+    }
+    pub fn enable(mut self, enable: bool) -> Self {
+        self.enabled = Some(enable);
+        self
+    }
+    pub(crate) fn build_config(&mut self) -> DeviceConfig {
+        DeviceConfig {
+            dev_name: self.dev_name.take(),
+            layer: self.layer.take(),
+            #[cfg(windows)]
+            device_guid: self.device_guid.take(),
+            #[cfg(windows)]
+            wintun_file: self.wintun_file.take(),
+            #[cfg(windows)]
+            ring_capacity: self.ring_capacity.take(),
+            #[cfg(any(target_os = "ios", target_os = "macos", target_os = "linux"))]
+            packet_information: self.packet_information.take(),
+            #[cfg(target_os = "linux")]
+            offload: self.offload.take(),
+            #[cfg(target_os = "linux")]
+            multi_queue: self.multi_queue.take(),
+        }
+    }
     pub(crate) fn config(self, device: &DeviceImpl) -> io::Result<()> {
         if let Some(mtu) = self.mtu {
             device.set_mtu(mtu)?;
@@ -81,126 +227,15 @@ impl DeviceConfig {
         device.enabled(self.enabled.unwrap_or(true))?;
         Ok(())
     }
-}
-
-/// Builder for a TUN/TAP interface.
-#[derive(Default)]
-pub struct DeviceBuilder {
-    config: DeviceConfig,
-}
-
-impl DeviceBuilder {
-    pub fn new() -> Self {
-        Self::default()
-    }
-    pub fn name<S: Into<String>>(mut self, dev_name: S) -> Self {
-        self.config.dev_name = Some(dev_name.into());
-        self
-    }
-    pub fn mtu(mut self, mtu: u16) -> Self {
-        self.config.mtu = Some(mtu);
-        self
-    }
-    #[cfg(windows)]
-    pub fn mtu_v6(mut self, mtu: u16) -> Self {
-        self.config.mtu = Some(mtu);
-        self
-    }
-    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
-    pub fn mac_addr(mut self, mac_addr: [u8; 6]) -> Self {
-        self.config.mac_addr = Some(mac_addr);
-        self
-    }
-    pub fn ipv4<Netmask: ToIpv4Netmask>(
-        mut self,
-        address: Ipv4Addr,
-        mask: Netmask,
-        destination: Option<Ipv4Addr>,
-    ) -> Self {
-        self.config.ipv4 = Some((address, mask.prefix(), destination));
-        self
-    }
-    pub fn ipv6<Netmask: ToIpv6Netmask>(mut self, address: Ipv6Addr, mask: Netmask) -> Self {
-        if let Some(v) = &mut self.config.ipv6 {
-            v.push((address, mask.prefix()));
-        } else {
-            self.config.ipv6 = Some(vec![(address, mask.prefix())]);
-        }
-
-        self
-    }
-    pub fn ipv6_tuple<Netmask: ToIpv6Netmask>(mut self, addrs: Vec<(Ipv6Addr, Netmask)>) -> Self {
-        if let Some(v) = &mut self.config.ipv6 {
-            for (address, mask) in addrs {
-                v.push((address, mask.prefix()));
-            }
-        } else {
-            self.config.ipv6 = Some(
-                addrs
-                    .into_iter()
-                    .map(|(ip, mask)| (ip, mask.prefix()))
-                    .collect(),
-            );
-        }
-        self
-    }
-    pub fn layer(mut self, layer: Layer) -> Self {
-        self.config.layer = Some(layer);
-        self
-    }
-    #[cfg(windows)]
-    pub fn device_guid(mut self, device_guid: u128) -> Self {
-        self.config.device_guid = Some(device_guid);
-        self
-    }
-    #[cfg(windows)]
-    pub fn wintun_file(mut self, wintun_file: String) -> Self {
-        self.config.wintun_file = Some(wintun_file);
-        self
-    }
-    #[cfg(windows)]
-    pub fn ring_capacity(mut self, ring_capacity: u32) -> Self {
-        self.config.ring_capacity = Some(ring_capacity);
-        self
-    }
-    #[cfg(windows)]
-    pub fn metric(mut self, metric: u16) -> Self {
-        self.config.metric = Some(metric);
-        self
-    }
-    #[cfg(target_os = "linux")]
-    pub fn tx_queue_len(mut self, tx_queue_len: u32) -> Self {
-        self.config.tx_queue_len = Some(tx_queue_len);
-        self
-    }
-    /// After enabling, use `recv_multiple`/`send_multiple` for data transmission.
-    #[cfg(target_os = "linux")]
-    pub fn offload(mut self, offload: bool) -> Self {
-        self.config.offload = Some(offload);
-        self
-    }
-    #[cfg(target_os = "linux")]
-    pub fn multi_queue(mut self, multi_queue: bool) -> Self {
-        self.config.multi_queue = Some(multi_queue);
-        self
-    }
-
-    #[cfg(any(target_os = "ios", target_os = "macos", target_os = "linux"))]
-    pub fn packet_information(mut self, packet_information: bool) -> Self {
-        self.config.packet_information = Some(packet_information);
-        self
-    }
-    pub fn enable(mut self, enable: bool) -> Self {
-        self.config.enabled = Some(enable);
-        self
-    }
-    pub fn build_sync(self) -> io::Result<SyncDevice> {
-        let device = DeviceImpl::new(self.config)?;
+    pub fn build_sync(mut self) -> io::Result<SyncDevice> {
+        let device = DeviceImpl::new(self.build_config())?;
+        self.config(&device)?;
         Ok(SyncDevice(device))
     }
     #[cfg(any(feature = "async_std", feature = "async_tokio"))]
     pub fn build_async(self) -> io::Result<crate::AsyncDevice> {
-        let device = crate::AsyncDevice::new_dev(DeviceImpl::new(self.config)?)?;
+        let sync_device = self.build_sync()?;
+        let device = crate::AsyncDevice::new_dev(sync_device.0)?;
         Ok(device)
     }
 }

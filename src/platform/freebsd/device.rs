@@ -108,7 +108,6 @@ impl DeviceImpl {
                 alias_lock: Mutex::new(()),
             }
         };
-        config.config(&device)?;
 
         Ok(device)
     }

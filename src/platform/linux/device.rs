@@ -108,7 +108,6 @@ impl DeviceImpl {
                 udp_gso,
                 flags: req.ifr_ifru.ifru_flags,
             };
-            config.config(&device)?;
             Ok(device)
         }
     }

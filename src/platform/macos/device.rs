@@ -105,7 +105,6 @@ impl DeviceImpl {
         device
             .tun
             .set_ignore_packet_info(!config.packet_information.unwrap_or(false));
-        config.config(&device)?;
         Ok(device)
     }
     pub(crate) fn from_tun(tun: Tun) -> Self {

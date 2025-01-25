@@ -108,7 +108,6 @@ impl DeviceImpl {
         } else {
             panic!("unknown layer {:?}", layer);
         };
-        config.config(&device)?;
         Ok(device)
     }
 
