@@ -1,7 +1,7 @@
 use self::AsyncFd;
 #[cfg(target_os = "linux")]
 use crate::platform::offload::{handle_gro, VirtioNetHdr, VIRTIO_NET_HDR_LEN};
-use crate::platform::DeviceInner;
+use crate::platform::DeviceImpl;
 #[cfg(target_os = "linux")]
 use crate::platform::GROTable;
 use crate::SyncDevice;
@@ -30,10 +30,10 @@ pub struct AsyncFd;
 
 #[cfg(all(feature = "async_tokio", feature = "async_std"))]
 impl AsyncFd {
-    pub fn new(_device: crate::platform::DeviceInner) -> std::io::Result<Self> {
+    pub fn new(_device: crate::platform::DeviceImpl) -> std::io::Result<Self> {
         unreachable!()
     }
-    pub fn into_device(self) -> std::io::Result<crate::platform::DeviceInner> {
+    pub fn into_device(self) -> std::io::Result<crate::platform::DeviceImpl> {
         unreachable!()
     }
     pub async fn readable(&self) -> std::io::Result<()> {
@@ -73,7 +73,7 @@ impl AsyncFd {
         unreachable!()
     }
 
-    pub fn get_ref(&self) -> &crate::platform::DeviceInner {
+    pub fn get_ref(&self) -> &crate::platform::DeviceImpl {
         unreachable!()
     }
 }
@@ -100,7 +100,7 @@ impl AsRawFd for AsyncDevice {
 }
 
 impl Deref for AsyncDevice {
-    type Target = DeviceInner;
+    type Target = DeviceImpl;
 
     fn deref(&self) -> &Self::Target {
         self.inner.get_ref()
@@ -112,7 +112,7 @@ impl AsyncDevice {
         AsyncDevice::new_dev(device.0)
     }
     /// Create a new `AsyncDevice` wrapping around a `Device`.
-    pub(crate) fn new_dev(device: DeviceInner) -> io::Result<AsyncDevice> {
+    pub(crate) fn new_dev(device: DeviceImpl) -> io::Result<AsyncDevice> {
         Ok(AsyncDevice {
             inner: AsyncFd::new(device)?,
         })
@@ -122,7 +122,7 @@ impl AsyncDevice {
     /// This method is safe if the provided fd is valid
     /// Construct a AsyncDevice from an existing file descriptor
     pub unsafe fn from_fd(fd: RawFd) -> io::Result<AsyncDevice> {
-        AsyncDevice::new_dev(DeviceInner::from_fd(fd))
+        AsyncDevice::new_dev(DeviceImpl::from_fd(fd))
     }
     pub fn into_fd(self) -> io::Result<RawFd> {
         Ok(self.inner.into_device()?.into_raw_fd())

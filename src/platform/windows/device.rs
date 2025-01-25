@@ -16,7 +16,7 @@ pub(crate) enum Driver {
 }
 
 /// A TUN device using the wintun driver.
-pub struct DeviceInner {
+pub struct DeviceImpl {
     pub(crate) driver: Driver,
 }
 
@@ -34,7 +34,7 @@ fn hash_name(input_str: &str) -> u128 {
     (u128::from(front) << 64) | u128::from(back)
 }
 
-impl DeviceInner {
+impl DeviceImpl {
     /// Create a new `Device` for the given `Configuration`.
     pub(crate) fn new(config: DeviceConfig) -> io::Result<Self> {
         let layer = config.layer.unwrap_or(Layer::L3);
@@ -75,7 +75,7 @@ impl DeviceInner {
                 }
             };
 
-            DeviceInner {
+            DeviceImpl {
                 driver: Driver::Tun(tun_device),
             }
         } else if layer == Layer::L2 {
@@ -102,7 +102,7 @@ impl DeviceInner {
                     break tap;
                 }
             };
-            DeviceInner {
+            DeviceImpl {
                 driver: Driver::Tap(tap),
             }
         } else {

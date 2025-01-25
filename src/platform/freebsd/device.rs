@@ -27,12 +27,12 @@ struct Route {
 }
 
 /// A TUN device using the TUN/TAP Linux driver.
-pub struct DeviceInner {
+pub struct DeviceImpl {
     pub(crate) tun: Tun,
     alias_lock: Mutex<()>,
 }
 
-impl DeviceInner {
+impl DeviceImpl {
     /// Create a new `Device` for the given `Configuration`.
     pub(crate) fn new(config: DeviceConfig) -> std::io::Result<Self> {
         let layer = config.layer.unwrap_or(Layer::L3);
@@ -103,7 +103,7 @@ impl DeviceInner {
                 }
             };
 
-            DeviceInner {
+            DeviceImpl {
                 tun: Tun::new(tun),
                 alias_lock: Mutex::new(()),
             }

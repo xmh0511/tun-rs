@@ -4,7 +4,7 @@ pub mod unix;
 #[cfg(target_os = "linux")]
 pub mod linux;
 #[cfg(target_os = "linux")]
-pub(crate) use self::linux::DeviceInner;
+pub(crate) use self::linux::DeviceImpl;
 
 #[cfg(target_os = "linux")]
 pub use self::linux::*;
@@ -12,22 +12,22 @@ pub use self::linux::*;
 #[cfg(target_os = "freebsd")]
 pub mod freebsd;
 #[cfg(target_os = "freebsd")]
-pub(crate) use self::freebsd::DeviceInner;
+pub(crate) use self::freebsd::DeviceImpl;
 
 #[cfg(target_os = "macos")]
 pub mod macos;
 #[cfg(target_os = "macos")]
-pub(crate) use self::macos::DeviceInner;
+pub(crate) use self::macos::DeviceImpl;
 
 #[cfg(target_os = "ios")]
 pub mod ios;
 #[cfg(target_os = "ios")]
-pub(crate) use self::ios::DeviceInner;
+pub(crate) use self::ios::DeviceImpl;
 
 #[cfg(target_os = "android")]
 pub mod android;
 #[cfg(target_os = "android")]
-pub(crate) use self::android::DeviceInner;
+pub(crate) use self::android::DeviceImpl;
 
 #[cfg(unix)]
 #[cfg(any(feature = "async_std", feature = "async_tokio"))]
@@ -36,7 +36,7 @@ pub use crate::platform::unix::{async_device, async_device::*};
 #[cfg(target_os = "windows")]
 pub mod windows;
 #[cfg(target_os = "windows")]
-pub(crate) use self::windows::DeviceInner;
+pub(crate) use self::windows::DeviceImpl;
 
 #[cfg(target_os = "windows")]
 #[cfg(any(feature = "async_std", feature = "async_tokio"))]
@@ -60,14 +60,14 @@ pub(crate) fn get_if_addrs_by_name(if_name: String) -> std::io::Result<Vec<Inter
 }
 
 #[repr(transparent)]
-pub struct SyncDevice(pub(crate) DeviceInner);
+pub struct SyncDevice(pub(crate) DeviceImpl);
 
 impl SyncDevice {
     /// # Safety
     /// The fd passed in must be an owned file descriptor; in particular, it must be open.
     #[cfg(unix)]
     pub unsafe fn from_fd(fd: RawFd) -> Self {
-        SyncDevice(DeviceInner::from_fd(fd))
+        SyncDevice(DeviceImpl::from_fd(fd))
     }
     pub fn recv(&self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.0.recv(buf)
@@ -113,7 +113,7 @@ impl SyncDevice {
 }
 
 impl Deref for SyncDevice {
-    type Target = DeviceInner;
+    type Target = DeviceImpl;
     fn deref(&self) -> &Self::Target {
         &self.0
     }

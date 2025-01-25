@@ -1,38 +1,38 @@
 use crate::platform::unix::{Fd, Tun};
-use crate::platform::DeviceInner;
+use crate::platform::DeviceImpl;
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
 use libc::{AF_INET, AF_INET6, SOCK_DGRAM};
 use std::io;
 use std::io::{IoSlice, IoSliceMut};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, RawFd};
 
-impl FromRawFd for DeviceInner {
+impl FromRawFd for DeviceImpl {
     unsafe fn from_raw_fd(fd: RawFd) -> Self {
-        DeviceInner::from_fd(fd)
+        DeviceImpl::from_fd(fd)
     }
 }
-impl AsRawFd for DeviceInner {
+impl AsRawFd for DeviceImpl {
     fn as_raw_fd(&self) -> RawFd {
         self.tun.as_raw_fd()
     }
 }
-impl AsFd for DeviceInner {
+impl AsFd for DeviceImpl {
     fn as_fd(&self) -> BorrowedFd<'_> {
         unsafe { BorrowedFd::borrow_raw(self.as_raw_fd()) }
     }
 }
 
-impl IntoRawFd for DeviceInner {
+impl IntoRawFd for DeviceImpl {
     fn into_raw_fd(self) -> RawFd {
         self.tun.into_raw_fd()
     }
 }
-impl DeviceInner {
+impl DeviceImpl {
     /// # Safety
     /// The fd passed in must be an owned file descriptor; in particular, it must be open.
     pub(crate) unsafe fn from_fd(fd: RawFd) -> Self {
         let tun = Fd::new_unchecked(fd);
-        DeviceInner::from_tun(Tun::new(tun))
+        DeviceImpl::from_tun(Tun::new(tun))
     }
     pub(crate) fn is_nonblocking(&self) -> io::Result<bool> {
         self.tun.is_nonblocking()
@@ -64,7 +64,7 @@ impl DeviceInner {
     }
 }
 #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
-impl DeviceInner {
+impl DeviceImpl {
     pub fn if_index(&self) -> io::Result<u32> {
         let if_name = std::ffi::CString::new(self.name()?)?;
         unsafe { Ok(libc::if_nametoindex(if_name.as_ptr())) }

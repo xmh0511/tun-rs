@@ -1,4 +1,4 @@
-use crate::platform::DeviceInner;
+use crate::platform::DeviceImpl;
 use ::tokio::io::unix::AsyncFd as TokioAsyncFd;
 use ::tokio::io::Interest;
 use std::io;
@@ -7,13 +7,13 @@ use std::pin::Pin;
 use std::task::{ready, Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
-pub struct AsyncFd(TokioAsyncFd<DeviceInner>);
+pub struct AsyncFd(TokioAsyncFd<DeviceImpl>);
 impl AsyncFd {
-    pub fn new(device: DeviceInner) -> io::Result<Self> {
+    pub fn new(device: DeviceImpl) -> io::Result<Self> {
         device.set_nonblocking(true)?;
         Ok(Self(TokioAsyncFd::new(device)?))
     }
-    pub fn into_device(self) -> io::Result<DeviceInner> {
+    pub fn into_device(self) -> io::Result<DeviceImpl> {
         Ok(self.0.into_inner())
     }
     pub async fn readable(&self) -> io::Result<()> {
@@ -61,7 +61,7 @@ impl AsyncFd {
             .await
     }
 
-    pub fn get_ref(&self) -> &DeviceInner {
+    pub fn get_ref(&self) -> &DeviceImpl {
         self.0.get_ref()
     }
 }

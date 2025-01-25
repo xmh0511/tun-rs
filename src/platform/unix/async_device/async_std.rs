@@ -1,14 +1,14 @@
-use crate::platform::DeviceInner;
+use crate::platform::DeviceImpl;
 use ::async_io::Async;
 use std::io;
 use std::io::{IoSlice, IoSliceMut};
 use std::task::{Context, Poll};
-pub struct AsyncFd(Async<DeviceInner>);
+pub struct AsyncFd(Async<DeviceImpl>);
 impl AsyncFd {
-    pub fn new(device: DeviceInner) -> io::Result<Self> {
+    pub fn new(device: DeviceImpl) -> io::Result<Self> {
         Ok(Self(Async::new(device)?))
     }
-    pub fn into_device(self) -> io::Result<DeviceInner> {
+    pub fn into_device(self) -> io::Result<DeviceImpl> {
         self.0.into_inner()
     }
     pub async fn readable(&self) -> io::Result<()> {
@@ -36,7 +36,7 @@ impl AsyncFd {
         self.0.read_with(|device| device.recv_vectored(bufs)).await
     }
 
-    pub fn get_ref(&self) -> &DeviceInner {
+    pub fn get_ref(&self) -> &DeviceImpl {
         self.0.get_ref()
     }
 }
