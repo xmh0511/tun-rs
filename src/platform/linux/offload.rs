@@ -1402,3 +1402,29 @@ impl ExpandBuffer for &mut BytesMut {
         self.extend_from_slice(extend)
     }
 }
+impl ExpandBuffer for Vec<u8> {
+    fn buf_capacity(&self) -> usize {
+        self.capacity()
+    }
+
+    fn buf_resize(&mut self, new_len: usize, value: u8) {
+        self.resize(new_len, value)
+    }
+
+    fn buf_extend_from_slice(&mut self, extend: &[u8]) {
+        self.extend_from_slice(extend)
+    }
+}
+impl ExpandBuffer for &mut Vec<u8> {
+    fn buf_capacity(&self) -> usize {
+        self.capacity()
+    }
+
+    fn buf_resize(&mut self, new_len: usize, value: u8) {
+        self.resize(new_len, value)
+    }
+
+    fn buf_extend_from_slice(&mut self, extend: &[u8]) {
+        self.extend_from_slice(extend)
+    }
+}
