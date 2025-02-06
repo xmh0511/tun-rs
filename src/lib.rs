@@ -42,6 +42,9 @@ loop {
 pub use crate::builder::*;
 pub use crate::platform::*;
 
+#[cfg(any(feature = "async_std", feature = "async_tokio"))]
+#[cfg(feature = "async_framed")]
+pub mod async_framed;
 #[cfg(any(
     target_os = "windows",
     target_os = "linux",

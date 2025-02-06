@@ -31,6 +31,9 @@ ipnet = "2"
 byteorder = "1.5.0"
 getifaddrs = "0.1.5"
 
+futures-core = { version = "0.3", optional = true }
+futures = { version = "0.3", optional = true }
+
 [target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "android", target_os="freebsd"))'.dependencies]
 nix = { version = "0.29", features = ["ioctl"] }
 
@@ -80,6 +83,7 @@ packet = "0.1"
 async = ["async_tokio"]
 async_tokio = ["blocking", "tokio"]
 async_std = ["blocking", "async-io"]
+async_framed = ["futures", "futures-core"]
 experimental = []
 
 [package.metadata.docs.rs]
@@ -90,6 +94,10 @@ rustdoc-args = ["--cfg", "docsrs"]
 [[example]]
 name = "async_ping"
 required-features = ["async_tokio"]
+
+[[example]]
+name = "async_ping_framed"
+required-features = ["async_tokio", "async_framed"]
 
 [[example]]
 name = "ping_offload"
