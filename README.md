@@ -35,7 +35,7 @@ First, add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-tun-rs = "1"
+tun-rs = "2"
 ```
 
 If you want to use the TUN interface with asynchronous runtimes, you need to enable the `async`(aliased
@@ -44,10 +44,10 @@ as `async_tokio`), or `async_std` feature:
 ```toml
 [dependencies]
 # tokio
-tun-rs = { version = "1", features = ["async"] }
+tun-rs = { version = "2", features = ["async"] }
 
 # async-std
-tun-rs = { version = "1", features = ["async_std"] }
+#tun-rs = { version = "2", features = ["async_std"] }
 ```
 
 Example
@@ -56,16 +56,12 @@ The following example creates and configures a TUN interface and reads packets f
 
 ```rust
 use tun_rs::DeviceBuilder;
-use std::net::Ipv4Addr;
 
 fn main() -> std::io::Result<()> {
     let dev = DeviceBuilder::new()
         .name("utun6")
-        .ipv4(Ipv4Addr::new(10, 0, 0, 1), 24, None)
-        .ipv6(
-            "CDCD:910A:2222:5498:8475:1111:3900:2021".parse().unwrap(),
-            64,
-        )
+        .ipv4("10.0.0.1", 24, None)
+        .ipv6("CDCD:910A:2222:5498:8475:1111:3900:2021", 64)
         // .iff_multi_queue(true)
         .mtu(1400)
         .build_sync()?;
@@ -82,17 +78,13 @@ An example of asynchronously reading packets from an interface
 
 ````rust
 use tun_rs::DeviceBuilder;
-use std::net::Ipv4Addr;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()>  {
     let dev = DeviceBuilder::new()
         .name("utun6")
-        .ipv4(Ipv4Addr::new(10, 0, 0, 1), 24, None)
+        .ipv4("10.0.0.1", 24, None)
         .build_async()?;
-    // ignore the head 4bytes packet information for calling `recv` and `send` on macOS
-    #[cfg(target_os = "macos")]
-    dev.set_ignore_packet_info(true);
 
     let mut buf = vec![0; 1500];
     loop {
@@ -108,27 +100,29 @@ async fn main() -> std::io::Result<()>  {
 
 ````rust
 use tun_rs::DeviceBuilder;
-use std::net::Ipv4Addr;
+#[cfg(target_os = "linux")]
+use tun_rs::{GROTable, IDEAL_BATCH_SIZE, VIRTIO_NET_HDR_LEN};
 
+#[cfg(target_os = "linux")]
 fn main() -> std::io::Result<()> {
     let builder = DeviceBuilder::new()
+        .offload(true)
         .name("utun6")
-        .ipv4(Ipv4Addr::new(10, 0, 0, 1), 24, None)
-        .ipv6(
-            "CDCD:910A:2222:5498:8475:1111:3900:2021".parse().unwrap(),
-            64,
-        )
+        .ipv4("10.0.0.1", 24, None)
+        .ipv6("CDCD:910A:2222:5498:8475:1111:3900:2021", 64)
         .mtu(1400);
-    
-    #[cfg(target_os = "linux")]
-    let builder = builder.offload(true);
     
     let dev = builder.build_sync()?;
 
-    let mut buf = [0; 4096];
+    let mut original_buffer = vec![0; VIRTIO_NET_HDR_LEN + 65535];
+    let mut bufs = vec![vec![0u8; 1500]; IDEAL_BATCH_SIZE];
+    let mut sizes = vec![0; IDEAL_BATCH_SIZE];
+    let mut gro_table = GROTable::default();
     loop {
-        let amount = dev.recv(&mut buf)?;
-        println!("{:?}", &buf[0..amount]);
+        let num = dev.recv_multiple(&mut original_buffer, &mut bufs, &mut sizes, 0)?;
+        for i in 0..num {
+            println!("num={num},bytes={:?}", &bufs[i][..sizes[i]]);
+        }
     }
 }
 ````

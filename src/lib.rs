@@ -4,14 +4,10 @@
 # Example:
 ```no_run
 use tun_rs::DeviceBuilder;
-use std::net::Ipv4Addr;
 let dev = DeviceBuilder::new()
             .name("utun7")
-            .ipv4(Ipv4Addr::new(10, 0, 0, 12), 24, None)
-            .ipv6(
-                "CDCD:910A:2222:5498:8475:1111:3900:2021".parse().unwrap(),
-                64,
-            )
+            .ipv4("10.0.0.12", 24, None)
+            .ipv6("CDCD:910A:2222:5498:8475:1111:3900:2021", 64)
             .mtu(1400)
             .build_sync().unwrap();
 let mut buf = [0;65535];
