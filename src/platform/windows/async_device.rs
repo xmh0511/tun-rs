@@ -5,15 +5,16 @@ use std::io;
 use std::ops::Deref;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
-use std::task::{Context, Poll};
+use std::task::{Context, Poll, Waker};
 
 /// An async TUN device wrapper around a TUN device.
 pub struct AsyncDevice {
     inner: Arc<DeviceImpl>,
     recv_task_lock: Arc<Mutex<Option<RecvTask>>>,
-    send_task_lock: Arc<Mutex<Option<blocking::Task<io::Result<usize>>>>>,
+    send_task_lock: Arc<Mutex<Option<SendTask>>>,
 }
-type RecvTask = blocking::Task<io::Result<(Vec<u8>, usize)>>;
+type RecvTask = (blocking::Task<io::Result<(Vec<u8>, usize)>>, Vec<Waker>);
+type SendTask = (blocking::Task<io::Result<usize>>, Vec<Waker>);
 impl Deref for AsyncDevice {
     type Target = DeviceImpl;
     fn deref(&self) -> &Self::Target {
@@ -40,34 +41,48 @@ impl AsyncDevice {
         })
     }
     pub fn poll_recv(&self, cx: &mut Context<'_>, mut buf: &mut [u8]) -> Poll<io::Result<usize>> {
-        match self.try_recv(buf) {
-            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
-            rs => return Poll::Ready(rs),
-        }
+        // match self.try_recv(buf) {
+        //     Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
+        //     rs => return Poll::Ready(rs),
+        // }
         let mut guard = self.recv_task_lock.lock().unwrap();
-        let mut task = if let Some(task) = guard.take() {
-            task
+        let current = cx.waker();
+        let (mut task, waiters) = if let Some((task, mut waiters)) = guard.take() {
+            if !waiters.iter().any(|w| w.will_wake(current)) {
+                waiters.push(current.clone());
+            }
+            (task, waiters)
         } else {
             let device = self.inner.clone();
             let size = buf.len();
-            blocking::unblock(move || {
+            let task = blocking::unblock(move || {
                 let mut in_buf = vec![0; size];
                 let n = device.recv(&mut in_buf)?;
                 Ok((in_buf, n))
-            })
+            });
+            (task, vec![current.clone()])
         };
         match Pin::new(&mut task).poll(cx) {
-            Poll::Ready(Ok((packet, n))) => {
+            Poll::Ready(rs) => {
                 drop(guard);
-                let mut packet: &[u8] = &packet[..n];
-                match io::copy(&mut packet, &mut buf) {
-                    Ok(n) => Poll::Ready(Ok(n as usize)),
+                for waker in waiters {
+                    if !waker.will_wake(current) {
+                        waker.wake();
+                    }
+                }
+                match rs {
+                    Ok((packet, n)) => {
+                        let mut packet: &[u8] = &packet[..n];
+                        match io::copy(&mut packet, &mut buf) {
+                            Ok(n) => Poll::Ready(Ok(n as usize)),
+                            Err(e) => Poll::Ready(Err(e)),
+                        }
+                    }
                     Err(e) => Poll::Ready(Err(e)),
                 }
             }
-            Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
             Poll::Pending => {
-                guard.replace(task);
+                guard.replace((task, waiters));
                 Poll::Pending
             }
         }
@@ -78,23 +93,39 @@ impl AsyncDevice {
             rs => return Poll::Ready(rs),
         }
         let mut guard = self.send_task_lock.lock().unwrap();
+        let current = cx.waker();
+        let mut waiters = None;
         loop {
-            if let Some(task) = guard.as_mut() {
-                match Pin::new(task).poll(cx) {
+            if let Some((mut task, mut w)) = guard.take() {
+                if !w.iter().any(|w| w.will_wake(current)) {
+                    w.push(current.clone());
+                }
+                match Pin::new(&mut task).poll(cx) {
                     Poll::Ready(rs) => {
-                        _ = guard.take();
+                        waiters = Some(w);
                         // If the previous write was successful, continue.
                         // Otherwise, error.
                         rs?;
                         continue;
                     }
-                    Poll::Pending => return Poll::Pending,
+                    Poll::Pending => {
+                        guard.replace((task, w));
+                        return Poll::Pending;
+                    }
                 }
             } else {
                 let device = self.inner.clone();
                 let buf = src.to_vec();
                 let task = blocking::unblock(move || device.send(&buf));
-                guard.replace(task);
+                guard.replace((task, vec![]));
+                drop(guard);
+                if let Some(waiters) = waiters {
+                    for waker in waiters {
+                        if !waker.will_wake(current) {
+                            waker.wake();
+                        }
+                    }
+                }
                 return Poll::Ready(Ok(src.len()));
             };
         }
