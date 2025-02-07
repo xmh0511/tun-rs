@@ -29,18 +29,10 @@ pub mod android;
 #[cfg(target_os = "android")]
 pub(crate) use self::android::DeviceImpl;
 
-#[cfg(unix)]
-#[cfg(any(feature = "async_std", feature = "async_tokio"))]
-pub use crate::platform::unix::{async_device, async_device::*};
-
 #[cfg(target_os = "windows")]
 pub mod windows;
 #[cfg(target_os = "windows")]
 pub(crate) use self::windows::DeviceImpl;
-
-#[cfg(target_os = "windows")]
-#[cfg(any(feature = "async_std", feature = "async_tokio"))]
-pub use self::windows::{async_device, async_device::*};
 
 use getifaddrs::Interface;
 #[cfg(unix)]

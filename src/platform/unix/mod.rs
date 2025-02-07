@@ -13,11 +13,3 @@ mod tun;
 pub(crate) use self::tun::Tun;
 
 pub(crate) mod device;
-
-#[cfg_attr(docsrs, doc(cfg(any(feature = "async_std", feature = "async_tokio"))))]
-#[cfg(any(feature = "async_std", feature = "async_tokio"))]
-pub mod async_device;
-
-#[cfg_attr(docsrs, doc(cfg(any(feature = "async_std", feature = "async_tokio"))))]
-#[cfg(any(feature = "async_std", feature = "async_tokio"))]
-pub use async_device::*;

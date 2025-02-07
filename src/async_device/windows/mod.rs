@@ -1,4 +1,4 @@
-use super::DeviceImpl;
+use crate::platform::DeviceImpl;
 use crate::SyncDevice;
 use std::future::Future;
 use std::io;
