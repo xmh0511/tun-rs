@@ -65,7 +65,7 @@ fn main() -> std::io::Result<()> {
         // .iff_multi_queue(true)
         .mtu(1400)
         .build_sync()?;
-    
+
     let mut buf = [0; 4096];
     loop {
         let amount = dev.recv(&mut buf)?;
@@ -80,7 +80,7 @@ An example of asynchronously reading packets from an interface
 use tun_rs::DeviceBuilder;
 
 #[tokio::main]
-async fn main() -> std::io::Result<()>  {
+async fn main() -> std::io::Result<()> {
     let dev = DeviceBuilder::new()
         .name("utun6")
         .ipv4("10.0.0.1", 24, None)
@@ -111,7 +111,7 @@ fn main() -> std::io::Result<()> {
         .ipv4("10.0.0.1", 24, None)
         .ipv6("CDCD:910A:2222:5498:8475:1111:3900:2021", 64)
         .mtu(1400);
-    
+
     let dev = builder.build_sync()?;
 
     let mut original_buffer = vec![0; VIRTIO_NET_HDR_LEN + 65535];
@@ -167,15 +167,29 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
 ```rust
 #[no_mangle]
 pub extern "C" fn start_tun(fd: std::os::raw::c_int) {
-    let mut rt = tokio::runtime::Runtime::new().unwrap();
-    rt.block_on(async {
-        // This is safe if the provided fd is valid
-        let tun = unsafe { tun_rs::AsyncDevice::from_raw_fd(fd) };
-        let mut buf = [0u8; 1500];
-        while let Ok(packet) = tun.recv(&mut buf).await {
-            ...
-        }
-    });
+    // This is safe if the provided fd is valid
+    let tun = unsafe { tun_rs::SyncDevice::from_raw_fd(fd) };
+    let mut buf = [0u8; 1500];
+    while let Ok(packet) = tun.recv(&mut buf) {
+        ...
+    }
+}
+```
+
+Android
+-----
+
+```java
+// use android.net.VpnService
+private void startVpn(DeviceConfig config) {
+    Builder builder = new Builder();
+    builder
+       .allowFamily(OsConstants.AF_INET)
+       .addAddress("10.0.0.2", 24);
+    ParcelFileDescriptor vpnInterface = builder.setSession("tun-rs")
+                 .establish();
+    int fd = vpnInterface.getFd();
+    // Pass the fd to tun-rs using JNI
 }
 ```
 
