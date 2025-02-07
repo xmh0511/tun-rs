@@ -41,10 +41,10 @@ impl AsyncDevice {
         })
     }
     pub fn poll_recv(&self, cx: &mut Context<'_>, mut buf: &mut [u8]) -> Poll<io::Result<usize>> {
-        // match self.try_recv(buf) {
-        //     Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
-        //     rs => return Poll::Ready(rs),
-        // }
+        match self.try_recv(buf) {
+            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
+            rs => return Poll::Ready(rs),
+        }
         let mut guard = self.recv_task_lock.lock().unwrap();
         let current = cx.waker();
         let (mut task, waiters) = if let Some((task, mut waiters)) = guard.take() {
