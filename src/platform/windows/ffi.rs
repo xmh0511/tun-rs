@@ -1,31 +1,24 @@
-// Many things will be used in the future
-#![allow(unused)]
-
-//! Module holding safe wrappers over winapi functions
-
 use std::{io, mem, ptr};
 
-use windows_sys::Win32::Foundation::{ERROR_BUFFER_OVERFLOW, ERROR_IO_PENDING, NO_ERROR};
+use windows_sys::Win32::Foundation::{ERROR_IO_PENDING, NO_ERROR};
 use windows_sys::Win32::NetworkManagement::IpHelper::{
-    GetIpInterfaceTable, GAA_FLAG_INCLUDE_PREFIX, MIB_IPINTERFACE_ROW, MIB_IPINTERFACE_TABLE,
+    GetIpInterfaceTable, MIB_IPINTERFACE_ROW, MIB_IPINTERFACE_TABLE,
 };
 use windows_sys::Win32::Networking::WinSock::{AF_INET, AF_INET6};
 use windows_sys::Win32::System::IO::{GetOverlappedResult, OVERLAPPED};
 use windows_sys::{
-    core::{GUID, PCWSTR},
+    core::GUID,
     Win32::{
         Devices::DeviceAndDriverInstallation::{
             SetupDiBuildDriverInfoList, SetupDiCallClassInstaller, SetupDiClassNameFromGuidW,
             SetupDiCreateDeviceInfoList, SetupDiCreateDeviceInfoW, SetupDiDestroyDeviceInfoList,
             SetupDiDestroyDriverInfoList, SetupDiEnumDeviceInfo, SetupDiEnumDriverInfoW,
             SetupDiGetClassDevsW, SetupDiGetDeviceRegistryPropertyW, SetupDiGetDriverInfoDetailW,
-            SetupDiOpenDevRegKey, SetupDiSetClassInstallParamsW, SetupDiSetDeviceRegistryPropertyW,
-            SetupDiSetSelectedDevice, SetupDiSetSelectedDriverW, HDEVINFO, MAX_CLASS_NAME_LEN,
-            SP_DEVINFO_DATA, SP_DRVINFO_DATA_V2_W, SP_DRVINFO_DETAIL_DATA_W,
+            SetupDiOpenDevRegKey, SetupDiSetDeviceRegistryPropertyW, SetupDiSetSelectedDevice,
+            SetupDiSetSelectedDriverW, HDEVINFO, MAX_CLASS_NAME_LEN, SP_DEVINFO_DATA,
+            SP_DRVINFO_DATA_V2_W, SP_DRVINFO_DETAIL_DATA_W,
         },
-        Foundation::{
-            CloseHandle, GetLastError, BOOL, ERROR_NO_MORE_ITEMS, FALSE, FILETIME, HANDLE, TRUE,
-        },
+        Foundation::{GetLastError, BOOL, ERROR_NO_MORE_ITEMS, FALSE, FILETIME, HANDLE, TRUE},
         NetworkManagement::{
             IpHelper::{
                 ConvertInterfaceAliasToLuid, ConvertInterfaceLuidToAlias,
@@ -45,12 +38,6 @@ use windows_sys::{
         },
     },
 };
-
-fn to_pcwstr(s: &str) -> PCWSTR {
-    let mut wide: Vec<u16> = s.encode_utf16().collect();
-    wide.push(0);
-    wide.as_ptr() as PCWSTR
-}
 
 #[allow(non_camel_case_types)]
 #[allow(non_snake_case)]
@@ -93,7 +80,7 @@ pub fn alias_to_luid(alias: &str) -> io::Result<NET_LUID_LH> {
     let mut luid = unsafe { mem::zeroed() };
     match unsafe { ConvertInterfaceAliasToLuid(alias.as_ptr(), &mut luid) } {
         0 => Ok(luid),
-        err => Err(io::Error::last_os_error()),
+        _err => Err(io::Error::last_os_error()),
     }
 }
 
@@ -101,7 +88,7 @@ pub fn luid_to_index(luid: &NET_LUID_LH) -> io::Result<u32> {
     let mut index = 0;
     match unsafe { ConvertInterfaceLuidToIndex(luid, &mut index) } {
         0 => Ok(index),
-        err => Err(io::Error::last_os_error()),
+        _err => Err(io::Error::last_os_error()),
     }
 }
 
@@ -109,7 +96,7 @@ pub fn luid_to_guid(luid: &NET_LUID_LH) -> io::Result<GUID> {
     let mut guid = unsafe { mem::zeroed() };
     match unsafe { ConvertInterfaceLuidToGuid(luid, &mut guid) } {
         0 => Ok(guid),
-        err => Err(io::Error::last_os_error()),
+        _err => Err(io::Error::last_os_error()),
     }
 }
 
@@ -118,14 +105,7 @@ pub fn luid_to_alias(luid: &NET_LUID_LH) -> io::Result<String> {
     let mut alias = vec![0; 257];
     match unsafe { ConvertInterfaceLuidToAlias(luid, alias.as_mut_ptr(), alias.len()) } {
         0 => Ok(decode_utf16(&alias)),
-        err => Err(io::Error::last_os_error()),
-    }
-}
-
-pub fn close_handle(handle: HANDLE) -> io::Result<()> {
-    match unsafe { CloseHandle(handle) } {
-        0 => Err(io::Error::last_os_error()),
-        _ => Ok(()),
+        _err => Err(io::Error::last_os_error()),
     }
 }
 
@@ -452,24 +432,6 @@ pub fn set_selected_driver(
     }
 }
 
-pub fn set_class_install_params(
-    devinfo: HDEVINFO,
-    devinfo_data: &SP_DEVINFO_DATA,
-    params: &impl Copy,
-) -> io::Result<()> {
-    match unsafe {
-        SetupDiSetClassInstallParamsW(
-            devinfo,
-            devinfo_data as *const _ as _,
-            params as *const _ as _,
-            mem::size_of_val(params) as _,
-        )
-    } {
-        0 => Err(io::Error::last_os_error()),
-        _ => Ok(()),
-    }
-}
-
 pub fn call_class_installer(
     devinfo: HDEVINFO,
     devinfo_data: &SP_DEVINFO_DATA,
@@ -523,7 +485,7 @@ pub fn notify_change_key_value(
 
     match unsafe { RegNotifyChangeKeyValue(key, watch_subtree, notify_filter, event, TRUE) } {
         0 => Ok(()),
-        err => Err(io::Error::last_os_error()),
+        _err => Err(io::Error::last_os_error()),
     }?;
 
     match unsafe { WaitForSingleObject(event, milliseconds) } {
