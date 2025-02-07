@@ -15,8 +15,9 @@ cross-platform.
 4. Supporting Tokio and async-std asynchronous runtimes
 5. All platforms have consistent IP packets(macOS's 4-byte head information can be eliminated)
 6. Experimentally supporting shutdown for Synchronous version
-7. Supporting Offload on the Linux platform
-8. Having a consistent behavior of setting up routes when creating a device
+7. Supporting Offload (`TSO`/`GSO`) on Linux
+8. Supporting `multi-queue` on Linux
+9. Having a consistent behavior of setting up routes when creating a device
 
 ## Supported Platforms
 
