@@ -51,11 +51,11 @@ fn main_entry(quit: Receiver<()>) -> Result<(), std::io::Error> {
             // .iff_multi_queue(true)
             .mtu(1400)
             // .ipv6(
-            //     "CDCD:910A:2222:5498:8475:1111:3900:2021".parse().unwrap(),
-            //     "FFFF:FFFF:FFFF:FFFF:0000:0000:0000:0000".parse::<Ipv6Addr>().unwrap(),
+            //     "CDCD:910A:2222:5498:8475:1111:3900:2021",
+            //     "FFFF:FFFF:FFFF:FFFF:0000:0000:0000:0000",
             // )
-            // .ipv6_tuple(vec![( "CDCD:910A:2222:5498:8475:1111:3900:2022".parse().unwrap(),64),
-            //                ( "CDCD:910A:2222:5498:8475:1111:3900:2023".parse().unwrap(),64)])
+            // .ipv6_tuple(&[( "CDCD:910A:2222:5498:8475:1111:3900:2022",64),
+            //                ( "CDCD:910A:2222:5498:8475:1111:3900:2023",64)])
             .build_sync()?,
     );
     // // linux multi queue

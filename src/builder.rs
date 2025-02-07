@@ -86,11 +86,20 @@ impl DeviceBuilder {
     }
     pub fn mtu(mut self, mtu: u16) -> Self {
         self.mtu = Some(mtu);
+        #[cfg(windows)]
+        {
+            self.mtu_v6 = Some(mtu);
+        }
+        self
+    }
+    #[cfg(windows)]
+    pub fn mtu_v4(mut self, mtu: u16) -> Self {
+        self.mtu = Some(mtu);
         self
     }
     #[cfg(windows)]
     pub fn mtu_v6(mut self, mtu: u16) -> Self {
-        self.mtu = Some(mtu);
+        self.mtu_v6 = Some(mtu);
         self
     }
     #[cfg(any(target_os = "windows", target_os = "linux", target_os = "freebsd"))]
@@ -122,7 +131,7 @@ impl DeviceBuilder {
     }
     pub fn ipv6_tuple<IPv6: ToIpv6Address, Netmask: ToIpv6Netmask>(
         mut self,
-        addrs: Vec<(IPv6, Netmask)>,
+        addrs: &[(IPv6, Netmask)],
     ) -> Self {
         if let Some(v) = &mut self.ipv6 {
             for (address, mask) in addrs {
@@ -131,7 +140,7 @@ impl DeviceBuilder {
         } else {
             self.ipv6 = Some(
                 addrs
-                    .into_iter()
+                    .iter()
                     .map(|(ip, mask)| (ip.ipv6(), mask.prefix()))
                     .collect(),
             );
